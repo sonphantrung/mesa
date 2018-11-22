@@ -1561,6 +1561,10 @@ nir_alu_instr_is_comparison(const nir_alu_instr *instr)
    case nir_op_flt:
    case nir_op_fge:
    case nir_op_feq:
+   case nir_op_fne:
+   case nir_op_fltu:
+   case nir_op_fgeu:
+   case nir_op_fequ:
    case nir_op_fneu:
    case nir_op_ilt:
    case nir_op_ult:
@@ -2131,6 +2135,10 @@ typedef struct nir_shader_compiler_options {
    bool lower_ffract;
 
    bool lower_ldexp;
+
+   bool lower_fltu;
+   bool lower_fgeu;
+   bool lower_fne_to_fequ;
 
    bool lower_pack_half_2x16;
    bool lower_pack_unorm_2x16;

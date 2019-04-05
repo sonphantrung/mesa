@@ -403,8 +403,7 @@ if with_vulkan_icd_dir == ''
   with_vulkan_icd_dir = join_paths(get_option('datadir'), 'vulkan/icd.d')
 endif
 
-with_dri2 = (with_dri or with_any_vk) and (with_dri_platform == 'drm' or
-  host_machine.system() == 'gnu')
+with_dri2 = (with_dri or with_any_vk) and with_dri_platform == 'drm'
 _dri3 = get_option('dri3')
 if _dri3 == 'auto'
   with_dri3 = system_has_kms_drm and with_dri2

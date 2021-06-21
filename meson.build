@@ -2178,6 +2178,11 @@ subdir('src')
 
 meson.add_devenv(devenv)
 
+sphinx = find_program('sphinx-build', required: get_option('html-docs'))
+if sphinx.found()
+  subdir('docs')
+endif
+
 summary(
   {
     'prefix': get_option('prefix'),

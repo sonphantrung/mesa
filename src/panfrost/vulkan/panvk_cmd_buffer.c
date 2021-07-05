@@ -37,6 +37,40 @@
 #include "util/u_pack_color.h"
 #include "vk_format.h"
 
+static void
+panvk_destroy_batch(struct panvk_cmd_buffer *cmdbuf, struct panvk_batch *batch)
+{
+   struct panfrost_device *pdev = &cmdbuf->device->physical_device->pdev;
+
+   list_del(&batch->node);
+   util_dynarray_fini(&batch->jobs);
+   if (!pan_is_bifrost(pdev))
+      panfrost_bo_unreference(batch->tiler.ctx.midgard.polygon_list);
+
+   util_dynarray_fini(&batch->event_ops);
+
+   vk_free(&cmdbuf->pool->alloc, batch);
+}
+
+/* Shallow clone, resources are still owned by the secondary cmdbuf */
+static void
+panvk_clone_batch(struct panvk_cmd_buffer *cmdbuf, struct panvk_batch *batch,
+                  struct panvk_batch **new_batch)
+{
+   *new_batch = vk_zalloc(&cmdbuf->pool->alloc,
+                          sizeof(**new_batch), 8,
+                          VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+   memcpy(*new_batch, batch, sizeof(**new_batch));
+
+   util_dynarray_init(&(*new_batch)->jobs, NULL);
+   util_dynarray_foreach(&batch->jobs, void *, job)
+      util_dynarray_append(&(*new_batch)->jobs, void *, job);
+
+   util_dynarray_init(&(*new_batch)->event_ops, NULL);
+   util_dynarray_foreach(&batch->event_ops, struct panvk_event_op, op)
+      util_dynarray_append(&(*new_batch)->event_ops, struct panvk_event_op, *op);
+}
+
 static VkResult
 panvk_reset_cmdbuf(struct panvk_cmd_buffer *cmdbuf)
 {
@@ -44,13 +78,8 @@ panvk_reset_cmdbuf(struct panvk_cmd_buffer *cmdbuf)
 
    cmdbuf->record_result = VK_SUCCESS;
 
-   list_for_each_entry_safe(struct panvk_batch, batch, &cmdbuf->batches, node) {
-      list_del(&batch->node);
-      util_dynarray_fini(&batch->jobs);
-      if (!pan_is_bifrost(pdev))
-         panfrost_bo_unreference(batch->tiler.ctx.midgard.polygon_list);
-      vk_free(&cmdbuf->pool->alloc, batch);
-   }
+   list_for_each_entry_safe(struct panvk_batch, batch, &cmdbuf->batches, node)
+      panvk_destroy_batch(cmdbuf, batch);
 
    panvk_pool_reset(&cmdbuf->desc_pool);
    panvk_pool_reset(&cmdbuf->tls_pool);
@@ -114,13 +143,8 @@ panvk_destroy_cmdbuf(struct panvk_cmd_buffer *cmdbuf)
 
    list_del(&cmdbuf->pool_link);
 
-   list_for_each_entry_safe(struct panvk_batch, batch, &cmdbuf->batches, node) {
-      list_del(&batch->node);
-      util_dynarray_fini(&batch->jobs);
-      if (!pan_is_bifrost(pdev))
-         panfrost_bo_unreference(batch->tiler.ctx.midgard.polygon_list);
-      vk_free(&cmdbuf->pool->alloc, batch);
-   }
+   list_for_each_entry_safe(struct panvk_batch, batch, &cmdbuf->batches, node)
+      panvk_destroy_batch(cmdbuf, batch);
 
    panvk_pool_cleanup(&cmdbuf->desc_pool);
    panvk_pool_cleanup(&cmdbuf->tls_pool);
@@ -479,7 +503,24 @@ panvk_CmdExecuteCommands(VkCommandBuffer commandBuffer,
                          uint32_t commandBufferCount,
                          const VkCommandBuffer *pCmdBuffers)
 {
-   panvk_stub();
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+
+   assert(commandBufferCount > 0);
+
+   if (cmdbuf->state.batch != NULL)
+      panvk_cmd_close_batch(cmdbuf);
+
+   for (uint32_t i = 0; i < commandBufferCount; i++) {
+      VK_FROM_HANDLE(panvk_cmd_buffer, secondary, pCmdBuffers[i]);
+
+      list_for_each_entry_safe(struct panvk_batch, batch, &secondary->batches, node) {
+         struct panvk_batch *new_batch;
+         panvk_clone_batch(cmdbuf, batch, &new_batch);
+         list_addtail(&new_batch->node, &cmdbuf->batches);
+      }
+   }
+
+   cmdbuf->state.dirty = ~0u; /* TODO: set dirty only what needs to be */
 }
 
 VkResult
@@ -690,6 +731,7 @@ panvk_CmdBeginRenderPass2(VkCommandBuffer commandBuffer,
                                    sizeof(*cmdbuf->state.batch), 8,
                                    VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
    util_dynarray_init(&cmdbuf->state.batch->jobs, NULL);
+   util_dynarray_init(&cmdbuf->state.batch->event_ops, NULL);
    cmdbuf->state.clear = vk_zalloc(&cmdbuf->pool->alloc,
                                    sizeof(*cmdbuf->state.clear) *
                                    pRenderPassBegin->clearValueCount, 8,
@@ -769,17 +811,29 @@ panvk_cmd_get_midgard_polygon_list(struct panvk_cmd_buffer *cmdbuf,
 void
 panvk_cmd_close_batch(struct panvk_cmd_buffer *cmdbuf)
 {
-   assert(cmdbuf->state.batch);
+   struct panvk_batch *batch = cmdbuf->state.batch;
 
-   if (!cmdbuf->state.batch->fragment_job &&
-       !cmdbuf->state.batch->scoreboard.first_job) {
-      vk_free(&cmdbuf->pool->alloc, cmdbuf->state.batch);
-      cmdbuf->state.batch = NULL;
-      return;
+   assert(batch);
+
+   if (!batch->fragment_job && !batch->scoreboard.first_job) {
+      if (util_dynarray_num_elements(&batch->event_ops, struct panvk_event_op) == 0) {
+         vk_free(&cmdbuf->pool->alloc, batch);
+         cmdbuf->state.batch = NULL;
+         return;
+      } else {
+         struct panfrost_ptr ptr = pan_pool_alloc_desc(&cmdbuf->desc_pool.base,
+                                                       JOB_HEADER);
+         util_dynarray_append(&batch->jobs, void *, ptr.cpu);
+         panfrost_add_job(&cmdbuf->desc_pool.base, &batch->scoreboard,
+                          MALI_JOB_TYPE_NULL, false, false, 0, 0,
+                          &ptr, false);
+         list_addtail(&batch->node, &cmdbuf->batches);
+         cmdbuf->state.batch = NULL;
+         return;
+      }
    }
 
    struct panfrost_device *pdev = &cmdbuf->device->physical_device->pdev;
-   struct panvk_batch *batch = cmdbuf->state.batch;
 
    list_addtail(&cmdbuf->state.batch->node, &cmdbuf->batches);
 
@@ -1480,12 +1534,69 @@ panvk_CmdPipelineBarrier(VkCommandBuffer commandBuffer,
    }
 }
 
+static void
+panvk_add_set_event_operation(struct panvk_cmd_buffer *cmdbuf,
+                              struct panvk_event *event,
+                              enum panvk_event_op_type type)
+{
+   struct panvk_event_op op = {
+      .type = type,
+      .event = event,
+   };
+
+   if (cmdbuf->state.batch == NULL) {
+      panvk_cmd_open_batch(cmdbuf);
+      util_dynarray_append(&cmdbuf->state.batch->event_ops,
+                           struct panvk_event_op,
+                           op);
+      panvk_cmd_close_batch(cmdbuf);
+   } else {
+      util_dynarray_append(&cmdbuf->state.batch->event_ops,
+                           struct panvk_event_op,
+                           op);
+      panvk_cmd_close_batch(cmdbuf);
+      panvk_cmd_open_batch(cmdbuf);
+   }
+}
+
+static void
+panvk_add_wait_event_operation(struct panvk_cmd_buffer *cmdbuf,
+                               struct panvk_event *event)
+{
+   struct panvk_event_op op = {
+      .type = PANVK_EVENT_OP_WAIT,
+      .event = event,
+   };
+
+   if (cmdbuf->state.batch == NULL) {
+      panvk_cmd_open_batch(cmdbuf);
+      util_dynarray_append(&cmdbuf->state.batch->event_ops,
+                           struct panvk_event_op,
+                           op);
+   } else {
+      if (cmdbuf->state.batch->fragment_job ||
+          cmdbuf->state.batch->scoreboard.first_job) {
+         panvk_cmd_close_batch(cmdbuf);
+         panvk_cmd_open_batch(cmdbuf);
+      }
+      util_dynarray_append(&cmdbuf->state.batch->event_ops,
+                           struct panvk_event_op,
+                           op);
+   }
+}
+
 void
 panvk_CmdSetEvent(VkCommandBuffer commandBuffer,
                   VkEvent _event,
                   VkPipelineStageFlags stageMask)
 {
-   panvk_stub();
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+   VK_FROM_HANDLE(panvk_event, event, _event);
+
+   /* vkCmdSetEvent cannot be called inside a render pass */
+   assert(cmdbuf->state.pass == NULL);
+
+   panvk_add_set_event_operation(cmdbuf, event, PANVK_EVENT_OP_SET);
 }
 
 void
@@ -1493,7 +1604,13 @@ panvk_CmdResetEvent(VkCommandBuffer commandBuffer,
                     VkEvent _event,
                     VkPipelineStageFlags stageMask)
 {
-   panvk_stub();
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+   VK_FROM_HANDLE(panvk_event, event, _event);
+
+   /* vkCmdResetEvent cannot be called inside a render pass */
+   assert(cmdbuf->state.pass == NULL);
+
+   panvk_add_set_event_operation(cmdbuf, event, PANVK_EVENT_OP_RESET);
 }
 
 void
@@ -1509,7 +1626,14 @@ panvk_CmdWaitEvents(VkCommandBuffer commandBuffer,
                     uint32_t imageMemoryBarrierCount,
                     const VkImageMemoryBarrier *pImageMemoryBarriers)
 {
-   panvk_stub();
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+
+   assert(eventCount > 0);
+
+   for (uint32_t i = 0; i < eventCount; i++) {
+      VK_FROM_HANDLE(panvk_event, event, pEvents[i]);
+      panvk_add_wait_event_operation(cmdbuf, event);
+   }
 }
 
 void

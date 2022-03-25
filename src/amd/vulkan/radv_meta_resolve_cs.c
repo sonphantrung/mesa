@@ -776,15 +776,14 @@ radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer, struct radv_
  * Emit any needed resolves for the current subpass.
  */
 void
-radv_cmd_buffer_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer)
+radv_cmd_buffer_resolve_rendering_cs(struct radv_cmd_buffer *cmd_buffer)
 {
-   const struct radv_subpass *subpass = cmd_buffer->state.subpass;
-   VkRect2D resolve_area = cmd_buffer->state.render_area;
-   uint32_t layer_count = cmd_buffer->state.framebuffer->layers;
-   struct radv_subpass_barrier barrier;
+   const struct radv_rendering_state *render = &cmd_buffer->state.render;
+   struct radv_resolve_barrier barrier;
 
-   if (subpass->view_mask)
-      layer_count = util_last_bit(subpass->view_mask);
+   uint32_t layer_count = render->layer_count;
+   if (render->view_mask)
+      layer_count = util_last_bit(render->view_mask);
 
    /* Resolves happen before the end-of-subpass barriers get executed, so
     * we have to make the attachment shader-readable.
@@ -792,23 +791,22 @@ radv_cmd_buffer_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer)
    barrier.src_stage_mask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
    barrier.src_access_mask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
    barrier.dst_access_mask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-   radv_emit_subpass_barrier(cmd_buffer, &barrier);
+   radv_emit_resolve_barrier(cmd_buffer, &barrier);
 
-   for (uint32_t i = 0; i < subpass->color_count; ++i) {
-      struct radv_subpass_attachment src_att = subpass->color_attachments[i];
-      struct radv_subpass_attachment dst_att = subpass->resolve_attachments[i];
-
-      if (dst_att.attachment == VK_ATTACHMENT_UNUSED)
+   for (uint32_t i = 0; i < render->color_att_count; ++i) {
+      if (render->color_att[i].resolve_iview == NULL)
          continue;
 
-      struct radv_image_view *src_iview = cmd_buffer->state.attachments[src_att.attachment].iview;
-      struct radv_image_view *dst_iview = cmd_buffer->state.attachments[dst_att.attachment].iview;
+      struct radv_image_view *src_iview = render->color_att[i].iview;
+      struct radv_image_view *dst_iview = render->color_att[i].resolve_iview;
+      VkImageLayout src_layout = render->color_att[i].layout;
+      VkImageLayout dst_layout = render->color_att[i].resolve_layout;
 
       VkImageResolve2 region = {
          .sType = VK_STRUCTURE_TYPE_IMAGE_RESOLVE_2,
          .extent = {
-            .width = resolve_area.extent.width,
-            .height = resolve_area.extent.height,
+            .width = render->area.extent.width,
+            .height = render->area.extent.height,
             .depth = 1,
          },
          .srcSubresource =
@@ -825,13 +823,14 @@ radv_cmd_buffer_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer)
                .baseArrayLayer = dst_iview->vk.base_array_layer,
                .layerCount = layer_count,
             },
-         .srcOffset = { resolve_area.offset.x, resolve_area.offset.y, 0 },
-         .dstOffset = { resolve_area.offset.x, resolve_area.offset.y, 0 },
+         .srcOffset = { render->area.offset.x, render->area.offset.y, 0 },
+         .dstOffset = { render->area.offset.x, render->area.offset.y, 0 },
       };
 
-      radv_meta_resolve_compute_image(cmd_buffer, src_iview->image, src_iview->vk.format,
-                                      src_att.layout, dst_iview->image, dst_iview->vk.format,
-                                      dst_att.layout, &region);
+      radv_meta_resolve_compute_image(cmd_buffer,
+                                      src_iview->image, src_iview->vk.format, src_layout,
+                                      dst_iview->image, dst_iview->vk.format, dst_layout,
+                                      &region);
    }
 
    cmd_buffer->state.flush_bits |=
@@ -840,19 +839,16 @@ radv_cmd_buffer_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer)
 }
 
 void
-radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
-                                      VkImageAspectFlags aspects,
-                                      VkResolveModeFlagBits resolve_mode)
+radv_depth_stencil_resolve_rendering_cs(struct radv_cmd_buffer *cmd_buffer,
+                                        VkImageAspectFlags aspects,
+                                        VkResolveModeFlagBits resolve_mode)
 {
-   const struct radv_subpass *subpass = cmd_buffer->state.subpass;
-   VkRect2D resolve_area = cmd_buffer->state.render_area;
-   uint32_t layer_count = cmd_buffer->state.framebuffer->layers;
+   const struct radv_rendering_state *render = &cmd_buffer->state.render;
    struct radv_meta_saved_state saved_state;
 
-   assert(resolve_area.offset.x == 0 && resolve_area.offset.y == 0);
-
-   if (subpass->view_mask)
-      layer_count = util_last_bit(subpass->view_mask);
+   uint32_t layer_count = render->layer_count;
+   if (render->view_mask)
+      layer_count = util_last_bit(render->view_mask);
 
    /* Resolves happen before the end-of-subpass barriers get executed, so
     * we have to make the attachment shader-readable.
@@ -862,8 +858,8 @@ radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
       radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_READ_BIT, NULL) |
       radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT, NULL);
 
-   struct radv_subpass_attachment src_att = *subpass->depth_stencil_attachment;
-   struct radv_image_view *src_iview = cmd_buffer->state.attachments[src_att.attachment].iview;
+   struct radv_image_view *src_iview = render->ds_att.iview;
+   VkImageLayout src_layout = render->ds_att.layout;
    struct radv_image *src_image = src_iview->image;
 
    VkImageResolve2 region = {0};
@@ -873,13 +869,13 @@ radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
    region.srcSubresource.baseArrayLayer = src_iview->vk.base_array_layer;
    region.srcSubresource.layerCount = layer_count;
 
-   radv_decompress_resolve_src(cmd_buffer, src_image, src_att.layout, &region);
+   radv_decompress_resolve_src(cmd_buffer, src_image, src_layout, &region);
 
    radv_meta_save(&saved_state, cmd_buffer,
                   RADV_META_SAVE_COMPUTE_PIPELINE | RADV_META_SAVE_DESCRIPTORS);
 
-   struct radv_subpass_attachment dest_att = *subpass->ds_resolve_attachment;
-   struct radv_image_view *dst_iview = cmd_buffer->state.attachments[dest_att.attachment].iview;
+   struct radv_image_view *dst_iview = render->ds_att.resolve_iview;
+   VkImageLayout dst_layout = render->ds_att.resolve_layout;
    struct radv_image *dst_image = dst_iview->image;
 
    struct radv_image_view tsrc_iview;
@@ -920,8 +916,8 @@ radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
 
    emit_depth_stencil_resolve(cmd_buffer, &tsrc_iview, &tdst_iview,
                               &(VkExtent3D){
-                                 resolve_area.extent.width,
-                                 resolve_area.extent.height,
+                                 render->area.extent.width,
+                                 render->area.extent.height,
                                  layer_count,
                               },
                               aspects, resolve_mode);
@@ -930,11 +926,10 @@ radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
       RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_INV_VCACHE |
       radv_src_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT, NULL);
 
-   VkImageLayout layout = cmd_buffer->state.attachments[dest_att.attachment].current_layout;
    uint32_t queue_mask = radv_image_queue_family_mask(dst_image, cmd_buffer->qf,
                                                       cmd_buffer->qf);
 
-   if (radv_layout_is_htile_compressed(cmd_buffer->device, dst_image, layout, queue_mask)) {
+   if (radv_layout_is_htile_compressed(cmd_buffer->device, dst_image, dst_layout, queue_mask)) {
       VkImageSubresourceRange range = {0};
       range.aspectMask = aspects;
       range.baseMipLevel = dst_iview->vk.base_mip_level;

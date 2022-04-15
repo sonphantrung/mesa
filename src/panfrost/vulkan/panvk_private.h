@@ -880,6 +880,10 @@ struct panvk_pipeline {
    } cs;
 
    struct {
+      bool idvs;
+   } vs;
+
+   struct {
       unsigned topology;
       bool writes_point_size;
       bool primitive_restart;

@@ -434,20 +434,12 @@ panvk_per_arch(emit_ubos)(const struct panvk_pipeline *pipeline,
    }
 }
 
-void
-panvk_per_arch(emit_vertex_job)(const struct panvk_pipeline *pipeline,
-                                const struct panvk_draw_info *draw,
-                                void *job)
+static void
+panvk_emit_vertex_dcd(const struct panvk_pipeline *pipeline,
+                      const struct panvk_draw_info *draw,
+                      void *dcd)
 {
-   void *section = pan_section_ptr(job, COMPUTE_JOB, INVOCATION);
-
-   memcpy(section, &draw->invocation, pan_size(INVOCATION));
-
-   pan_section_pack(job, COMPUTE_JOB, PARAMETERS, cfg) {
-      cfg.job_task_split = 5;
-   }
-
-   pan_section_pack(job, COMPUTE_JOB, DRAW, cfg) {
+   pan_pack(dcd, DRAW, cfg) {
       cfg.draw_descriptor_is_64b = true;
       cfg.state = pipeline->rsds[MESA_SHADER_VERTEX];
       cfg.attributes = draw->stages[MESA_SHADER_VERTEX].attributes;
@@ -463,6 +455,22 @@ panvk_per_arch(emit_vertex_job)(const struct panvk_pipeline *pipeline,
       cfg.textures = draw->textures;
       cfg.samplers = draw->samplers;
    }
+}
+
+void
+panvk_per_arch(emit_vertex_job)(const struct panvk_pipeline *pipeline,
+                                const struct panvk_draw_info *draw,
+                                void *job)
+{
+   void *section = pan_section_ptr(job, COMPUTE_JOB, INVOCATION);
+
+   memcpy(section, &draw->invocation, pan_size(INVOCATION));
+
+   pan_section_pack(job, COMPUTE_JOB, PARAMETERS, cfg) {
+      cfg.job_task_split = 5;
+   }
+
+   panvk_emit_vertex_dcd(pipeline, draw, pan_section_ptr(job, COMPUTE_JOB, DRAW));
 }
 
 void

@@ -186,10 +186,13 @@ struct ureg_program
    } buffer[PIPE_MAX_SHADER_BUFFERS];
    unsigned nr_buffers;
 
-   struct util_bitmask *free_temps;
+   struct util_bitmask *free_temps32;
+   struct util_bitmask *free_temps16;
    struct util_bitmask *local_temps;
    struct util_bitmask *decl_temps;
-   unsigned nr_temps;
+   struct util_bitmask *decl_temps16;
+   unsigned nr_temps_highp;
+   unsigned nr_temps_mediump;
 
    unsigned array_temps[UREG_MAX_ARRAY_TEMPS];
    unsigned nr_array_temps;
@@ -633,15 +636,19 @@ ureg_DECL_hw_atomic(struct ureg_program *ureg,
 }
 
 static struct ureg_dst alloc_temporary( struct ureg_program *ureg,
-                                        bool local )
+                                        bool local,
+                                        enum  tgsi_file_type file)
 {
    unsigned i;
 
    /* Look for a released temporary.
     */
-   for (i = util_bitmask_get_first_index(ureg->free_temps);
+   struct util_bitmask *free_temps = file == TGSI_FILE_TEMPORARY ?
+         ureg->free_temps32 : ureg->free_temps16;
+
+   for (i = util_bitmask_get_first_index(free_temps);
         i != UTIL_BITMASK_INVALID_INDEX;
-        i = util_bitmask_get_next_index(ureg->free_temps, i + 1)) {
+        i = util_bitmask_get_next_index(free_temps, i + 1)) {
       if (util_bitmask_get(ureg->local_temps, i) == local)
          break;
    }
@@ -649,36 +656,41 @@ static struct ureg_dst alloc_temporary( struct ureg_program *ureg,
    /* Or allocate a new one.
     */
    if (i == UTIL_BITMASK_INVALID_INDEX) {
-      i = ureg->nr_temps++;
+      if (file == TGSI_FILE_TEMPORARY)
+         i = ureg->nr_temps_highp++;
+      else
+         i = ureg->nr_temps_mediump++;
 
       if (local)
          util_bitmask_set(ureg->local_temps, i);
 
       /* Start a new declaration when the local flag changes */
       if (!i || util_bitmask_get(ureg->local_temps, i - 1) != local)
-         util_bitmask_set(ureg->decl_temps, i);
+         util_bitmask_set(file == TGSI_FILE_TEMPORARY ?
+                             ureg->decl_temps : ureg->decl_temps16,
+                          i);
    }
 
-   util_bitmask_clear(ureg->free_temps, i);
+   util_bitmask_clear(free_temps, i);
 
-   return ureg_dst_register( TGSI_FILE_TEMPORARY, i );
+   return ureg_dst_register(file, i );
 }
 
 struct ureg_dst ureg_DECL_temporary( struct ureg_program *ureg )
 {
-   return alloc_temporary(ureg, false);
+   return alloc_temporary(ureg, false, TGSI_FILE_TEMPORARY);
 }
 
 struct ureg_dst ureg_DECL_local_temporary( struct ureg_program *ureg )
 {
-   return alloc_temporary(ureg, true);
+   return alloc_temporary(ureg, true, TGSI_FILE_TEMPORARY);
 }
 
 struct ureg_dst ureg_DECL_array_temporary( struct ureg_program *ureg,
                                            unsigned size,
                                            bool local )
 {
-   unsigned i = ureg->nr_temps;
+   unsigned i = ureg->nr_temps_highp;
    struct ureg_dst dst = ureg_dst_register( TGSI_FILE_TEMPORARY, i );
 
    if (local)
@@ -687,10 +699,46 @@ struct ureg_dst ureg_DECL_array_temporary( struct ureg_program *ureg,
    /* Always start a new declaration at the start */
    util_bitmask_set(ureg->decl_temps, i);
 
-   ureg->nr_temps += size;
+   ureg->nr_temps_highp += size;
 
    /* and also at the end of the array */
-   util_bitmask_set(ureg->decl_temps, ureg->nr_temps);
+   util_bitmask_set(ureg->decl_temps, ureg->nr_temps_highp);
+
+   if (ureg->nr_array_temps < UREG_MAX_ARRAY_TEMPS) {
+      ureg->array_temps[ureg->nr_array_temps++] = i;
+      dst.ArrayID = ureg->nr_array_temps;
+   }
+
+   return dst;
+}
+
+struct ureg_dst ureg_DECL_temporary16( struct ureg_program *ureg )
+{
+   return alloc_temporary(ureg, false, TGSI_FILE_TEMPORARY16);
+}
+
+struct ureg_dst ureg_DECL_local_temporary16( struct ureg_program *ureg )
+{
+   return alloc_temporary(ureg, true, TGSI_FILE_TEMPORARY16);
+}
+
+struct ureg_dst ureg_DECL_array_temporary16( struct ureg_program *ureg,
+                                              unsigned size,
+                                              bool local )
+{
+   unsigned i = ureg->nr_temps_mediump;
+   struct ureg_dst dst = ureg_dst_register( TGSI_FILE_TEMPORARY16, i );
+
+   if (local)
+      util_bitmask_set(ureg->local_temps, i);
+
+   /* Always start a new declaration at the start */
+   util_bitmask_set(ureg->decl_temps16, i);
+
+   ureg->nr_temps_mediump += size;
+
+   /* and also at the end of the array */
+   util_bitmask_set(ureg->decl_temps16, ureg->nr_temps_mediump);
 
    if (ureg->nr_array_temps < UREG_MAX_ARRAY_TEMPS) {
       ureg->array_temps[ureg->nr_array_temps++] = i;
@@ -703,8 +751,10 @@ struct ureg_dst ureg_DECL_array_temporary( struct ureg_program *ureg,
 void ureg_release_temporary( struct ureg_program *ureg,
                              struct ureg_dst tmp )
 {
-   if(tmp.File == TGSI_FILE_TEMPORARY)
-      util_bitmask_set(ureg->free_temps, tmp.Index);
+   if (tmp.File == TGSI_FILE_TEMPORARY)
+      util_bitmask_set(ureg->free_temps32, tmp.Index);
+   else if (tmp.File == TGSI_FILE_TEMPORARY16)
+      util_bitmask_set(ureg->free_temps16, tmp.Index);
 }
 
 
@@ -1026,6 +1076,14 @@ ureg_DECL_immediate_f64( struct ureg_program *ureg,
    }
 
    return decl_immediate(ureg, fu.u, nr, TGSI_IMM_FLOAT64);
+}
+
+struct ureg_src
+ureg_DECL_immediate_f16( struct ureg_program *ureg,
+                         const unsigned *v,
+                         unsigned nr )
+{
+  return decl_immediate(ureg, v, nr, TGSI_IMM_FLOAT16);
 }
 
 struct ureg_src
@@ -1627,7 +1685,8 @@ static void
 emit_decl_temps( struct ureg_program *ureg,
                  unsigned first, unsigned last,
                  bool local,
-                 unsigned arrayid )
+                 unsigned arrayid,
+                 enum tgsi_file_type file)
 {
    union tgsi_any_token *out = get_tokens( ureg, DOMAIN_DECL,
                                            arrayid ? 3 : 2 );
@@ -1635,7 +1694,7 @@ emit_decl_temps( struct ureg_program *ureg,
    out[0].value = 0;
    out[0].decl.Type = TGSI_TOKEN_TYPE_DECLARATION;
    out[0].decl.NrTokens = 2;
-   out[0].decl.File = TGSI_FILE_TEMPORARY;
+   out[0].decl.File = file;
    out[0].decl.UsageMask = TGSI_WRITEMASK_XYZW;
    out[0].decl.Local = local;
 
@@ -2041,19 +2100,39 @@ static void emit_decls( struct ureg_program *ureg )
       }
    }
 
-   if (ureg->nr_temps) {
+   if (ureg->nr_temps_highp) {
       unsigned array = 0;
-      for (i = 0; i < ureg->nr_temps;) {
+      for (i = 0; i < ureg->nr_temps_highp;) {
          bool local = util_bitmask_get(ureg->local_temps, i);
          unsigned first = i;
          i = util_bitmask_get_next_index(ureg->decl_temps, i + 1);
          if (i == UTIL_BITMASK_INVALID_INDEX)
-            i = ureg->nr_temps;
+            i = ureg->nr_temps_highp;
 
          if (array < ureg->nr_array_temps && ureg->array_temps[array] == first)
-            emit_decl_temps( ureg, first, i - 1, local, ++array );
+            emit_decl_temps( ureg, first, i - 1, local, ++array,
+                             TGSI_FILE_TEMPORARY );
          else
-            emit_decl_temps( ureg, first, i - 1, local, 0 );
+            emit_decl_temps( ureg, first, i - 1, local, 0,
+                             TGSI_FILE_TEMPORARY );
+      }
+   }
+
+   if (ureg->nr_temps_mediump) {
+      unsigned array = 0;
+      for (i = 0; i < ureg->nr_temps_mediump;) {
+         bool local = util_bitmask_get(ureg->local_temps, i);
+         unsigned first = i;
+         i = util_bitmask_get_next_index(ureg->decl_temps16, i + 1);
+         if (i == UTIL_BITMASK_INVALID_INDEX)
+            i = ureg->nr_temps_mediump;
+
+         if (array < ureg->nr_array_temps && ureg->array_temps[array] == first)
+            emit_decl_temps( ureg, first, i - 1, local, ++array,
+                             TGSI_FILE_TEMPORARY16 );
+         else
+            emit_decl_temps( ureg, first, i - 1, local, 0,
+                             TGSI_FILE_TEMPORARY16 );
       }
    }
 
@@ -2251,9 +2330,13 @@ ureg_create_with_screen(enum pipe_shader_type processor,
    for (i = 0; i < ARRAY_SIZE(ureg->properties); i++)
       ureg->properties[i] = ~0;
 
-   ureg->free_temps = util_bitmask_create();
-   if (ureg->free_temps == NULL)
-      goto no_free_temps;
+   ureg->free_temps32 = util_bitmask_create();
+   if (ureg->free_temps32 == NULL)
+      goto no_free_temps32;
+
+   ureg->free_temps16 = util_bitmask_create();
+   if (ureg->free_temps16 == NULL)
+      goto no_free_temps16;
 
    ureg->local_temps = util_bitmask_create();
    if (ureg->local_temps == NULL)
@@ -2263,13 +2346,19 @@ ureg_create_with_screen(enum pipe_shader_type processor,
    if (ureg->decl_temps == NULL)
       goto no_decl_temps;
 
+   ureg->decl_temps16 = util_bitmask_create();
+   if (ureg->decl_temps16 == NULL)
+      goto no_decl_temps;
+
    return ureg;
 
 no_decl_temps:
    util_bitmask_destroy(ureg->local_temps);
 no_local_temps:
-   util_bitmask_destroy(ureg->free_temps);
-no_free_temps:
+   util_bitmask_destroy(ureg->free_temps16);
+no_free_temps16:
+   util_bitmask_destroy(ureg->free_temps32);
+no_free_temps32:
    FREE(ureg);
 no_ureg:
    return NULL;
@@ -2447,9 +2536,11 @@ void ureg_destroy( struct ureg_program *ureg )
          FREE(ureg->domain[i].tokens);
    }
 
-   util_bitmask_destroy(ureg->free_temps);
+   util_bitmask_destroy(ureg->free_temps16);
+   util_bitmask_destroy(ureg->free_temps32);
    util_bitmask_destroy(ureg->local_temps);
    util_bitmask_destroy(ureg->decl_temps);
+   util_bitmask_destroy(ureg->decl_temps16);
 
    FREE(ureg);
 }

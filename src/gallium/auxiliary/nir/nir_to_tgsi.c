@@ -290,16 +290,25 @@ ntt_live_reg_mark_use(struct ntt_compile *c, struct ntt_live_reg_block_state *bs
    c->liveness[index].end = MAX2(c->liveness[index].end, ip);
 
 }
+
+struct ra_data {   
+    int num_registers;
+    int num_array_registers;
+    enum tgsi_file_type file_type;
+};
+
 static void
-ntt_live_reg_setup_def_use(struct ntt_compile *c, nir_function_impl *impl, struct ntt_live_reg_state *state)
+ntt_live_reg_setup_def_use(struct ntt_compile *c, nir_function_impl *impl,
+                           struct ntt_live_reg_state *state,
+                           struct ra_data *data)
 {
    for (int i = 0; i < impl->num_blocks; i++) {
-      state->blocks[i].def = rzalloc_array(state->blocks, uint8_t, c->num_temps);
-      state->blocks[i].defin = rzalloc_array(state->blocks, uint8_t, c->num_temps);
-      state->blocks[i].defout = rzalloc_array(state->blocks, uint8_t, c->num_temps);
-      state->blocks[i].use = rzalloc_array(state->blocks, uint8_t, c->num_temps);
-      state->blocks[i].livein = rzalloc_array(state->blocks, uint8_t, c->num_temps);
-      state->blocks[i].liveout = rzalloc_array(state->blocks, uint8_t, c->num_temps);
+      state->blocks[i].def = rzalloc_array(state->blocks, uint8_t, data->num_registers);
+      state->blocks[i].defin = rzalloc_array(state->blocks, uint8_t, data->num_registers);
+      state->blocks[i].defout = rzalloc_array(state->blocks, uint8_t, data->num_registers);
+      state->blocks[i].use = rzalloc_array(state->blocks, uint8_t, data->num_registers);
+      state->blocks[i].livein = rzalloc_array(state->blocks, uint8_t, data->num_registers);
+      state->blocks[i].liveout = rzalloc_array(state->blocks, uint8_t, data->num_registers);
    }
 
    int ip = 0;
@@ -320,7 +329,7 @@ ntt_live_reg_setup_def_use(struct ntt_compile *c, nir_function_impl *impl, struc
           * tracking of array regs, so they're never screened off.
           */
          for (int i = 0; i < opcode_info->num_src; i++) {
-            if (insn->src[i].File != TGSI_FILE_TEMPORARY)
+            if (insn->src[i].File != data->file_type)
                continue;
             int index = insn->src[i].Index;
 
@@ -333,13 +342,13 @@ ntt_live_reg_setup_def_use(struct ntt_compile *c, nir_function_impl *impl, struc
                                                               insn->tex_target,
                                                               insn->tex_target);
 
-            assert(!insn->src[i].Indirect || index < c->first_non_array_temp);
+            assert(!insn->src[i].Indirect || index < data->num_array_registers);
             ntt_live_reg_mark_use(c, bs, ip, index, used_mask);
          }
 
          if (insn->is_tex) {
             for (int i = 0; i < ARRAY_SIZE(insn->tex_offset); i++) {
-               if (insn->tex_offset[i].File == TGSI_FILE_TEMPORARY)
+               if (insn->tex_offset[i].File == data->file_type)
                   ntt_live_reg_mark_use(c, bs, ip, insn->tex_offset[i].Index, 0xf);
             }
          }
@@ -350,7 +359,7 @@ ntt_live_reg_setup_def_use(struct ntt_compile *c, nir_function_impl *impl, struc
           * the block that don't have a preceding use.
           */
          for (int i = 0; i < opcode_info->num_dst; i++) {
-            if (insn->dst[i].File != TGSI_FILE_TEMPORARY)
+            if (insn->dst[i].File != data->file_type)
                continue;
             int index = insn->dst[i].Index;
             uint32_t writemask = insn->dst[i].WriteMask;
@@ -358,7 +367,7 @@ ntt_live_reg_setup_def_use(struct ntt_compile *c, nir_function_impl *impl, struc
             bs->def[index] |= writemask & ~bs->use[index];
             bs->defout[index] |= writemask;
 
-            assert(!insn->dst[i].Indirect || index < c->first_non_array_temp);
+            assert(!insn->dst[i].Indirect || index < data->num_array_registers);
             c->liveness[index].start = MIN2(c->liveness[index].start, ip);
             c->liveness[index].end = MAX2(c->liveness[index].end, ip);
          }
@@ -370,21 +379,22 @@ ntt_live_reg_setup_def_use(struct ntt_compile *c, nir_function_impl *impl, struc
 }
 
 static void
-ntt_live_regs(struct ntt_compile *c, nir_function_impl *impl)
+ntt_live_regs(struct ntt_compile *c, nir_function_impl *impl,
+              struct ra_data *data)
 {
    nir_metadata_require(impl, nir_metadata_block_index);
 
-   c->liveness = rzalloc_array(c, struct ntt_reg_interval, c->num_temps);
+   c->liveness = rzalloc_array(c, struct ntt_reg_interval, data->num_registers);
 
    struct ntt_live_reg_state state = {
        .blocks = rzalloc_array(impl, struct ntt_live_reg_block_state, impl->num_blocks),
    };
 
    /* The intervals start out with start > end (indicating unused) */
-   for (int i = 0; i < c->num_temps; i++)
+   for (int i = 0; i < data->num_registers; i++)
       c->liveness[i].start = ~0;
 
-   ntt_live_reg_setup_def_use(c, impl, &state);
+   ntt_live_reg_setup_def_use(c, impl, &state, data);
 
    /* Make a forward-order worklist of all the blocks. */
    nir_block_worklist_init(&state.worklist, impl->num_blocks, NULL);
@@ -405,7 +415,7 @@ ntt_live_regs(struct ntt_compile *c, nir_function_impl *impl)
          if (!succ || succ->index == impl->num_blocks)
             continue;
 
-         for (int i = 0; i < c->num_temps; i++) {
+         for (int i = 0; i < data->num_registers; i++) {
             uint8_t new_def = state.blocks[block->index].defout[i] & ~state.blocks[succ->index].defin[i];
 
             if (new_def) {
@@ -435,7 +445,7 @@ ntt_live_regs(struct ntt_compile *c, nir_function_impl *impl)
       struct ntt_block *ntt_block = ntt_block_from_nir(c, block);
       struct ntt_live_reg_block_state *bs = &state.blocks[block->index];
 
-      for (int i = 0; i < c->num_temps; i++) {
+      for (int i = 0; i < data->num_registers; i++) {
          /* Collect livein from our successors to include in our liveout. */
          for (int j = 0; j < ARRAY_SIZE(block->successors); j++) {
             nir_block *succ = block->successors[j];
@@ -474,83 +484,91 @@ ntt_live_regs(struct ntt_compile *c, nir_function_impl *impl)
 }
 
 static void
-ntt_ra_check(struct ntt_compile *c, unsigned *ra_map, BITSET_WORD *released, int ip, unsigned index)
+ntt_ra_check(struct ntt_compile *c, unsigned *ra_map, BITSET_WORD *released,
+             int ip, unsigned index, struct ra_data *data)
 {
-   if (index < c->first_non_array_temp)
+
+   if (index < data->num_array_registers)
       return;
 
    if (c->liveness[index].start == ip && ra_map[index] == ~0)
-      ra_map[index] = ureg_DECL_temporary(c->ureg).Index;
+      ra_map[index] = data->file_type == TGSI_FILE_TEMPORARY ?
+               ureg_DECL_temporary(c->ureg).Index :
+               ureg_DECL_temporary16(c->ureg).Index;
 
    if (c->liveness[index].end == ip && !BITSET_TEST(released, index)) {
-      ureg_release_temporary(c->ureg, ureg_dst_register(TGSI_FILE_TEMPORARY, ra_map[index]));
+      ureg_release_temporary(c->ureg, ureg_dst_register(data->file_type, ra_map[index]));
       BITSET_SET(released, index);
    }
 }
 
 static void
-ntt_allocate_regs(struct ntt_compile *c, nir_function_impl *impl)
+ntt_allocate_regs(struct ntt_compile *c, nir_function_impl *impl,
+                  struct ra_data *data)
 {
-   ntt_live_regs(c, impl);
+   ntt_live_regs(c, impl, data);
 
-   unsigned *ra_map = ralloc_array(c, unsigned, c->num_temps);
-   unsigned *released = rzalloc_array(c, BITSET_WORD, BITSET_WORDS(c->num_temps));
+   unsigned *ra_map = ralloc_array(c, unsigned, data->num_registers);
+   unsigned *released = rzalloc_array(c, BITSET_WORD, BITSET_WORDS(data->num_registers));
 
    /* No RA on NIR array regs */
-   for (int i = 0; i < c->first_non_array_temp; i++)
+   for (int i = 0; i < data->num_array_registers; i++)
       ra_map[i] = i;
 
-   for (int i = c->first_non_array_temp; i < c->num_temps; i++)
+   for (int i = data->num_array_registers; i < data->num_registers; i++)
       ra_map[i] = ~0;
 
    int ip = 0;
    nir_foreach_block(block, impl) {
       struct ntt_block *ntt_block = ntt_block_from_nir(c, block);
 
-      for (int i = 0; i < c->num_temps; i++)
-         ntt_ra_check(c, ra_map, released, ip, i);
+      for (int i = 0; i < data->num_registers; i++)
+         ntt_ra_check(c, ra_map, released, ip, i, data);
 
       util_dynarray_foreach(&ntt_block->insns, struct ntt_insn, insn) {
          const struct tgsi_opcode_info *opcode_info =
             tgsi_get_opcode_info(insn->opcode);
 
          for (int i = 0; i < opcode_info->num_src; i++) {
-            if (insn->src[i].File == TGSI_FILE_TEMPORARY) {
-               ntt_ra_check(c, ra_map, released, ip, insn->src[i].Index);
+            if (insn->src[i].File == data->file_type) {
+               ntt_ra_check(c, ra_map, released, ip, insn->src[i].Index, data);
                insn->src[i].Index = ra_map[insn->src[i].Index];
             }
          }
 
          if (insn->is_tex) {
             for (int i = 0; i < ARRAY_SIZE(insn->tex_offset); i++) {
-               if (insn->tex_offset[i].File == TGSI_FILE_TEMPORARY) {
-                  ntt_ra_check(c, ra_map, released, ip, insn->tex_offset[i].Index);
+               if (insn->tex_offset[i].File == data->file_type) {
+                  ntt_ra_check(c, ra_map, released, ip, insn->tex_offset[i].Index, data);
                   insn->tex_offset[i].Index = ra_map[insn->tex_offset[i].Index];
                }
             }
          }
 
          for (int i = 0; i < opcode_info->num_dst; i++) {
-            if (insn->dst[i].File == TGSI_FILE_TEMPORARY) {
-               ntt_ra_check(c, ra_map, released, ip, insn->dst[i].Index);
+            if (insn->dst[i].File == data->file_type) {
+               ntt_ra_check(c, ra_map, released, ip, insn->dst[i].Index, data);
                insn->dst[i].Index = ra_map[insn->dst[i].Index];
             }
          }
          ip++;
       }
 
-      for (int i = 0; i < c->num_temps; i++)
-         ntt_ra_check(c, ra_map, released, ip, i);
+      for (int i = 0; i < data->num_registers; i++)
+         ntt_ra_check(c, ra_map, released, ip, i, data);
    }
+   ralloc_free(c->liveness);
+   c->liveness = NULL;
 }
 
 static void
 ntt_allocate_regs_unoptimized(struct ntt_compile *c, nir_function_impl *impl)
 {
+   for (int i = c->first_non_array_temp16; i < c->num_temps16; i++)
+      ureg_DECL_temporary16(c->ureg);
    for (int i = c->first_non_array_temp; i < c->num_temps; i++)
       ureg_DECL_temporary(c->ureg);
 }
-
 
 /**
  * Try to find an iadd of a constant value with a non-constant value in the
@@ -1137,7 +1155,7 @@ ntt_setup_uniforms(struct ntt_compile *c)
 static void
 ntt_setup_registers(struct ntt_compile *c, struct exec_list *list)
 {
-   assert(c->num_temps == 0);
+   assert(c->num_temps + c->num_temps16 == 0);
 
    nir_foreach_reg_decl_safe(nir_reg, nir_shader_get_entrypoint(c->s)) {
       /* Permanently allocate all the array regs at the start. */
@@ -3214,17 +3232,30 @@ ntt_emit_impl(struct ntt_compile *c, nir_function_impl *impl)
    /* Don't do optimized RA if the driver requests it, unless the number of
     * temps is too large to be covered by the 16 bit signed int that TGSI
     * allocates for the register index */
-   if (!c->options->unoptimized_ra || c->num_temps > 0x7fff)
-      ntt_allocate_regs(c, impl);
-   else
+   if (!c->options->unoptimized_ra ||
+       c->num_temps > 0x7fff ||
+       c->num_temps16 > 0x7fff) {
+      if (c->num_temps16 > 0) {
+         struct ra_data data = {
+            .num_registers = c->num_temps16,
+            .num_array_registers = c->first_non_array_temp16,
+            .file_type =TGSI_FILE_TEMPORARY16
+         };
+         ntt_allocate_regs(c, impl, &data);
+      }
+      if (c->num_temps > 0) {
+         struct ra_data data = {
+            .num_registers = c->num_temps,
+            .num_array_registers = c->first_non_array_temp,
+            .file_type = TGSI_FILE_TEMPORARY
+         };
+         ntt_allocate_regs(c, impl, &data);
+      }
+   } else
       ntt_allocate_regs_unoptimized(c, impl);
 
    /* Turn the ntt insns into actual TGSI tokens */
-   ntt_emit_cf_list_ureg(c, &impl->body);
-
-   ralloc_free(c->liveness);
-   c->liveness = NULL;
-
+   ntt_emit_cf_list_ureg(c, &impl->body);  
 }
 
 static int

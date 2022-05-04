@@ -101,6 +101,9 @@ struct ntt_compile {
    unsigned num_temps;
    unsigned first_non_array_temp;
 
+   unsigned num_temps16;
+   unsigned first_non_array_temp16;
+
    /* Mappings from driver_location to TGSI input/output number.
     *
     * We'll be declaring TGSI input/outputs in an arbitrary order, and they get
@@ -120,6 +123,13 @@ ntt_temp(struct ntt_compile *c)
 {
    return ureg_dst_register(TGSI_FILE_TEMPORARY, c->num_temps++);
 }
+
+static struct ureg_dst
+ntt_temp16(struct ntt_compile *c)
+{
+   return ureg_dst_register(TGSI_FILE_TEMPORARY16, c->num_temps16++);
+}
+
 
 static struct ntt_block *
 ntt_block_from_nir(struct ntt_compile *c, struct nir_block *block)
@@ -1135,13 +1145,21 @@ ntt_setup_registers(struct ntt_compile *c, struct exec_list *list)
       unsigned index = nir_reg->dest.ssa.index;
 
       if (num_array_elems != 0) {
-         struct ureg_dst decl = ureg_DECL_array_temporary(c->ureg, num_array_elems, true);
-         c->reg_temp[index] = decl;
-         assert(c->num_temps == decl.Index);
-         c->num_temps += num_array_elems;
+         if (nir_intrinsic_bit_size(nir_reg) < 32) {
+            struct ureg_dst decl =
+               ureg_DECL_array_temporary16(c->ureg, num_array_elems, true);
+            c->reg_temp[index] = decl;
+            c->num_temps16 += num_array_elems;
+         } else {
+            struct ureg_dst decl =
+               ureg_DECL_array_temporary(c->ureg, num_array_elems, true);
+            c->reg_temp[index] = decl;
+            c->num_temps += num_array_elems;
+         }
       }
    }
    c->first_non_array_temp = c->num_temps;
+   c->first_non_array_temp16 = c->num_temps16;
 
    /* After that, allocate non-array regs in our virtual space that we'll
     * register-allocate before ureg emit.
@@ -1166,8 +1184,8 @@ ntt_setup_registers(struct ntt_compile *c, struct exec_list *list)
 
                write_mask = ntt_64bit_write_mask(write_mask);
             }
-
-            decl = ureg_writemask(ntt_temp(c), write_mask);
+            decl = ureg_writemask(bit_size >= 32 ? ntt_temp(c) : ntt_temp16(c),
+                                  write_mask);
          }
          c->reg_temp[index] = decl;
       }
@@ -1189,7 +1207,12 @@ ntt_get_load_const_src(struct ntt_compile *c, nir_load_const_instr *instr)
    } else {
       uint32_t values[4];
 
-      if (instr->def.bit_size == 32) {
+      if (instr->def.bit_size == 16) {
+         for (int i = 0; i < num_components; i++)
+            values[i] = instr->value[i].u16;
+
+         return ureg_DECL_immediate_f16(c->ureg, values, num_components);
+      } else if (instr->def.bit_size == 32) {
          for (int i = 0; i < num_components; i++)
             values[i] = instr->value[i].u32;
       } else {
@@ -1330,7 +1353,7 @@ ntt_get_ssa_def_decl(struct ntt_compile *c, nir_ssa_def *ssa)
 
    struct ureg_dst dst;
    if (!ntt_try_store_ssa_in_tgsi_output(c, &dst, ssa))
-      dst = ntt_temp(c);
+      dst = ssa->bit_size == 32 ? ntt_temp(c) : ntt_temp16(c);
 
    c->ssa_temp[ssa->index] = ntt_swizzle_for_write_mask(ureg_src(dst), writemask);
 

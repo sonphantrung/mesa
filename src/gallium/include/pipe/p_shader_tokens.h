@@ -135,7 +135,8 @@ struct tgsi_declaration
    unsigned Array       : 1;  /**< extra array info? */
    unsigned Atomic      : 1;  /**< atomic only? for TGSI_FILE_BUFFER */
    unsigned MemType     : 2;  /**< TGSI_MEMORY_TYPE_x for TGSI_FILE_MEMORY */
-   unsigned Padding     : 3;
+   unsigned FP16        : 1;  /**< Medium precision values? */
+   unsigned Padding     : 2;
 };
 
 struct tgsi_declaration_range

@@ -449,6 +449,10 @@ iter_declaration(
       TXT( ", INVARIANT" );
    }
 
+   if (decl->Declaration.FP16) {
+      TXT( ", FP16" );
+   }
+
    EOL();
 
    return true;

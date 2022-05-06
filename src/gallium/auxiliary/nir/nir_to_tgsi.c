@@ -76,6 +76,7 @@ struct ntt_compile {
    bool needs_texcoord_semantic;
    bool native_integers;
    bool has_txf_lz;
+   bool has_fp16;
 
    bool addr_declared[3];
    struct ureg_dst addr_reg[3];
@@ -728,7 +729,10 @@ ntt_output_decl(struct ntt_compile *c, nir_intrinsic_instr *instr, uint32_t *fra
          break;
       }
 
-      out = ureg_DECL_output(c->ureg, semantic_name, semantic_index);
+      out = ureg_DECL_output_layout(c->ureg, semantic_name, semantic_index,
+                                    0, base, TGSI_WRITEMASK_XYZW, 0, 1, false,
+                                    c->has_fp16 ? semantics.medium_precision : 0);
+
    } else {
       unsigned semantic_name, semantic_index;
 
@@ -768,7 +772,8 @@ ntt_output_decl(struct ntt_compile *c, nir_intrinsic_instr *instr, uint32_t *fra
                                     usage_mask,
                                     array_id,
                                     num_slots,
-                                    invariant);
+                                    invariant,
+                                    c->has_fp16 ? semantics.medium_precision : 0);
    }
 
    unsigned write_mask;
@@ -940,7 +945,10 @@ ntt_setup_inputs(struct ntt_compile *c)
                                                 sample_loc,
                                                 var->data.driver_location,
                                                 usage_mask,
-                                                array_id, array_len);
+                                                array_id, array_len,
+                                                c->has_fp16 ?
+                                                   var->data.precision == GLSL_PRECISION_MEDIUM ||
+                                                   var->data.precision == GLSL_PRECISION_LOW : 0);
 
       if (semantic_name == TGSI_SEMANTIC_FACE) {
          struct ureg_dst temp = ntt_temp(c);
@@ -995,7 +1003,11 @@ ntt_setup_outputs(struct ntt_compile *c)
       tgsi_get_gl_frag_result_semantic(var->data.location,
                                        &semantic_name, &semantic_index);
 
-      (void)ureg_DECL_output(c->ureg, semantic_name, semantic_index);
+      (void)ureg_DECL_output_layout(c->ureg, semantic_name, semantic_index, 0, var->data.driver_location,
+                                    TGSI_WRITEMASK_XYZW, 0, 1, false,
+                                    c->has_fp16 ?
+                                    var->data.precision == GLSL_PRECISION_MEDIUM ||
+                                    var->data.precision == GLSL_PRECISION_LOW : 0);
    }
 }
 
@@ -2313,7 +2325,8 @@ ntt_emit_load_input(struct ntt_compile *c, nir_intrinsic_instr *instr)
                                                          instr->num_components,
                                                          is_64),
                                      array_id,
-                                     semantics.num_slots);
+                                     semantics.num_slots,
+                                     c->has_fp16 ? semantics.medium_precision : 0);
    } else {
       input = c->input_index_map[base];
    }
@@ -4055,6 +4068,8 @@ const void *nir_to_tgsi_options(struct nir_shader *s,
       screen->get_param(screen, PIPE_CAP_TGSI_TEXCOORD);
    c->has_txf_lz =
       screen->get_param(screen, PIPE_CAP_TGSI_TEX_TXF_LZ);
+   c->has_fp16 =
+      screen->get_shader_param(screen, s->info.stage, PIPE_SHADER_CAP_FP16);
 
    c->s = s;
    c->native_integers = native_integers;

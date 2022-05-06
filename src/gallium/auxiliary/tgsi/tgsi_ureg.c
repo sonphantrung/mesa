@@ -124,6 +124,7 @@ struct ureg_program
       unsigned first;
       unsigned last;
       unsigned array_id;
+      bool medium_precision;
    } input[UREG_MAX_INPUT];
    unsigned nr_inputs, nr_input_regs;
 
@@ -144,6 +145,7 @@ struct ureg_program
       unsigned last;
       unsigned array_id;
       bool invariant;
+      bool medium_precision;
    } output[UREG_MAX_OUTPUT];
    unsigned nr_outputs, nr_output_regs;
 
@@ -297,7 +299,8 @@ ureg_DECL_fs_input_centroid_layout(struct ureg_program *ureg,
                        unsigned index,
                        unsigned usage_mask,
                        unsigned array_id,
-                       unsigned array_size)
+                       unsigned array_size,
+                       bool medium_precision)
 {
    unsigned i;
 
@@ -329,6 +332,7 @@ ureg_DECL_fs_input_centroid_layout(struct ureg_program *ureg,
       ureg->input[i].last = index + array_size - 1;
       ureg->input[i].array_id = array_id;
       ureg->input[i].usage_mask = usage_mask;
+      ureg->input[i].medium_precision = medium_precision;
       ureg->nr_input_regs = MAX2(ureg->nr_input_regs, index + array_size);
       ureg->nr_inputs++;
    } else {
@@ -352,7 +356,7 @@ ureg_DECL_fs_input_centroid(struct ureg_program *ureg,
    return ureg_DECL_fs_input_centroid_layout(ureg,
          semantic_name, semantic_index, interp_mode,
          interp_location,
-         ureg->nr_input_regs, TGSI_WRITEMASK_XYZW, array_id, array_size);
+         ureg->nr_input_regs, TGSI_WRITEMASK_XYZW, array_id, array_size, false);
 }
 
 
@@ -375,12 +379,13 @@ ureg_DECL_input_layout(struct ureg_program *ureg,
                 unsigned index,
                 unsigned usage_mask,
                 unsigned array_id,
-                unsigned array_size)
+                unsigned array_size,
+                bool medium_precision)
 {
    return ureg_DECL_fs_input_centroid_layout(ureg,
                semantic_name, semantic_index,
                TGSI_INTERPOLATE_CONSTANT, TGSI_INTERPOLATE_LOC_CENTER,
-               index, usage_mask, array_id, array_size);
+               index, usage_mask, array_id, array_size, medium_precision);
 }
 
 
@@ -435,7 +440,8 @@ ureg_DECL_output_layout(struct ureg_program *ureg,
                         unsigned usage_mask,
                         unsigned array_id,
                         unsigned array_size,
-                        bool invariant)
+                        bool invariant,
+                        bool medium_precision)
 {
    unsigned i;
 
@@ -466,6 +472,7 @@ ureg_DECL_output_layout(struct ureg_program *ureg,
       ureg->output[i].last = index + array_size - 1;
       ureg->output[i].array_id = array_id;
       ureg->output[i].invariant = invariant;
+      ureg->output[i].medium_precision = medium_precision;
       ureg->nr_output_regs = MAX2(ureg->nr_output_regs, index + array_size);
       ureg->nr_outputs++;
    }
@@ -492,7 +499,7 @@ ureg_DECL_output_masked(struct ureg_program *ureg,
 {
    return ureg_DECL_output_layout(ureg, name, index, 0,
                                   ureg->nr_output_regs, usage_mask, array_id,
-                                  array_size, false);
+                                  array_size, false, false);
 }
 
 
@@ -1578,7 +1585,8 @@ emit_decl_semantic(struct ureg_program *ureg,
                    unsigned streams,
                    unsigned usage_mask,
                    unsigned array_id,
-                   bool invariant)
+                   bool invariant,
+                   bool medium_precision)
 {
    union tgsi_any_token *out = get_tokens(ureg, DOMAIN_DECL, array_id ? 4 : 3);
 
@@ -1590,6 +1598,7 @@ emit_decl_semantic(struct ureg_program *ureg,
    out[0].decl.Semantic = 1;
    out[0].decl.Array = array_id != 0;
    out[0].decl.Invariant = invariant;
+   out[0].decl.FP16 = medium_precision;
 
    out[1].value = 0;
    out[1].decl_range.First = first;
@@ -1649,7 +1658,8 @@ emit_decl_fs(struct ureg_program *ureg,
              enum tgsi_interpolate_mode interpolate,
              enum tgsi_interpolate_loc interpolate_location,
              unsigned array_id,
-             unsigned usage_mask)
+             unsigned usage_mask,
+             bool medium_precision)
 {
    union tgsi_any_token *out = get_tokens(ureg, DOMAIN_DECL,
                                           array_id ? 5 : 4);
@@ -1662,6 +1672,7 @@ emit_decl_fs(struct ureg_program *ureg,
    out[0].decl.Interpolate = 1;
    out[0].decl.Semantic = 1;
    out[0].decl.Array = array_id != 0;
+   out[0].decl.FP16 = medium_precision;
 
    out[1].value = 0;
    out[1].decl_range.First = first;
@@ -1933,7 +1944,8 @@ static void emit_decls( struct ureg_program *ureg )
                          ureg->input[i].interp,
                          ureg->input[i].interp_location,
                          ureg->input[i].array_id,
-                         ureg->input[i].usage_mask);
+                         ureg->input[i].usage_mask,
+                         ureg->input[i].medium_precision);
          }
       }
       else {
@@ -1947,7 +1959,8 @@ static void emit_decls( struct ureg_program *ureg )
                             (j - ureg->input[i].first),
                             ureg->input[i].interp,
                             ureg->input[i].interp_location, 0,
-                            ureg->input[i].usage_mask);
+                            ureg->input[i].usage_mask,
+                            ureg->input[i].medium_precision);
             }
          }
       }
@@ -1963,7 +1976,8 @@ static void emit_decls( struct ureg_program *ureg )
                                0,
                                TGSI_WRITEMASK_XYZW,
                                ureg->input[i].array_id,
-                               false);
+                               false,
+                               ureg->input[i].medium_precision);
          }
       }
       else {
@@ -1976,7 +1990,8 @@ static void emit_decls( struct ureg_program *ureg )
                                   ureg->input[i].semantic_index +
                                   (j - ureg->input[i].first),
                                   0,
-                                  TGSI_WRITEMASK_XYZW, 0, false);
+                                  TGSI_WRITEMASK_XYZW, 0, false,
+                                  ureg->input[i].medium_precision);
             }
          }
       }
@@ -1990,7 +2005,8 @@ static void emit_decls( struct ureg_program *ureg )
                          ureg->system_value[i].semantic_name,
                          ureg->system_value[i].semantic_index,
                          0,
-                         TGSI_WRITEMASK_XYZW, 0, false);
+                         TGSI_WRITEMASK_XYZW, 0, false,
+                         false);
    }
 
    /* While not required by TGSI spec, virglrenderer has a dependency on the
@@ -2009,7 +2025,8 @@ static void emit_decls( struct ureg_program *ureg )
                             ureg->output[i].streams,
                             ureg->output[i].usage_mask,
                             ureg->output[i].array_id,
-                            ureg->output[i].invariant);
+                            ureg->output[i].invariant,
+                            ureg->output[i].medium_precision);
       }
    }
    else {
@@ -2024,7 +2041,8 @@ static void emit_decls( struct ureg_program *ureg )
                                ureg->output[i].streams,
                                ureg->output[i].usage_mask,
                                0,
-                               ureg->output[i].invariant);
+                               ureg->output[i].invariant,
+                               ureg->output[i].medium_precision);
          }
       }
    }

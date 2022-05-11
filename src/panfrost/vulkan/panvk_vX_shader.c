@@ -574,7 +574,7 @@ panvk_per_arch(shader_create)(struct panvk_device *dev,
    struct panfrost_compile_inputs inputs = {
       .gpu_id = pdev->gpu_id,
       .no_ubo_to_push = true,
-      .no_idvs = true, /* TODO */
+      .no_idvs = false,
       .sysval_ubo = sysval_ubo,
    };
 

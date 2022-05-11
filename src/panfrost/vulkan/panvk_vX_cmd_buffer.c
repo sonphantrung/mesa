@@ -868,6 +868,21 @@ panvk_draw_prepare_viewport(struct panvk_cmd_buffer *cmdbuf,
    }
 }
 
+#if PAN_ARCH >= 6
+static void
+panvk_draw_prepare_idvs_job(struct panvk_cmd_buffer *cmdbuf,
+                            struct panvk_draw_info *draw)
+{
+   const struct panvk_pipeline *pipeline = panvk_cmd_get_pipeline(cmdbuf, GRAPHICS);
+
+   struct panfrost_ptr ptr =
+      pan_pool_alloc_desc(&cmdbuf->desc_pool.base, INDEXED_VERTEX_JOB);
+
+   draw->jobs.tiler = ptr;
+   panvk_per_arch(emit_idvs_job)(pipeline, draw, draw->jobs.tiler.cpu);
+}
+#endif
+
 static void
 panvk_draw_prepare_vertex_job(struct panvk_cmd_buffer *cmdbuf,
                               struct panvk_draw_info *draw)
@@ -954,20 +969,34 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf,
    panvk_draw_prepare_attributes(cmdbuf, draw);
    panvk_draw_prepare_viewport(cmdbuf, draw);
    panvk_draw_prepare_tiler_context(cmdbuf, draw);
-   panvk_draw_prepare_vertex_job(cmdbuf, draw);
-   panvk_draw_prepare_tiler_job(cmdbuf, draw);
+   
    batch->tlsinfo.tls.size = MAX2(pipeline->tls_size, batch->tlsinfo.tls.size);
    assert(!pipeline->wls_size);
 
-   unsigned vjob_id =
+   if (pipeline->vs.idvs) {
+#if PAN_ARCH >= 6
+      panvk_draw_prepare_idvs_job(cmdbuf, draw);
       panfrost_add_job(&cmdbuf->desc_pool.base, &batch->scoreboard,
-                       MALI_JOB_TYPE_VERTEX, false, false, 0, 0,
-                       &draw->jobs.vertex, false);
+                       MALI_JOB_TYPE_INDEXED_VERTEX, false, false,
+                       0, 0, &draw->jobs.tiler, false);
 
-   if (pipeline->rast.enable) {
-      panfrost_add_job(&cmdbuf->desc_pool.base, &batch->scoreboard,
-                       MALI_JOB_TYPE_TILER, false, false, vjob_id, 0,
-                       &draw->jobs.tiler, false);
+#else
+      unreachable("IDVS is unsupported on Midgard");
+#endif
+   } else {
+      panvk_draw_prepare_vertex_job(cmdbuf, draw);
+      panvk_draw_prepare_tiler_job(cmdbuf, draw);
+
+      unsigned vjob_id =
+         panfrost_add_job(&cmdbuf->desc_pool.base, &batch->scoreboard,
+                          MALI_JOB_TYPE_VERTEX, false, false, 0, 0,
+                          &draw->jobs.vertex, false);
+
+      if (pipeline->rast.enable) {
+         panfrost_add_job(&cmdbuf->desc_pool.base, &batch->scoreboard,
+                          MALI_JOB_TYPE_TILER, false, false, vjob_id, 0,
+                          &draw->jobs.tiler, false);
+      }
    }
 
    /* Clear the dirty flags all at once */

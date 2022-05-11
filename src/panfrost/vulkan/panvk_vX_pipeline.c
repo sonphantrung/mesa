@@ -370,6 +370,9 @@ panvk_pipeline_builder_init_shaders(struct panvk_pipeline_builder *builder,
 
       if (i == MESA_SHADER_COMPUTE)
          pipeline->cs.local_size = shader->local_size;
+      
+      if (i == MESA_SHADER_VERTEX)
+         pipeline->vs.idvs = shader->info.vs.idvs;
    }
 
    if (builder->create_info.gfx && !pipeline->fs.dynamic_rsd) {

@@ -434,20 +434,12 @@ panvk_per_arch(emit_ubos)(const struct panvk_pipeline *pipeline,
    }
 }
 
-void
-panvk_per_arch(emit_vertex_job)(const struct panvk_pipeline *pipeline,
-                                const struct panvk_draw_info *draw,
-                                void *job)
+static void
+panvk_emit_vertex_dcd(const struct panvk_pipeline *pipeline,
+                      const struct panvk_draw_info *draw,
+                      void *dcd)
 {
-   void *section = pan_section_ptr(job, COMPUTE_JOB, INVOCATION);
-
-   memcpy(section, &draw->invocation, pan_size(INVOCATION));
-
-   pan_section_pack(job, COMPUTE_JOB, PARAMETERS, cfg) {
-      cfg.job_task_split = 5;
-   }
-
-   pan_section_pack(job, COMPUTE_JOB, DRAW, cfg) {
+   pan_pack(dcd, DRAW, cfg) {
       cfg.draw_descriptor_is_64b = true;
       cfg.state = pipeline->rsds[MESA_SHADER_VERTEX];
       cfg.attributes = draw->stages[MESA_SHADER_VERTEX].attributes;
@@ -463,6 +455,22 @@ panvk_per_arch(emit_vertex_job)(const struct panvk_pipeline *pipeline,
       cfg.textures = draw->textures;
       cfg.samplers = draw->samplers;
    }
+}
+
+void
+panvk_per_arch(emit_vertex_job)(const struct panvk_pipeline *pipeline,
+                                const struct panvk_draw_info *draw,
+                                void *job)
+{
+   void *section = pan_section_ptr(job, COMPUTE_JOB, INVOCATION);
+
+   memcpy(section, &draw->invocation, pan_size(INVOCATION));
+
+   pan_section_pack(job, COMPUTE_JOB, PARAMETERS, cfg) {
+      cfg.job_task_split = 5;
+   }
+
+   panvk_emit_vertex_dcd(pipeline, draw, pan_section_ptr(job, COMPUTE_JOB, DRAW));
 }
 
 void
@@ -528,6 +536,9 @@ panvk_emit_tiler_primitive(const struct panvk_pipeline *pipeline,
          cfg.index_count = draw->vertex_count;
          cfg.index_type = MALI_INDEX_TYPE_NONE;
       }
+#if PAN_ARCH >= 6
+      cfg.secondary_shader = pipeline->vs.idvs;
+#endif
    }
 }
 
@@ -620,6 +631,38 @@ panvk_per_arch(emit_tiler_job)(const struct panvk_pipeline *pipeline,
    pan_section_pack(job, TILER_JOB, PADDING, padding);
 #endif
 }
+
+#if PAN_ARCH >= 6
+void
+panvk_per_arch(emit_idvs_job)(const struct panvk_pipeline *pipeline,
+                              const struct panvk_draw_info *draw,
+                              void *job)
+{
+   void *section;
+
+   section = pan_section_ptr(job, INDEXED_VERTEX_JOB, INVOCATION);
+   memcpy(section, &draw->invocation, pan_size(INVOCATION));
+
+   section = pan_section_ptr(job, INDEXED_VERTEX_JOB, PRIMITIVE);
+   panvk_emit_tiler_primitive(pipeline, draw, section);
+
+   section = pan_section_ptr(job, INDEXED_VERTEX_JOB, PRIMITIVE_SIZE);
+   panvk_emit_tiler_primitive_size(pipeline, draw, section);
+
+   pan_section_pack(job, TILER_JOB, TILER, cfg) {
+      cfg.address = draw->tiler_ctx->bifrost;
+   }
+
+   pan_section_pack(job, TILER_JOB, PADDING, padding);
+
+   section = pan_section_ptr(job, INDEXED_VERTEX_JOB, FRAGMENT_DRAW);
+   panvk_emit_tiler_dcd(pipeline, draw, section);
+
+   section = pan_section_ptr(job, INDEXED_VERTEX_JOB, VERTEX_DRAW);
+
+   panvk_emit_vertex_dcd(pipeline, draw, section);
+}
+#endif
 
 void
 panvk_per_arch(emit_viewport)(const VkViewport *viewport,

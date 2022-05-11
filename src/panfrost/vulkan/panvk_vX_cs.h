@@ -90,6 +90,13 @@ panvk_per_arch(emit_tiler_job)(const struct panvk_pipeline *pipeline,
                                const struct panvk_draw_info *draw,
                                void *job);
 
+#if PAN_ARCH >= 6
+void
+panvk_per_arch(emit_idvs_job)(const struct panvk_pipeline *pipeline,
+                               const struct panvk_draw_info *draw,
+                               void *job);
+#endif
+
 void
 panvk_per_arch(emit_viewport)(const VkViewport *viewport,
                               const VkRect2D *scissor,

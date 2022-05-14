@@ -176,6 +176,9 @@ static int si_init_surface(struct si_screen *sscreen, struct radeon_surf *surfac
 
    if (!is_flushed_depth && ptex->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) {
       bpe = 4; /* stencil is allocated separately */
+   } else if (util_format_get_num_planes(ptex->format) > 1) {
+      /* XXX assign proper value for planar format */
+      bpe = 1;
    } else {
       bpe = util_format_get_blocksize(ptex->format);
       assert(util_is_power_of_two_or_zero(bpe));

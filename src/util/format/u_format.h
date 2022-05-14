@@ -838,15 +838,10 @@ static inline uint
 util_format_get_blocksize(enum pipe_format format)
 {
    uint bits = util_format_get_blocksizebits(format);
-   uint bytes = bits / 8;
 
-   assert(bits % 8 == 0);
-   assert(bytes > 0);
-   if (bytes == 0) {
-      bytes = 1;
-   }
+   assert(bits && bits % 8 == 0);
 
-   return bytes;
+   return bits / 8;
 }
 
 static inline uint

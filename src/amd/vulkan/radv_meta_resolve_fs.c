@@ -704,7 +704,7 @@ emit_resolve(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_ivi
 
 static void
 emit_depth_stencil_resolve(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_iview,
-                           struct radv_image_view *dst_iview, const VkExtent2D *resolve_extent,
+                           struct radv_image_view *dst_iview, const VkRect2D *resolve_area,
                            VkImageAspectFlags aspects, VkResolveModeFlagBits resolve_mode)
 {
    struct radv_device *device = cmd_buffer->device;
@@ -774,18 +774,15 @@ emit_depth_stencil_resolve(struct radv_cmd_buffer *cmd_buffer, struct radv_image
                         *pipeline);
 
    radv_CmdSetViewport(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1,
-                       &(VkViewport){.x = 0,
-                                     .y = 0,
-                                     .width = resolve_extent->width,
-                                     .height = resolve_extent->height,
+                       &(VkViewport){.x = resolve_area->offset.x,
+                                     .y = resolve_area->offset.y,
+                                     .width = resolve_area->extent.width,
+                                     .height = resolve_area->extent.height,
                                      .minDepth = 0.0f,
                                      .maxDepth = 1.0f});
 
    radv_CmdSetScissor(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1,
-                      &(VkRect2D){
-                         .offset = (VkOffset2D){0, 0},
-                         .extent = *resolve_extent,
-                      });
+                      resolve_area);
 
    radv_CmdDraw(radv_cmd_buffer_to_handle(cmd_buffer), 3, 1, 0, 0);
 }
@@ -899,8 +896,8 @@ radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer, struct radv
 void
 radv_cmd_buffer_resolve_subpass_fs(struct radv_cmd_buffer *cmd_buffer)
 {
-   struct vk_framebuffer *fb = cmd_buffer->state.framebuffer;
    const struct radv_subpass *subpass = cmd_buffer->state.subpass;
+   VkRect2D resolve_area = cmd_buffer->state.render_area;
    struct radv_meta_saved_state saved_state;
    struct radv_subpass_barrier barrier;
 
@@ -935,8 +932,8 @@ radv_cmd_buffer_resolve_subpass_fs(struct radv_cmd_buffer *cmd_buffer)
 
       radv_cmd_buffer_set_subpass(cmd_buffer, &resolve_subpass);
 
-      emit_resolve(cmd_buffer, src_iview, dest_iview, &(VkOffset2D){0, 0}, &(VkOffset2D){0, 0},
-                   &(VkExtent2D){fb->width, fb->height});
+      emit_resolve(cmd_buffer, src_iview, dest_iview, &resolve_area.offset, &resolve_area.offset,
+                   &resolve_area.extent);
 
       radv_cmd_buffer_restore_subpass(cmd_buffer, subpass);
    }
@@ -952,8 +949,8 @@ radv_depth_stencil_resolve_subpass_fs(struct radv_cmd_buffer *cmd_buffer,
                                       VkImageAspectFlags aspects,
                                       VkResolveModeFlagBits resolve_mode)
 {
-   struct vk_framebuffer *fb = cmd_buffer->state.framebuffer;
    const struct radv_subpass *subpass = cmd_buffer->state.subpass;
+   VkRect2D resolve_area = cmd_buffer->state.render_area;
    struct radv_meta_saved_state saved_state;
    struct radv_subpass_barrier barrier;
 
@@ -1010,7 +1007,7 @@ radv_depth_stencil_resolve_subpass_fs(struct radv_cmd_buffer *cmd_buffer,
                         0, NULL);
 
    emit_depth_stencil_resolve(cmd_buffer, &tsrc_iview, dst_iview,
-                              &(VkExtent2D){fb->width, fb->height}, aspects, resolve_mode);
+                              &resolve_area, aspects, resolve_mode);
 
    radv_cmd_buffer_restore_subpass(cmd_buffer, subpass);
 

@@ -40,6 +40,7 @@ enum radv_meta_save_flags {
    RADV_META_SAVE_GRAPHICS_PIPELINE = (1 << 3),
    RADV_META_SAVE_COMPUTE_PIPELINE = (1 << 4),
    RADV_META_SAVE_SAMPLE_LOCATIONS = (1 << 5),
+   RADV_META_SAVE_PREDICATING = (1 << 6),
 };
 
 struct radv_meta_saved_state {
@@ -49,6 +50,7 @@ struct radv_meta_saved_state {
    struct radv_graphics_pipeline *old_graphics_pipeline;
    struct radv_compute_pipeline *old_compute_pipeline;
    struct radv_dynamic_state dynamic;
+   bool predicating;
 
    char push_constants[MAX_PUSH_CONSTANTS_SIZE];
 

@@ -339,6 +339,42 @@ vk_get_command_buffer_inheritance_rendering_info(
    VkCommandBufferLevel level,
    const VkCommandBufferBeginInfo *pBeginInfo);
 
+struct vk_gcbiarr_data {
+   VkRenderingInfo rendering;
+   VkRenderingFragmentShadingRateAttachmentInfoKHR fsr_att;
+   VkRenderingAttachmentInfo attachments[];
+};
+
+#define VK_GCBIARR_DATA_SIZE(max_color_rts) (\
+   sizeof(struct vk_gcbiarr_data) + \
+   sizeof(VkRenderingAttachmentInfo) * ((max_color_rts) + 2) \
+)
+
+/**
+ * Constructs a VkRenderingInfo for the inheritance rendering info
+ *
+ * For render-pass-free drivers, this can be used in the implementaiton of
+ * vkCmdExecuteCommands to get a VkRenderingInfo representing the subpass and
+ * framebuffer provided via the inheritance info for a command buffer created
+ * with VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT.  The mental model
+ * here is that VkExecuteCommands() implicitly suspends the render pass and
+ * VkBeginCommandBuffer() resumes it.  If a VkRenderingInfo cannot be
+ * constructed due to a missing framebuffer or similar, NULL will be
+ * returned.
+ *
+ * @param[in]  level       The nesting level of this command buffer
+ * @param[in]  pBeginInfo  The pBeginInfo from vkBeginCommandBuffer
+ * @param[out] stack_data  An opaque blob of data which will be overwritten by
+ *                         this function, passed in from the caller to avoid
+ *                         heap allocations.  It must be at least
+ *                         VK_GCBIARR_DATA_SIZE(max_color_rts) bytes.
+ */
+const VkRenderingInfo *
+vk_get_command_buffer_inheritance_as_rendering_resume(
+   VkCommandBufferLevel level,
+   const VkCommandBufferBeginInfo *pBeginInfo,
+   void *stack_data);
+
 #ifdef __cplusplus
 }
 #endif

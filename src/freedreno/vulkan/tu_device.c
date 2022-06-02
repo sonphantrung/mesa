@@ -1407,6 +1407,8 @@ tu_GetPhysicalDeviceMemoryProperties2(VkPhysicalDevice pdev,
    TU_FROM_HANDLE(tu_physical_device, physical_device, pdev);
 
    VkPhysicalDeviceMemoryProperties *props = &props2->memoryProperties;
+   memset(props, 0, sizeof(*props));
+
    props->memoryHeapCount = 1;
    props->memoryHeaps[0].size = physical_device->heap.size;
    props->memoryHeaps[0].flags = physical_device->heap.flags;

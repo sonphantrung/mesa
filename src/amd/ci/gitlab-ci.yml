@@ -60,6 +60,8 @@ radv_stoney_vkcts:amd64:
     B2C_TEST_SCRIPT: ./install/deqp-runner.sh
     B2C_JOB_VOLUME_EXCLUSIONS: "*.shader_cache"
     DEQP_VER: vk
+    RADV_COMPILER_BACKEND: aco
+    RADV_DEBUG: "$RADV_COMPILER_BACKEND"
     RADV_PERFTEST: nv_ms
 
 # dEQP never finishes on gfx7 due to all the GPU resets and hangs.
@@ -70,7 +72,7 @@ radv_stoney_vkcts:amd64:
   timeout: 6h 10m
   variables:
     # FIXME: Create this baseline for KABINI
-    GPU_VERSION: radv-kabini-aco
+    GPU_VERSION: "radv-kabini-$RADV_COMPILER_BACKEND"
     B2C_TIMEOUT_BOOT_MINUTES: 360
     B2C_TIMEOUT_OVERALL_MINUTES: 360
     B2C_TIMEOUT_BOOT_RETRIES: 0
@@ -88,7 +90,7 @@ radv_stoney_vkcts:amd64:
   # total) would get the runtime under 15 minutes.
   timeout: 4h 10m
   variables:
-    GPU_VERSION: radv-stoney-aco
+    GPU_VERSION: "radv-stoney-$RADV_COMPILER_BACKEND"
     # Note, it only has a wee 32g disk!
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=8g'
     B2C_TIMEOUT_BOOT_MINUTES: 240
@@ -101,7 +103,7 @@ deqp-polaris10-valve:
   extends:
     - .deqp-test-valve
   variables:
-    GPU_VERSION: radv-polaris10-aco
+    GPU_VERSION: "radv-polaris10-$RADV_COMPILER_BACKEND"
     FDO_CI_CONCURRENT: 16
     B2C_TIMEOUT_BOOT_RETRIES: 4
     # (2022-01) tsc=unstable was added in response to this message in kmsg,
@@ -114,7 +116,7 @@ deqp-vega10-valve:
   extends:
     - .deqp-test-valve
   variables:
-    GPU_VERSION: radv-vega10-aco
+    GPU_VERSION: "radv-vega10-$RADV_COMPILER_BACKEND"
     FDO_CI_CONCURRENT: 16
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g'
   tags:
@@ -125,7 +127,7 @@ deqp-renoir-valve:
     - .deqp-test-valve
   timeout: 2h 10m
   variables:
-    GPU_VERSION: radv-renoir-aco
+    GPU_VERSION: "radv-renoir-$RADV_COMPILER_BACKEND"
     FDO_CI_CONCURRENT: 24
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g'
     B2C_TIMEOUT_BOOT_MINUTES: 60
@@ -137,7 +139,7 @@ deqp-navi10-valve:
   extends:
     - .deqp-test-valve
   variables:
-    GPU_VERSION: radv-navi10-aco
+    GPU_VERSION: "radv-navi10-$RADV_COMPILER_BACKEND"
     FDO_CI_CONCURRENT: 24
     # (2022-01) noapic is set because the serial adapter on this
     # machine is using non-MSI IRQs and is generating a lot of
@@ -151,7 +153,7 @@ deqp-navi21-valve:
   extends:
     - .deqp-test-valve
   variables:
-    GPU_VERSION: radv-navi21-aco
+    GPU_VERSION: "radv-navi21-$RADV_COMPILER_BACKEND"
     FDO_CI_CONCURRENT: 16
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g'
   tags:
@@ -162,7 +164,7 @@ deqp-vangogh-valve:
     - .deqp-test-valve
   timeout: 2h 10m
   variables:
-    GPU_VERSION: radv-vangogh-aco
+    GPU_VERSION: "radv-vangogh-$RADV_COMPILER_BACKEND"
     FDO_CI_CONCURRENT: 8
     B2C_TIMEOUT_BOOT_MINUTES: 85
     B2C_TIMEOUT_OVERALL_MINUTES: 120

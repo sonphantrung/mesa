@@ -25,7 +25,7 @@ cd "${CI_PROJECT_DIR}"
 STDERR_FIFO=/tmp/crosvm-stderr.fifo
 mkfifo -m 600 ${STDERR_FIFO}
 
-dmesg --level crit,err,warn -w > ${STDERR_FIFO} &
+dmesg -w > ${STDERR_FIFO} &
 DMESG_PID=$!
 
 # Transfer the errors and crosvm-script output via a pair of virtio-vsocks

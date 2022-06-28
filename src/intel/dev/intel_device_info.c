@@ -1151,6 +1151,19 @@ static const struct intel_device_info intel_device_info_mtl_h = {
    .platform = INTEL_PLATFORM_MTL_H,
 };
 
+#define XE2_FEATURES                                            \
+   /* Draft/placeholder */                                      \
+   XEHP_FEATURES(0, 1, 0),                                      \
+   .ver = 20,                                                   \
+   .verx10 = 200
+
+UNUSED static const struct intel_device_info intel_device_info_lnl = {
+   XE2_FEATURES,
+   .platform = INTEL_PLATFORM_LNL,
+   .has_local_mem = false,
+   .apply_hwconfig = true,
+};
+
 void
 intel_device_info_topology_reset_masks(struct intel_device_info *devinfo)
 {

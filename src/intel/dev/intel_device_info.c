@@ -72,6 +72,7 @@ static const struct {
    { "rpl", 0xa780 },
    { "dg2", 0x5690 },
    { "mtl", 0x7d60 },
+   { "lnl", 0x64a0 },
 };
 
 /**
@@ -1157,7 +1158,7 @@ static const struct intel_device_info intel_device_info_mtl_h = {
    .ver = 20,                                                   \
    .verx10 = 200
 
-UNUSED static const struct intel_device_info intel_device_info_lnl = {
+static const struct intel_device_info intel_device_info_lnl = {
    XE2_FEATURES,
    .platform = INTEL_PLATFORM_LNL,
    .has_local_mem = false,

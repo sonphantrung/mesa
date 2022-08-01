@@ -1689,16 +1689,24 @@ radv_queue_sparse_submit(struct vk_queue *vqueue, struct vk_queue_submit *submis
    struct radv_device *device = queue->device;
    VkResult result;
 
+   if (device->physical_device->rad_info.has_explicit_sync_contexts) {
+      /* We do a CPU wait here, as the sparse binds get executed immediately. */
+      result =
+         vk_sync_wait_many(&device->vk, submission->wait_count, submission->waits, VK_SYNC_WAIT_COMPLETE, UINT64_MAX);
+      if (result != VK_SUCCESS)
+         goto fail;
+   }
+
    result = radv_queue_submit_bind_sparse_memory(device, submission);
    if (result != VK_SUCCESS)
       goto fail;
 
-   /* We do a CPU wait here, in part to avoid more winsys mechanisms. In the likely kernel explicit
-    * sync mechanism, we'd need to do a CPU wait anyway. Haven't seen this be a perf issue yet, but
-    * we have to make sure the queue always has its submission thread enabled. */
-   result = vk_sync_wait_many(&device->vk, submission->wait_count, submission->waits, 0, UINT64_MAX);
-   if (result != VK_SUCCESS)
-      goto fail;
+   if (!device->physical_device->rad_info.has_explicit_sync_contexts) {
+      /* We do a CPU wait here, so that all dependencies have finished before we start signaling the signal vk_syncs. */
+      result = vk_sync_wait_many(&device->vk, submission->wait_count, submission->waits, 0, UINT64_MAX);
+      if (result != VK_SUCCESS)
+         goto fail;
+   }
 
    /* Ignore all the commandbuffers. They're necessarily empty anyway. */
 

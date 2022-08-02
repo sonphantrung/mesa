@@ -30,9 +30,14 @@
 #include <sys/mman.h>
 
 #include "msm_kgsl.h"
+#include "ion/ion.h"
+#include "ion/ion_4.19.h"
 #include "vk_util.h"
 
 #include "util/debug.h"
+
+/* ION_HEAP(ION_SYSTEM_HEAP_ID) */
+#define KGSL_ION_SYSTEM_HEAP_MASK (1u << 25)
 
 struct tu_syncobj {
    struct vk_object_base base;
@@ -82,10 +87,84 @@ tu_drm_submitqueue_close(const struct tu_device *dev, uint32_t queue_id)
    safe_ioctl(dev->physical_device->local_fd, IOCTL_KGSL_DRAWCTXT_DESTROY, &req);
 }
 
+static VkResult
+bo_init_new_ion(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
+                enum tu_bo_alloc_flags flags)
+{
+   assert(flags == TU_BO_ALLOC_SHARED);
+
+   struct ion_new_allocation_data alloc = {
+      .len = size,
+      .heap_id_mask = KGSL_ION_SYSTEM_HEAP_MASK,
+      .flags = 0,
+      .fd = -1,
+   };
+
+   int ret;
+   ret = safe_ioctl(dev->physical_device->ion_fd, ION_IOC_NEW_ALLOC, &alloc);
+   if (ret) {
+      return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                       "ION_IOC_NEW_ALLOC failed (%s)", strerror(errno));
+   }
+
+   return tu_bo_init_dmabuf(dev, out_bo, -1, alloc.fd);
+}
+
+static VkResult
+bo_init_new_ion_legacy(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
+                       enum tu_bo_alloc_flags flags)
+{
+   assert(flags == TU_BO_ALLOC_SHARED);
+
+   struct ion_allocation_data alloc = {
+      .len = size,
+      .align = 4096,
+      .heap_id_mask = KGSL_ION_SYSTEM_HEAP_MASK,
+      .flags = 0,
+      .handle = -1,
+   };
+
+   int ret;
+   ret = safe_ioctl(dev->physical_device->ion_fd, ION_IOC_ALLOC, &alloc);
+   if (ret) {
+      return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                       "ION_IOC_ALLOC failed (%s)", strerror(errno));
+   }
+
+   struct ion_fd_data share = {
+      .handle = alloc.handle,
+      .fd = -1,
+   };
+
+   ret = safe_ioctl(dev->physical_device->ion_fd, ION_IOC_SHARE, &share);
+   if (ret) {
+      return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                       "ION_IOC_SHARE failed (%s)", strerror(errno));
+   }
+
+   struct ion_handle_data free = {
+      .handle = alloc.handle,
+   };
+   ret = safe_ioctl(dev->physical_device->ion_fd, ION_IOC_FREE, &free);
+   if (ret) {
+      return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                       "ION_IOC_FREE failed (%s)", strerror(errno));
+   }
+
+   return tu_bo_init_dmabuf(dev, out_bo, -1, share.fd);
+}
+
 VkResult
 tu_bo_init_new(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
                enum tu_bo_alloc_flags flags)
 {
+   if (flags & TU_BO_ALLOC_SHARED) {
+      if (dev->physical_device->legacy_ion)
+         return bo_init_new_ion_legacy(dev, out_bo, size, flags);
+      else
+         return bo_init_new_ion(dev, out_bo, size, flags);
+   }
+
    struct kgsl_gpumem_alloc_id req = {
       .size = size,
    };
@@ -158,6 +237,7 @@ tu_bo_init_dmabuf(struct tu_device *dev,
       .size = info_req.size,
       .iova = info_req.gpuaddr,
       .refcnt = 1,
+      .shared_fd = fd,
    };
 
    *out_bo = bo;
@@ -168,9 +248,8 @@ tu_bo_init_dmabuf(struct tu_device *dev,
 int
 tu_bo_export_dmabuf(struct tu_device *dev, struct tu_bo *bo)
 {
-   tu_stub();
-
-   return -1;
+   assert(bo->shared_fd >= 0);
+   return dup(bo->shared_fd);
 }
 
 VkResult
@@ -179,9 +258,16 @@ tu_bo_map(struct tu_device *dev, struct tu_bo *bo)
    if (bo->map)
       return VK_SUCCESS;
 
-   uint64_t offset = bo->gem_handle << 12;
-   void *map = mmap(0, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED,
-                    dev->physical_device->local_fd, offset);
+   void *map = MAP_FAILED;
+   if (bo->shared_fd == 0) {
+      uint64_t offset = bo->gem_handle << 12;
+      map = mmap(0, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED,
+                 dev->physical_device->local_fd, offset);
+   } else {
+      map = mmap(0, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED,
+                 bo->shared_fd, 0);
+   }
+
    if (map == MAP_FAILED)
       return vk_error(dev, VK_ERROR_MEMORY_MAP_FAILED);
 
@@ -200,6 +286,9 @@ tu_bo_finish(struct tu_device *dev, struct tu_bo *bo)
 
    if (bo->map)
       munmap(bo->map, bo->size);
+
+   if (bo->shared_fd >= 0)
+      close(bo->shared_fd);
 
    struct kgsl_gpumem_free_id req = {
       .id = bo->gem_handle
@@ -227,7 +316,8 @@ VkResult
 tu_enumerate_devices(struct tu_instance *instance)
 {
    static const char path[] = "/dev/kgsl-3d0";
-   int fd;
+   static const char ion_path[] = "/dev/ion";
+   int fd, ion_fd;
 
    struct tu_physical_device *device = &instance->physical_devices[0];
 
@@ -250,6 +340,19 @@ tu_enumerate_devices(struct tu_instance *instance)
    if (get_kgsl_prop(fd, KGSL_PROP_UCHE_GMEM_VADDR, &gmem_iova, sizeof(gmem_iova)))
       goto fail;
 
+   /* TODO: use dma_heap on latest kernels since ION was removed in them. */
+   bool legacy_ion = false;
+   ion_fd = open(ion_path, O_RDONLY);
+   if (ion_fd >= 0) {
+      /* ION_IOC_FREE available only for legacy ION */
+      struct ion_handle_data free = { .handle = 0 };
+      legacy_ion = safe_ioctl(ion_fd, ION_IOC_FREE, &free) >= 0 || errno != ENOTTY;
+      mesa_logi("Found %s ion '%s'.", legacy_ion ? "legacy" : "modern", ion_path);
+   } else {
+      mesa_logw("Unable to open /dev/ion, VK_KHR_external_memory_fd would be "
+                "unavailable: %s", strerror(errno));
+   }
+
    /* kgsl version check? */
 
    if (instance->debug_flags & TU_DEBUG_STARTUP)
@@ -258,6 +361,8 @@ tu_enumerate_devices(struct tu_instance *instance)
    device->instance = instance;
    device->master_fd = -1;
    device->local_fd = fd;
+   device->ion_fd = ion_fd;
+   device->legacy_ion = legacy_ion;
 
    device->dev_id.gpu_id =
       ((info.chip_id >> 24) & 0xff) * 100 +

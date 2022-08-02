@@ -143,7 +143,11 @@ get_device_extensions(const struct tu_physical_device *device,
       .KHR_external_fence = true,
       .KHR_external_fence_fd = true,
       .KHR_external_memory = true,
+#ifndef TU_USE_KGSL
       .KHR_external_memory_fd = true,
+#else
+      .KHR_external_memory_fd = device->ion_fd >= 0,
+#endif
       .KHR_external_semaphore = true,
       .KHR_external_semaphore_fd = true,
       .KHR_format_feature_flags2 = true,
@@ -188,7 +192,9 @@ get_device_extensions(const struct tu_physical_device *device,
 #ifdef VK_USE_PLATFORM_DISPLAY_KHR
       .EXT_display_control = true,
 #endif
+#ifndef TU_USE_KGSL
       .EXT_external_memory_dma_buf = true,
+#endif
       .EXT_image_drm_format_modifier = true,
       .EXT_sample_locations = device->info->a6xx.has_sample_locations,
       .EXT_sampler_filter_minmax = true,
@@ -348,6 +354,9 @@ tu_physical_device_finish(struct tu_physical_device *device)
    close(device->local_fd);
    if (device->master_fd != -1)
       close(device->master_fd);
+
+   if (device->ion_fd != -1)
+      close(device->ion_fd);
 
    vk_free(&device->instance->vk.alloc, (void *)device->name);
 
@@ -2310,12 +2319,23 @@ tu_AllocateMemory(VkDevice _device,
                                  pAllocateInfo->allocationSize, fd_info->fd);
       if (result == VK_SUCCESS) {
          /* take ownership and close the fd */
+         /* On kgsl we need the fd to do mmap. */
+      #ifndef TU_USE_KGSL
          close(fd_info->fd);
+      #endif
       }
    } else {
+      const VkExportMemoryAllocateInfo *export_info =
+         vk_find_struct_const(pAllocateInfo->pNext, EXPORT_MEMORY_ALLOCATE_INFO);
+
+      enum tu_bo_alloc_flags flags = TU_BO_ALLOC_NO_FLAGS;
+      if (export_info && (export_info->handleTypes &
+                          (VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT |
+                           VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT)))
+         flags |= TU_BO_ALLOC_SHARED;
+
       result =
-         tu_bo_init_new(device, &mem->bo, pAllocateInfo->allocationSize,
-                        TU_BO_ALLOC_NO_FLAGS);
+         tu_bo_init_new(device, &mem->bo, pAllocateInfo->allocationSize, flags);
    }
 
 

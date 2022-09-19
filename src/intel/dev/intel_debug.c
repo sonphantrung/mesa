@@ -106,6 +106,7 @@ static const struct debug_control debug_control[] = {
    { "draw_bkp",    DEBUG_DRAW_BKP },
    { "bat-stats",   DEBUG_BATCH_STATS },
    { "reg-pressure", DEBUG_REG_PRESSURE },
+   { "usebarriers", DEBUG_USEBARRIERS },
    { NULL,    0 }
 };
 

@@ -107,6 +107,7 @@ static const struct debug_control debug_control[] = {
    { "bat-stats",   DEBUG_BATCH_STATS },
    { "reg-pressure", DEBUG_REG_PRESSURE },
    { "usebarriers", DEBUG_USEBARRIERS },
+   { "rsc-barriers",DEBUG_RESOURCE_BARRIERS },
    { NULL,    0 }
 };
 

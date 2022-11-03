@@ -113,6 +113,7 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return BITFIELD_MASK(PIPE_PRIM_MAX);
    /* nv4x capabilities */
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
+   case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
    case PIPE_CAP_NPOT_TEXTURES:
    case PIPE_CAP_CONDITIONAL_RENDER:
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
@@ -161,7 +162,6 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
    case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
    case PIPE_CAP_MAX_TEXEL_BUFFER_ELEMENTS_UINT:
-   case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
    case PIPE_CAP_VS_LAYER_VIEWPORT:
    case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
    case PIPE_CAP_TEXTURE_GATHER_SM5:

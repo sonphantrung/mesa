@@ -112,8 +112,9 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_SUPPORTED_PRIM_MODES:
       return BITFIELD_MASK(PIPE_PRIM_MAX);
    /* nv4x capabilities */
-   case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
+      return (screen->arb_framebuffer_object && eng3d->oclass >= NV40_3D_CLASS) ? 1 : 0;
+   case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_NPOT_TEXTURES:
    case PIPE_CAP_CONDITIONAL_RENDER:
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
@@ -641,6 +642,14 @@ nv30_screen_create(struct nouveau_device *dev)
    screen->max_sample_count = debug_get_num_option("NV30_MAX_MSAA", 0);
    if (screen->max_sample_count > 4)
       screen->max_sample_count = 4;
+
+   /*
+    * nv40 Curie support EXT_framebuffer_object but doesn't implement enough
+    * features to support ARB_framebuffer_object. Some applications may still
+    * be usable with an incomplete ARB_framebuffer_object support if the user
+    * forces the enablement of the feature.
+    */
+   screen->arb_framebuffer_object = debug_get_bool_option("NV40_ARB_FBO", 0);
 
    pscreen->get_param = nv30_screen_get_param;
    pscreen->get_paramf = nv30_screen_get_paramf;

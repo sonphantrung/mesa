@@ -44,6 +44,9 @@ typedef struct nir_builder {
     * and header phis are not updated). */
    bool update_divergence;
 
+   /* Source location that will be assigned to inserted instructions */
+   uint32_t src_loc_index;
+
    nir_shader *shader;
    nir_function_impl *impl;
 } nir_builder;

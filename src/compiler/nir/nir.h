@@ -956,7 +956,10 @@ typedef struct nir_instr {
    /* A temporary for optimization and analysis passes to use for storing
     * flags.  For instance, DCE uses this to store the "dead/live" info.
     */
-   uint8_t pass_flags;
+   uint32_t pass_flags : 8;
+
+   /** source location */
+   uint32_t src_loc_index : 24;
 
    /** generic instruction index. */
    uint32_t index;
@@ -4176,6 +4179,14 @@ typedef struct nir_shader_compiler_options {
    unsigned (*varying_estimate_instr_cost)(struct nir_instr *instr);
 } nir_shader_compiler_options;
 
+typedef struct nir_src_loc {
+   const char *file;
+
+   uint32_t line, col;
+
+   size_t spirv_offset;
+} nir_src_loc;
+
 typedef struct nir_shader {
    gc_ctx *gctx;
 
@@ -4221,6 +4232,9 @@ typedef struct nir_shader {
    unsigned constant_data_size;
 
    struct nir_xfb_info *xfb_info;
+
+   const nir_src_loc *src_locs;
+   unsigned src_loc_count;
 
    unsigned printf_info_count;
    u_printf_info *printf_info;
@@ -4463,6 +4477,7 @@ typedef enum {
 
 typedef struct {
    nir_cursor_option option;
+   uint32_t src_loc_index;
    union {
       nir_block *block;
       nir_instr *instr;
@@ -4488,6 +4503,8 @@ nir_before_block(nir_block *block)
    nir_cursor cursor;
    cursor.option = nir_cursor_before_block;
    cursor.block = block;
+   nir_instr *first = nir_block_first_instr(cursor.block);
+   cursor.src_loc_index = first ? first->src_loc_index : 0;
    return cursor;
 }
 
@@ -4497,6 +4514,8 @@ nir_after_block(nir_block *block)
    nir_cursor cursor;
    cursor.option = nir_cursor_after_block;
    cursor.block = block;
+   nir_instr *last = nir_block_last_instr(cursor.block);
+   cursor.src_loc_index = last ? last->src_loc_index : 0;
    return cursor;
 }
 
@@ -4505,6 +4524,7 @@ nir_before_instr(nir_instr *instr)
 {
    nir_cursor cursor;
    cursor.option = nir_cursor_before_instr;
+   cursor.src_loc_index = instr->src_loc_index;
    cursor.instr = instr;
    return cursor;
 }
@@ -4514,6 +4534,7 @@ nir_after_instr(nir_instr *instr)
 {
    nir_cursor cursor;
    cursor.option = nir_cursor_after_instr;
+   cursor.src_loc_index = instr->src_loc_index;
    cursor.instr = instr;
    return cursor;
 }

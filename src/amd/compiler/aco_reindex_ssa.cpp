@@ -80,7 +80,7 @@ void
 update_live_out(idx_ctx& ctx, live& live_vars)
 {
    for (IDSet& set : live_vars.live_out) {
-      IDSet new_set;
+      IDSet new_set(live_vars.memory);
       for (uint32_t id : set)
          new_set.insert(ctx.renames[id]);
       set = new_set;

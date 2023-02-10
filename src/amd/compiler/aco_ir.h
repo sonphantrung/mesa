@@ -1975,6 +1975,7 @@ enum class CompilationProgress {
 };
 
 struct live {
+   monotonic_buffer_resource memory;
    /* live temps out per block */
    std::vector<IDSet> live_out;
    /* register demand (sgpr/vgpr) per instruction per block */

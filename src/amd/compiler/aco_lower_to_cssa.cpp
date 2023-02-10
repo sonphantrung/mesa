@@ -522,6 +522,6 @@ lower_to_cssa(Program* program, live& live_vars)
    emit_parallelcopies(ctx);
 
    /* update live variable information */
-   live_vars = live_var_analysis(program);
+   live_var_analysis(program, live_vars);
 }
 } // namespace aco

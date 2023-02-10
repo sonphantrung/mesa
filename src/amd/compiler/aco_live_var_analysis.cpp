@@ -455,12 +455,12 @@ update_vgpr_sgpr_demand(Program* program, const RegisterDemand new_demand)
    }
 }
 
-live
-live_var_analysis(Program* program)
+void
+live_var_analysis(Program* program, live& live)
 {
-   live result;
-   result.live_out.resize(program->blocks.size());
-   result.register_demand.resize(program->blocks.size());
+   live.live_out.clear();
+   live.live_out.resize(program->blocks.size());
+   live.register_demand.resize(program->blocks.size());
    unsigned worklist = program->blocks.size();
    std::vector<PhiInfo> phi_info(program->blocks.size());
    RegisterDemand new_demand;
@@ -471,19 +471,18 @@ live_var_analysis(Program* program)
     * program->blocks vector */
    while (worklist) {
       unsigned block_idx = --worklist;
-      process_live_temps_per_block(program, result, &program->blocks[block_idx], worklist,
-                                   phi_info);
+      process_live_temps_per_block(program, live, &program->blocks[block_idx], worklist, phi_info);
    }
 
    /* Handle branches: we will insert copies created for linear phis just before the branch. */
    for (Block& block : program->blocks) {
-      result.register_demand[block.index].back().sgpr += phi_info[block.index].linear_phi_defs;
-      result.register_demand[block.index].back().sgpr -= phi_info[block.index].linear_phi_ops;
+      live.register_demand[block.index].back().sgpr += phi_info[block.index].linear_phi_defs;
+      live.register_demand[block.index].back().sgpr -= phi_info[block.index].linear_phi_ops;
 
       /* update block's register demand */
       if (program->progress < CompilationProgress::after_ra) {
          block.register_demand = RegisterDemand();
-         for (RegisterDemand& demand : result.register_demand[block.index])
+         for (RegisterDemand& demand : live.register_demand[block.index])
             block.register_demand.update(demand);
       }
 
@@ -493,8 +492,6 @@ live_var_analysis(Program* program)
    /* calculate the program's register demand and number of waves */
    if (program->progress < CompilationProgress::after_ra)
       update_vgpr_sgpr_demand(program, new_demand);
-
-   return result;
 }
 
 } // namespace aco

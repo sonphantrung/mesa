@@ -77,9 +77,9 @@ reindex_program(idx_ctx& ctx, Program* program)
 }
 
 void
-update_live_out(idx_ctx& ctx, std::vector<IDSet>& live_out)
+update_live_out(idx_ctx& ctx, live& live_vars)
 {
-   for (IDSet& set : live_out) {
+   for (IDSet& set : live_vars.live_out) {
       IDSet new_set;
       for (uint32_t id : set)
          new_set.insert(ctx.renames[id]);
@@ -99,11 +99,11 @@ reindex_ssa(Program* program)
 }
 
 void
-reindex_ssa(Program* program, std::vector<IDSet>& live_out)
+reindex_ssa(Program* program, live& live_vars)
 {
    idx_ctx ctx;
    reindex_program(ctx, program);
-   update_live_out(ctx, live_out);
+   update_live_out(ctx, live_vars);
 
    program->allocationID = program->temp_rc.size();
 }

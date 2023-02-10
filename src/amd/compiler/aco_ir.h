@@ -1974,6 +1974,13 @@ enum class CompilationProgress {
    after_ra,
 };
 
+struct live {
+   /* live temps out per block */
+   std::vector<IDSet> live_out;
+   /* register demand (sgpr/vgpr) per instruction per block */
+   std::vector<std::vector<RegisterDemand>> register_demand;
+};
+
 class Program final {
 public:
    aco::monotonic_buffer_resource m{65536};
@@ -2047,7 +2054,7 @@ public:
    uint32_t peekAllocationId() { return allocationID; }
 
    friend void reindex_ssa(Program* program);
-   friend void reindex_ssa(Program* program, std::vector<IDSet>& live_out);
+   friend void reindex_ssa(Program* program, live& live_vars);
 
    Block* create_and_insert_block()
    {
@@ -2068,13 +2075,6 @@ public:
 
 private:
    uint32_t allocationID = 1;
-};
-
-struct live {
-   /* live temps out per block */
-   std::vector<IDSet> live_out;
-   /* register demand (sgpr/vgpr) per instruction per block */
-   std::vector<std::vector<RegisterDemand>> register_demand;
 };
 
 struct ra_test_policy {

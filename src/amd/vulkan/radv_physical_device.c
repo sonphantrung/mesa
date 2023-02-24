@@ -56,6 +56,8 @@ typedef void *drmDevicePtr;
 #include "ac_llvm_util.h"
 #endif
 
+#include "libdrm_amdgpu_loader.h"
+
 static bool
 radv_perf_query_supported(const struct radv_physical_device *pdev)
 {
@@ -1930,7 +1932,9 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
                           "Could not get the kernel driver version for device %s: %m", path);
       }
 
-      if (strcmp(version->name, "amdgpu")) {
+      if (strcmp(version->name, "amdgpu") == 0) {
+         ac_init_libdrm_amdgpu();
+      } else {
          drmFreeVersion(version);
          close(fd);
 
@@ -2199,7 +2203,6 @@ create_drm_physical_device(struct vk_instance *vk_instance, struct _drmDevice *d
    if (!(device->available_nodes & (1 << DRM_NODE_RENDER)) || device->bustype != DRM_BUS_PCI ||
        device->deviceinfo.pci->vendor_id != ATI_VENDOR_ID)
       return VK_ERROR_INCOMPATIBLE_DRIVER;
-
    return radv_physical_device_try_create((struct radv_instance *)vk_instance, device,
                                           (struct radv_physical_device **)out);
 #else

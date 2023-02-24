@@ -66,6 +66,31 @@ gfx10_format_table_c = custom_target(
   depend_files : ['../registers/regdb.py']
 )
 
+# TODO: enable this? Or keep committing the generated sources since it won't
+#       change often anyway.
+# libdrm_amdgpu_loader_h = custom_target(
+#   'libdrm_amdgpu_loader.h',
+#   input : files(
+#     'libdrm_amdgpu_gen_loader.py',
+#     dep_libdrm_amdgpu.get_variable('includedir') + '/libdrm/amdgpu.h',
+#   ),
+#   output : 'libdrm_amdgpu_loader.h',
+#   command : [prog_python, '@INPUT@', 'header', meson.get_compiler('c').cmd_array()[-1]],
+#   capture : true,
+# )
+
+# libdrm_amdgpu_loader_c = custom_target(
+#   'libdrm_amdgpu_loader.c',
+#   input : files(
+#     'libdrm_amdgpu_gen_loader.py',
+#     dep_libdrm_amdgpu.get_variable('includedir') + '/libdrm/amdgpu.h',
+#   ),
+#   output : 'libdrm_amdgpu_loader.c',
+#   command : [prog_python, '@INPUT@', 'source', meson.get_compiler('c').cmd_array()[-1]],
+#   capture : true,
+# )
+
+
 amd_common_files = files(
   'ac_binary.c',
   'ac_binary.h',
@@ -109,6 +134,8 @@ amd_common_files = files(
   'ac_perfcounter.c',
   'ac_perfcounter.h',
   'ac_vcn_av1_default.h',
+  'libdrm_amdgpu_loader.c',
+  'libdrm_amdgpu_loader.h'
 )
 
 if dep_elf.found()

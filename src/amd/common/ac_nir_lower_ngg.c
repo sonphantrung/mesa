@@ -36,8 +36,9 @@
 
 enum {
    nggc_passflag_used_by_pos = 1,
-   nggc_passflag_used_by_other = 2,
-   nggc_passflag_used_by_both = nggc_passflag_used_by_pos | nggc_passflag_used_by_other,
+   nggc_passflag_used_by_deferred = 2,
+   nggc_passflag_used_by_both = nggc_passflag_used_by_pos | nggc_passflag_used_by_deferred,
+   nggc_passflag_is_pos = 4,
 };
 
 typedef struct
@@ -1021,37 +1022,85 @@ compact_vertices_after_culling(nir_builder *b,
 static void
 analyze_shader_before_culling_walk(nir_ssa_def *ssa,
                                    uint8_t flag,
+                                   gl_shader_stage stage,
                                    ac_nir_before_cull_analysis *s)
 {
    nir_instr *instr = ssa->parent_instr;
    uint8_t old_pass_flags = instr->pass_flags;
    instr->pass_flags |= flag;
 
+   /* When flagging deferred outputs, stop the walk if we found position.
+    * This is because we know position is going to be repacked anyway.
+    */
+   if (flag == nggc_passflag_used_by_deferred &&
+       (instr->pass_flags & nggc_passflag_is_pos))
+      return;
+
+   /* Don't revisit the same instruction if it already has the same flags. */
    if (instr->pass_flags == old_pass_flags)
-      return; /* Already visited. */
+      return;
+
+   /* If the current SSA def is the position, its ancestores should be
+    * just flagged used by position (see exception below).
+    */
+   flag &= ~nggc_passflag_is_pos;
+
+   assert(flag);
 
    switch (instr->type) {
    case nir_instr_type_intrinsic: {
       nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+      const bool needs_deferred = !!(instr->pass_flags & nggc_passflag_used_by_deferred);
 
-      /* VS input loads and SSBO loads are actually VRAM reads on AMD HW. */
       switch (intrin->intrinsic) {
       case nir_intrinsic_load_input: {
+         /* Instance rate VS inputs need instance ID, others need vertex ID.
+          * TES inputs don't matter here.
+          */
+         if (stage != MESA_SHADER_VERTEX)
+            break;
+
          nir_io_semantics in_io_sem = nir_intrinsic_io_semantics(intrin);
          uint64_t in_mask = UINT64_C(1) << (uint64_t) in_io_sem.location;
          if (instr->pass_flags & nggc_passflag_used_by_pos)
             s->inputs_needed_by_pos |= in_mask;
-         else if (instr->pass_flags & nggc_passflag_used_by_other)
+         else if (instr->pass_flags & nggc_passflag_used_by_deferred)
             s->inputs_needed_by_others |= in_mask;
+
+         if (s->instance_rate_inputs & BITFIELD_BIT(nir_intrinsic_base(intrin)))
+            s->needs_deferred.instance_id |= needs_deferred;
+         else
+            s->needs_deferred.vertex_id |= needs_deferred;
          break;
       }
+      case nir_intrinsic_load_vertex_id:
+      case nir_intrinsic_load_vertex_id_zero_base:
+         assert(stage == MESA_SHADER_VERTEX);
+         s->needs_deferred.vertex_id |= needs_deferred;
+         break;
+      case nir_intrinsic_load_instance_id:
+         assert(stage == MESA_SHADER_VERTEX);
+         s->needs_deferred.instance_id |= needs_deferred;
+         break;
+      case nir_intrinsic_load_tess_coord:
+         assert(stage == MESA_SHADER_TESS_EVAL);
+         s->needs_deferred.tess_coord |= needs_deferred;
+         break;
+      case nir_intrinsic_load_primitive_id:
+         assert(stage == MESA_SHADER_TESS_EVAL);
+         s->needs_deferred.primitive_id |= needs_deferred;
+         break;
+      case nir_intrinsic_load_tess_rel_patch_id_amd:
+         assert(stage == MESA_SHADER_TESS_EVAL);
+         s->needs_deferred.rel_patch_id |= needs_deferred;
+         break;
       default:
          break;
       }
 
       const unsigned num_srcs = nir_intrinsic_infos[intrin->intrinsic].num_srcs;
       for (unsigned i = 0; i < num_srcs; ++i) {
-         analyze_shader_before_culling_walk(intrin->src[i].ssa, flag, s);
+         analyze_shader_before_culling_walk(intrin->src[i].ssa, flag, stage, s);
       }
 
       break;
@@ -1060,8 +1109,14 @@ analyze_shader_before_culling_walk(nir_ssa_def *ssa,
       nir_alu_instr *alu = nir_instr_as_alu(instr);
       unsigned num_srcs = nir_op_infos[alu->op].num_inputs;
 
+      if (nir_op_is_vec(alu->op)) {
+         /* Special case for move and vectors - treat these as "is" instead of "used by". */
+         if ((flag & nggc_passflag_used_by_pos) && (instr->pass_flags & nggc_passflag_is_pos))
+            flag |= nggc_passflag_is_pos;
+      }
+
       for (unsigned i = 0; i < num_srcs; ++i) {
-         analyze_shader_before_culling_walk(alu->src[i].src.ssa, flag, s);
+         analyze_shader_before_culling_walk(alu->src[i].src.ssa, flag, stage, s);
       }
 
       break;
@@ -1071,7 +1126,7 @@ analyze_shader_before_culling_walk(nir_ssa_def *ssa,
       unsigned num_srcs = tex->num_srcs;
 
       for (unsigned i = 0; i < num_srcs; ++i) {
-         analyze_shader_before_culling_walk(tex->src[i].src.ssa, flag, s);
+         analyze_shader_before_culling_walk(tex->src[i].src.ssa, flag, stage, s);
       }
 
       break;
@@ -1079,7 +1134,7 @@ analyze_shader_before_culling_walk(nir_ssa_def *ssa,
    case nir_instr_type_phi: {
       nir_phi_instr *phi = nir_instr_as_phi(instr);
       nir_foreach_phi_src_safe(phi_src, phi) {
-         analyze_shader_before_culling_walk(phi_src->src.ssa, flag, s);
+         analyze_shader_before_culling_walk(phi_src->src.ssa, flag, stage, s);
       }
 
       break;
@@ -1094,7 +1149,7 @@ analyze_shader_before_culling_walk(nir_ssa_def *ssa,
 
    if (parent_cf_node->type == nir_cf_node_if) {
       nir_if *nif = nir_cf_node_as_if(parent_cf_node);
-      analyze_shader_before_culling_walk(nif->condition.ssa, flag, s);
+      analyze_shader_before_culling_walk(nif->condition.ssa, flag, stage, s);
    }
 }
 
@@ -1106,6 +1161,9 @@ ac_nir_analyze_shader_before_culling(nir_shader *shader, ac_nir_before_cull_anal
    /* We need divergence info for culling shaders. */
    nir_divergence_analysis(shader);
 
+   /* Find the position output first.
+    * Flag all SSA defs that are needed to calculate position.
+    */
    nir_foreach_function(func, shader) {
       nir_foreach_block(block, func->impl) {
          nir_foreach_instr(instr, block) {
@@ -1119,9 +1177,33 @@ ac_nir_analyze_shader_before_culling(nir_shader *shader, ac_nir_before_cull_anal
                continue;
 
             nir_io_semantics io_sem = nir_intrinsic_io_semantics(intrin);
-            nir_ssa_def *store_val = intrin->src[0].ssa;
-            uint8_t flag = io_sem.location == VARYING_SLOT_POS ? nggc_passflag_used_by_pos : nggc_passflag_used_by_other;
-            analyze_shader_before_culling_walk(store_val, flag, s);
+            if (io_sem.location != VARYING_SLOT_POS)
+               continue;
+
+            nir_ssa_def *output_val = intrin->src[0].ssa;
+            output_val->parent_instr->pass_flags |= nggc_passflag_is_pos;
+            analyze_shader_before_culling_walk(output_val, nggc_passflag_used_by_pos, shader->info.stage, s);
+         }
+      }
+   }
+
+   /* Find other outputs and analyze their dependencies. */
+   nir_foreach_function(func, shader) {
+      nir_foreach_block(block, func->impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+            if (intrin->intrinsic != nir_intrinsic_store_output)
+               continue;
+
+            nir_io_semantics io_sem = nir_intrinsic_io_semantics(intrin);
+            if (io_sem.location == VARYING_SLOT_POS)
+               continue;
+
+            nir_ssa_def *output_val = intrin->src[0].ssa;
+            analyze_shader_before_culling_walk(output_val, nggc_passflag_used_by_deferred, shader->info.stage, s);
          }
       }
    }

@@ -196,6 +196,8 @@ typedef struct {
 typedef struct {
    uint64_t inputs_needed_by_pos;
    uint64_t inputs_needed_by_others;
+   uint32_t instance_rate_inputs;
+   struct ac_repacked_args needs_deferred;
 } ac_nir_before_cull_analysis;
 
 void

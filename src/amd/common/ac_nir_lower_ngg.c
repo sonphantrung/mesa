@@ -2332,8 +2332,7 @@ ac_nir_lower_ngg_nogs(nir_shader *shader, const ac_nir_lower_ngg_options *option
    nir_builder_init(b, impl);
 
    if (options->can_cull) {
-      ac_nir_before_cull_analysis a = {0};
-      ac_nir_analyze_shader_before_culling(shader, &a);
+      /* Caller must call ac_nir_analyze_shader_before_culling before this. */
       save_reusable_variables(b, &state);
    }
 

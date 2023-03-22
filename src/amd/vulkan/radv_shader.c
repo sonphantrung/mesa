@@ -803,12 +803,16 @@ radv_consider_culling(const struct radv_physical_device *pdevice, struct nir_sha
 
 static void
 setup_ngg_lds_layout(struct radv_device *device, nir_shader *nir, struct radv_shader_info *info,
-                     unsigned max_vtx_in)
+                     ac_nir_before_cull_analysis *analysis, unsigned max_vtx_in)
 {
    unsigned scratch_lds_base = 0;
    gl_shader_stage stage = nir->info.stage;
 
    if (stage == MESA_SHADER_VERTEX || stage == MESA_SHADER_TESS_EVAL) {
+      if (info->has_ngg_culling) {
+         ac_nir_analyze_shader_before_culling(nir, analysis);
+      }
+
       /* Get pervertex LDS usage. */
       bool uses_instanceid =
          BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_INSTANCE_ID);
@@ -903,7 +907,8 @@ void radv_lower_ngg(struct radv_device *device, struct radv_pipeline_stage *ngg_
    if (info->has_ngg_culling)
       radv_optimize_nir_algebraic(nir, false);
 
-   setup_ngg_lds_layout(device, nir, &ngg_stage->info, max_vtx_in);
+   ac_nir_before_cull_analysis an = {0};
+   setup_ngg_lds_layout(device, nir, &ngg_stage->info, &an, max_vtx_in);
 
    ac_nir_lower_ngg_options options = {0};
    options.family = device->physical_device->rad_info.family;

@@ -86,6 +86,17 @@ struct ac_spi_color_formats {
    unsigned blend_alpha : 8;
 };
 
+/** Args that need to be repacked by NGG culling. */
+struct ac_repacked_args {
+   /* VS */
+   uint32_t vertex_id : 1;
+   uint32_t instance_id : 1;
+   /* TES */
+   uint32_t tess_coord : 1;
+   uint32_t primitive_id : 1;
+   uint32_t rel_patch_id : 1;
+};
+
 /* For ac_build_fetch_format.
  *
  * Note: FLOAT must be 0 (used for convenience of encoding in radeonsi).
@@ -180,8 +191,7 @@ ac_ngg_nogs_get_pervertex_lds_size(gl_shader_stage stage,
                                    bool export_prim_id,
                                    bool has_user_edgeflags,
                                    bool can_cull,
-                                   bool uses_instance_id,
-                                   bool uses_primitive_id);
+                                   const struct ac_repacked_args repack);
 
 unsigned
 ac_ngg_get_scratch_lds_size(gl_shader_stage stage,

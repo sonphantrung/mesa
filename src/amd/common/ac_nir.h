@@ -180,6 +180,7 @@ typedef struct {
    bool force_vrs;
 
    /* VS */
+   struct ac_repacked_args needs_deferred;
    unsigned num_vertices_per_primitive;
    bool early_prim_export;
    bool passthrough;

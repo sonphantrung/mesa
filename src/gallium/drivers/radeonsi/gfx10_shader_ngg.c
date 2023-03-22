@@ -153,14 +153,24 @@ retry_select_mode:
    } else {
       /* VS and TES. */
 
-      bool uses_instance_id = gs_sel->info.uses_instanceid;
-      bool uses_primitive_id = gs_sel->info.uses_primid;
+      /* Determine which shader arguments are needed by the
+       * deferred part of a culling shader. These will be
+       * repacked by the shader (using LDS).
+       */
+      struct ac_repacked_args needs_deferred = {
+         .vertex_id = true,
+         .instance_id = gs_sel->info.uses_instanceid,
+         .tess_coord = true,
+         .rel_patch_id = true,
+         .primitive_id = gs_sel->info.uses_primid,
+      };
+
       if (gs_stage == MESA_SHADER_VERTEX) {
-         uses_instance_id |=
+         needs_deferred.instance_id |=
             shader->key.ge.part.vs.prolog.instance_divisor_is_one ||
             shader->key.ge.part.vs.prolog.instance_divisor_is_fetched;
       } else {
-         uses_primitive_id |= shader->key.ge.mono.u.vs_export_prim_id;
+         needs_deferred.primitive_id |= shader->key.ge.mono.u.vs_export_prim_id;
       }
 
       esvert_lds_size = ac_ngg_nogs_get_pervertex_lds_size(
@@ -169,8 +179,7 @@ retry_select_mode:
          shader->key.ge.mono.u.vs_export_prim_id,
          gfx10_ngg_writes_user_edgeflags(shader),
          shader->key.ge.opt.ngg_culling,
-         uses_instance_id,
-         uses_primitive_id) / 4;
+         needs_deferred) / 4;
    }
 
    unsigned max_gsprims = max_gsprims_base;

@@ -1672,26 +1672,25 @@ static void si_lower_ngg(struct si_shader *shader, nir_shader *nir)
          instance_rate_inputs =
             key->ge.part.vs.prolog.instance_divisor_is_one |
             key->ge.part.vs.prolog.instance_divisor_is_fetched;
-
-         /* Manually mark the instance ID used, so the shader can repack it. */
-         if (instance_rate_inputs)
-            BITSET_SET(nir->info.system_values_read, SYSTEM_VALUE_INSTANCE_ID);
-      } else {
-         /* Manually mark the primitive ID used, so the shader can repack it. */
-         if (key->ge.mono.u.vs_export_prim_id)
-            BITSET_SET(nir->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID);
       }
 
-      ac_nir_before_cull_analysis before_cull_analysis = {0};
-      struct ac_repacked_args needs_deferred = {
-         .vertex_id = true,
-         .instance_id = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_INSTANCE_ID),
-         .tess_coord = true,
-         .rel_patch_id = true,
-         .primitive_id = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID),
+      ac_nir_before_cull_analysis before_cull_analysis = {
+         .instance_rate_inputs = instance_rate_inputs,
+
+         /* Deferred part of TES always needs primitive ID if PS reads it. */
+         .needs_deferred.primitive_id =
+            nir->info.stage == MESA_SHADER_TESS_EVAL &&
+            key->ge.mono.u.vs_export_prim_id
       };
 
       if (options.can_cull) {
+         /* Analyze the shader before culling, to determine which variables
+          * need to be repacked for use in the deferred shader part.
+          * Note that the LDS size is already set by gfx10_ngg_calculate_subgroup_info
+          * but we can at least eliminate some extra LDS instructions.
+          *
+          * TODO: adjust LDS size according to this information.
+          */
          ac_nir_analyze_shader_before_culling(nir, &before_cull_analysis);
       }
 
@@ -1707,7 +1706,7 @@ static void si_lower_ngg(struct si_shader *shader, nir_shader *nir)
       options.export_primitive_id = key->ge.mono.u.vs_export_prim_id;
       options.instance_rate_inputs = instance_rate_inputs;
       options.user_clip_plane_enable_mask = clip_plane_enable;
-      options.needs_deferred = needs_deferred;
+      options.needs_deferred = before_cull_analysis.needs_deferred;
 
       NIR_PASS_V(nir, ac_nir_lower_ngg_nogs, &options);
    } else {

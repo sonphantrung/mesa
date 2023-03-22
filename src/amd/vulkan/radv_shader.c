@@ -900,6 +900,9 @@ void radv_lower_ngg(struct radv_device *device, struct radv_pipeline_stage *ngg_
    /* Invocations that process an input vertex */
    unsigned max_vtx_in = MIN2(256, ngg_info->hw_max_esverts);
 
+   if (info->has_ngg_culling)
+      radv_optimize_nir_algebraic(nir, false);
+
    setup_ngg_lds_layout(device, nir, &ngg_stage->info, max_vtx_in);
 
    ac_nir_lower_ngg_options options = {0};
@@ -919,9 +922,6 @@ void radv_lower_ngg(struct radv_device *device, struct radv_pipeline_stage *ngg_
    if (nir->info.stage == MESA_SHADER_VERTEX ||
        nir->info.stage == MESA_SHADER_TESS_EVAL) {
       assert(info->is_ngg);
-
-      if (info->has_ngg_culling)
-         radv_optimize_nir_algebraic(nir, false);
 
       options.num_vertices_per_primitive = num_vertices_per_prim;
       options.early_prim_export = info->has_ngg_early_prim_export;

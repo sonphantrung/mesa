@@ -192,6 +192,14 @@ typedef struct {
    unsigned gs_out_vtx_bytes;
 } ac_nir_lower_ngg_options;
 
+typedef struct {
+   uint64_t inputs_needed_by_pos;
+   uint64_t inputs_needed_by_others;
+} ac_nir_before_cull_analysis;
+
+void
+ac_nir_analyze_shader_before_culling(nir_shader *shader, ac_nir_before_cull_analysis *out);
+
 void
 ac_nir_lower_ngg_nogs(nir_shader *shader, const ac_nir_lower_ngg_options *options);
 

@@ -81,9 +81,6 @@ typedef struct
    /* LDS params */
    unsigned pervertex_lds_bytes;
 
-   uint64_t inputs_needed_by_pos;
-   uint64_t inputs_needed_by_others;
-
    nir_instr *compact_arg_stores[4];
    nir_intrinsic_instr *overwrite_args;
    nir_variable *repacked_rel_patch_id;
@@ -1015,7 +1012,7 @@ compact_vertices_after_culling(nir_builder *b,
 static void
 analyze_shader_before_culling_walk(nir_ssa_def *ssa,
                                    uint8_t flag,
-                                   lower_ngg_nogs_state *s)
+                                   ac_nir_before_cull_analysis *s)
 {
    nir_instr *instr = ssa->parent_instr;
    uint8_t old_pass_flags = instr->pass_flags;
@@ -1092,8 +1089,8 @@ analyze_shader_before_culling_walk(nir_ssa_def *ssa,
    }
 }
 
-static void
-analyze_shader_before_culling(nir_shader *shader, lower_ngg_nogs_state *s)
+void
+ac_nir_analyze_shader_before_culling(nir_shader *shader, ac_nir_before_cull_analysis *s)
 {
    /* LCSSA is needed to get correct results from divergence analysis. */
    nir_convert_to_lcssa(shader, true, true);
@@ -2335,7 +2332,8 @@ ac_nir_lower_ngg_nogs(nir_shader *shader, const ac_nir_lower_ngg_options *option
    nir_builder_init(b, impl);
 
    if (options->can_cull) {
-      analyze_shader_before_culling(shader, &state);
+      ac_nir_before_cull_analysis a = {0};
+      ac_nir_analyze_shader_before_culling(shader, &a);
       save_reusable_variables(b, &state);
    }
 

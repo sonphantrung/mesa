@@ -82,7 +82,6 @@ typedef struct
    /* LDS params */
    unsigned pervertex_lds_bytes;
 
-   nir_instr *compact_arg_stores[4];
    nir_intrinsic_instr *overwrite_args;
    nir_variable *repacked_rel_patch_id;
 
@@ -796,113 +795,6 @@ remove_extra_pos_outputs(nir_shader *shader, lower_ngg_nogs_state *s)
                                 s);
 }
 
-static bool
-remove_compacted_arg(lower_ngg_nogs_state *s, nir_builder *b, unsigned idx)
-{
-   nir_instr *store_instr = s->compact_arg_stores[idx];
-   if (!store_instr)
-      return false;
-
-   /* Simply remove the store. */
-   nir_instr_remove(store_instr);
-
-   /* Find the intrinsic that overwrites the shader arguments,
-    * and change its corresponding source.
-    * This will cause NIR's DCE to recognize the load and its phis as dead.
-    */
-   b->cursor = nir_before_instr(&s->overwrite_args->instr);
-   nir_ssa_def *undef_arg = nir_ssa_undef(b, 1, 32);
-   nir_ssa_def_rewrite_uses(s->overwrite_args->src[idx].ssa, undef_arg);
-
-   s->compact_arg_stores[idx] = NULL;
-   return true;
-}
-
-static bool
-cleanup_culling_shader_after_dce(nir_shader *shader,
-                                 nir_function_impl *function_impl,
-                                 lower_ngg_nogs_state *s)
-{
-   bool uses_vs_vertex_id = false;
-   bool uses_vs_instance_id = false;
-   bool uses_tes_u = false;
-   bool uses_tes_v = false;
-   bool uses_tes_rel_patch_id = false;
-   bool uses_tes_patch_id = false;
-
-   bool progress = false;
-   nir_builder b;
-   nir_builder_init(&b, function_impl);
-
-   nir_foreach_block_reverse_safe(block, function_impl) {
-      nir_foreach_instr_reverse_safe(instr, block) {
-         if (instr->type != nir_instr_type_intrinsic)
-            continue;
-
-         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-
-         switch (intrin->intrinsic) {
-         case nir_intrinsic_alloc_vertices_and_primitives_amd:
-            goto cleanup_culling_shader_after_dce_done;
-         case nir_intrinsic_load_vertex_id:
-         case nir_intrinsic_load_vertex_id_zero_base:
-            uses_vs_vertex_id = true;
-            break;
-         case nir_intrinsic_load_instance_id:
-            uses_vs_instance_id = true;
-            break;
-         case nir_intrinsic_load_input:
-            if (s->options->instance_rate_inputs & BITFIELD_BIT(nir_intrinsic_base(intrin)))
-               uses_vs_instance_id = true;
-            else
-               uses_vs_vertex_id = true;
-            break;
-         case nir_intrinsic_load_tess_coord:
-            uses_tes_u = uses_tes_v = true;
-            break;
-         case nir_intrinsic_load_tess_rel_patch_id_amd:
-            uses_tes_rel_patch_id = true;
-            break;
-         case nir_intrinsic_load_primitive_id:
-            if (shader->info.stage == MESA_SHADER_TESS_EVAL)
-               uses_tes_patch_id = true;
-            break;
-         default:
-            break;
-         }
-      }
-   }
-
-   cleanup_culling_shader_after_dce_done:
-
-   unsigned repacked_var_idx = 0;
-   if (shader->info.stage == MESA_SHADER_VERTEX) {
-      unsigned vertex_id_idx = s->options->needs_deferred.vertex_id ? repacked_var_idx++ : -1;
-      unsigned instance_id_idx = s->options->needs_deferred.instance_id ? repacked_var_idx++ : -1;
-
-      if (!uses_vs_vertex_id && vertex_id_idx != -1)
-         progress |= remove_compacted_arg(s, &b, vertex_id_idx);
-      if (!uses_vs_instance_id && instance_id_idx != -1)
-         progress |= remove_compacted_arg(s, &b, instance_id_idx);
-   } else if (shader->info.stage == MESA_SHADER_TESS_EVAL) {
-      unsigned tes_u_idx = s->options->needs_deferred.tess_coord ? repacked_var_idx++ : -1;
-      unsigned tes_v_idx = s->options->needs_deferred.tess_coord ? repacked_var_idx++ : -1;
-      unsigned prim_id_idx = s->options->needs_deferred.primitive_id ? repacked_var_idx++ : -1;
-      unsigned rel_patch_id_idx = s->options->needs_deferred.rel_patch_id ? repacked_var_idx++ : -1;
-
-      if (!uses_tes_u && tes_u_idx != -1)
-         progress |= remove_compacted_arg(s, &b, tes_u_idx);
-      if (!uses_tes_v && tes_v_idx != -1)
-         progress |= remove_compacted_arg(s, &b, tes_v_idx);
-      if (!uses_tes_patch_id && prim_id_idx != -1)
-         progress |= remove_compacted_arg(s, &b, prim_id_idx);
-      if (!uses_tes_rel_patch_id && rel_patch_id_idx != -1)
-         progress |= remove_compacted_arg(s, &b, rel_patch_id_idx);
-   }
-
-   return progress;
-}
-
 /**
  * Perform vertex compaction after culling.
  *
@@ -944,19 +836,13 @@ compact_vertices_after_culling(nir_builder *b,
       /* Store the current thread's repackable arguments to the exporter thread's LDS space */
       for (unsigned i = 0; i < num_repacked_variables; ++i) {
          nir_ssa_def *arg_val = nir_load_var(b, repacked_variables[i]);
-         nir_intrinsic_instr *store = nir_store_shared(b, arg_val, exporter_addr, .base = lds_es_arg_0 + 4u * i);
-
-         s->compact_arg_stores[i] = &store->instr;
+         nir_store_shared(b, arg_val, exporter_addr, .base = lds_es_arg_0 + 4u * i);
       }
 
       /* TES rel patch id does not cost extra dword */
       if (b->shader->info.stage == MESA_SHADER_TESS_EVAL && s->options->needs_deferred.rel_patch_id) {
          nir_ssa_def *arg_val = nir_load_var(b, s->repacked_rel_patch_id);
-         nir_intrinsic_instr *store =
-            nir_store_shared(b, nir_u2u8(b, arg_val), exporter_addr,
-                             .base = lds_es_tes_rel_patch_id);
-
-         s->compact_arg_stores[num_repacked_variables] = &store->instr;
+         nir_store_shared(b, nir_u2u8(b, arg_val), exporter_addr, .base = lds_es_tes_rel_patch_id);
       }
    }
    nir_pop_if(b, if_es_accepted);
@@ -2642,9 +2528,6 @@ ac_nir_lower_ngg_nogs(nir_shader *shader, const ac_nir_lower_ngg_options *option
       NIR_PASS(progress, shader, nir_opt_undef);
       NIR_PASS(progress, shader, nir_opt_dce);
       NIR_PASS(progress, shader, nir_opt_dead_cf);
-
-      if (options->can_cull)
-         progress |= cleanup_culling_shader_after_dce(shader, b->impl, &state);
    } while (progress);
 }
 

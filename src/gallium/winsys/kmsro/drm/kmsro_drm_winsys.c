@@ -133,20 +133,52 @@ struct pipe_screen *kmsro_drm_screen_create(int fd,
 #endif
    };
 
-   for (int i = 0; i < ARRAY_SIZE(renderonly_drivers); i++) {
-      ro->gpu_fd = drmOpenWithType(renderonly_drivers[i].name, NULL, DRM_NODE_RENDER);
-      if (ro->gpu_fd >= 0) {
+   /*
+    * Open the first minor number that matches the driver name and isn't
+    * already in use.  If it's in use it will have a busid assigned already.
+    */
+   const int minor_base = 128;  /* drmGetMinorBase(DRM_NODE_RENDER) */
+   for (int minor = minor_base; minor < minor_base + DRM_MAX_MINOR; minor++) {
+      int minor_fd = drmOpenRender(minor);
+      if (minor_fd < 0)
+         continue;
+
+      char *id = drmGetBusid(fd);
+      bool already_used = id && *id;
+
+      if (id)
+         drmFreeBusid(id);
+
+      if (already_used)
+         continue;
+
+      drmVersionPtr version = drmGetVersion(minor_fd);
+      if (!version) {
+         close(minor_fd);
+         continue;
+      }
+
+      for (unsigned i = 0; i < ARRAY_SIZE(renderonly_drivers); i++) {
+         bool name_match = strcmp(version->name, renderonly_drivers[i].name) == 0;
+         if (!name_match)
+            continue;
+
+         drmFreeVersion(version);
+
+         ro->gpu_fd = minor_fd;
          ro->create_for_resource = renderonly_drivers[i].create_for_resource;
          screen = renderonly_drivers[i].create_screen(ro->gpu_fd, ro, config);
          if (!screen)
-            goto out_free;
+            goto next_minor;
+
+         close(minor_fd);
          return screen;
       }
+
+next_minor:
+      close(minor_fd);
    }
 
-   return screen;
-
-out_free:
    if (ro->gpu_fd >= 0)
       close(ro->gpu_fd);
    FREE(ro);

@@ -2151,12 +2151,12 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
          case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
          case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: {
             if (desc->image_view) {
-               struct anv_surface_state sstate =
-                  (desc->layout == VK_IMAGE_LAYOUT_GENERAL) ?
-                  desc->image_view->planes[binding->plane].general_sampler_surface_state :
-                  desc->image_view->planes[binding->plane].optimal_sampler_surface_state;
+               const struct anv_surface_state *sstate =
+                  anv_image_view_texture_surface_state(desc->image_view,
+                                                       binding->plane,
+                                                       desc->layout);
                surface_state =
-                  anv_bindless_state_for_binding_table(sstate.state);
+                  anv_bindless_state_for_binding_table(sstate->state);
                assert(surface_state.alloc_size);
             } else {
                surface_state =
@@ -2168,13 +2168,12 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
 
          case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: {
             if (desc->image_view) {
-               struct anv_surface_state sstate =
-                  binding->lowered_storage_surface
-                  ? desc->image_view->planes[binding->plane].lowered_storage_surface_state
-                  : desc->image_view->planes[binding->plane].storage_surface_state;
+               const struct anv_surface_state *sstate =
+                  anv_image_view_storage_surface_state(desc->image_view,
+                                                       binding->lowered_storage_surface);
                const bool lowered_surface_state_is_null =
                   desc->image_view->planes[binding->plane].lowered_surface_state_is_null;
-               surface_state = anv_bindless_state_for_binding_table(sstate.state);
+               surface_state = anv_bindless_state_for_binding_table(sstate->state);
                assert(surface_state.alloc_size);
                if (binding->lowered_storage_surface && lowered_surface_state_is_null) {
                   mesa_loge("Bound a image to a descriptor where the "

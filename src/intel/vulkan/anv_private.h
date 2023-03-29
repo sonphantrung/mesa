@@ -3975,6 +3975,24 @@ void anv_image_fill_surface_state(struct anv_device *device,
                                   enum anv_image_view_state_flags flags,
                                   struct anv_surface_state *state_inout);
 
+static inline const struct anv_surface_state *
+anv_image_view_texture_surface_state(const struct anv_image_view *iview,
+                                     uint32_t plane, VkImageLayout layout)
+{
+   return layout == VK_IMAGE_LAYOUT_GENERAL ?
+          &iview->planes[plane].general_sampler_surface_state :
+          &iview->planes[plane].optimal_sampler_surface_state;
+}
+
+static inline const struct anv_surface_state *
+anv_image_view_storage_surface_state(const struct anv_image_view *iview,
+                                     bool lowered_storage_surface)
+{
+   return lowered_storage_surface ?
+          &iview->planes[0].lowered_storage_surface_state :
+          &iview->planes[0].storage_surface_state;
+}
+
 struct anv_image_create_info {
    const VkImageCreateInfo *vk_info;
 

@@ -2756,7 +2756,6 @@ anv_DestroyImageView(VkDevice _device, VkImageView _iview,
    vk_image_view_destroy(&device->vk, pAllocator, &iview->vk);
 }
 
-
 VkResult
 anv_CreateBufferView(VkDevice _device,
                      const VkBufferViewCreateInfo *pCreateInfo,

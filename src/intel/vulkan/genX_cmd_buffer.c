@@ -1288,8 +1288,13 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
           initial_aux_usage == final_aux_usage);
 
    /* If initial aux usage is NONE, there is nothing to resolve */
-   if (initial_aux_usage == ISL_AUX_USAGE_NONE)
+   if (initial_aux_usage == ISL_AUX_USAGE_NONE) {
+      if (GFX_VERx10 == 120 && final_aux_usage == ISL_AUX_USAGE_CCS_E) {
+         anv_add_pending_pipe_bits(cmd_buffer, ANV_PIPE_TILE_CACHE_FLUSH_BIT,
+                                   "Due to re-enabling CCS");
+      }
       return;
+   }
 
    enum isl_aux_op resolve_op = ISL_AUX_OP_NONE;
 

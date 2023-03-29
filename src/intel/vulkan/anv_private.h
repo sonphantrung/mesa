@@ -3956,6 +3956,12 @@ struct anv_image_view {
       struct anv_surface_state general_sampler_surface_state;
 
       /**
+       * RENDER_SURFACE_STATE when using image as a sampler surface with an
+       * image layout of ATTACHMENT_FEEDBACK_LOOP_OPTIMAL.
+       */
+      struct anv_surface_state fb_loop_sampler_surface_state;
+
+      /**
        * RENDER_SURFACE_STATE when using image as a storage image. Separate
        * states for vanilla (with the original format) and one which has been
        * lowered to a format suitable for reading.  This may be a raw surface
@@ -3988,9 +3994,14 @@ static inline const struct anv_surface_state *
 anv_image_view_texture_surface_state(const struct anv_image_view *iview,
                                      uint32_t plane, VkImageLayout layout)
 {
-   return layout == VK_IMAGE_LAYOUT_GENERAL ?
-          &iview->planes[plane].general_sampler_surface_state :
-          &iview->planes[plane].optimal_sampler_surface_state;
+   switch (layout) {
+   case VK_IMAGE_LAYOUT_GENERAL:
+      return &iview->planes[plane].general_sampler_surface_state;
+   case VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT:
+      return &iview->planes[plane].fb_loop_sampler_surface_state;
+   default:
+      return &iview->planes[plane].optimal_sampler_surface_state;
+   }
 }
 
 static inline const struct anv_surface_state *

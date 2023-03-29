@@ -2148,8 +2148,7 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
             continue;
 
          case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-         case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: {
+         case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: {
             if (desc->image_view) {
                const struct anv_surface_state *sstate =
                   anv_image_view_texture_surface_state(desc->image_view,
@@ -2163,6 +2162,28 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
                   anv_bindless_state_for_binding_table(
                      cmd_buffer->device->null_surface_state);
             }
+            break;
+         }
+
+         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: {
+            /* Normally, we can trust the layout provided by the client.
+             * However, when an input attachment is used in a feedback loop,
+             * the common render pass code will smash the layout to
+             * VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT, causing
+             * us to disable compression in most cases.  We need to ensure we
+             * use the same layout here as was used when the image view was
+             * bound as a render target.
+             */
+            VkImageLayout layout = desc->layout;
+            if (binding->input_att_feedback_loop)
+               layout = VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT;
+
+            assert(binding->plane == 0);
+            const struct anv_surface_state *sstate =
+               anv_image_view_texture_surface_state(desc->image_view,
+                                                    0, layout);
+            surface_state = sstate->state;
+            assert(surface_state.alloc_size);
             break;
          }
 

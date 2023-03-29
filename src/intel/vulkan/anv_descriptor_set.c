@@ -246,6 +246,20 @@ anv_descriptor_supports_bindless(const struct anv_physical_device *pdevice,
                                  const struct anv_descriptor_set_binding_layout *binding,
                                  bool sampler)
 {
+   /* We need these to be in the bind map so that we can use the image layout
+    * from the render pass.  From the Vulkan 1.3.223 spec:
+    *
+    *    VUID-VkDescriptorSetLayoutBindingFlagsCreateInfo-None-03011
+    *
+    *    "All bindings with descriptor type
+    *    VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+    *    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, or
+    *    VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC must not use
+    *    VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT"
+    */
+   if (binding->type == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)
+      return false;
+
    return anv_descriptor_data_supports_bindless(pdevice, binding->data,
                                                 sampler);
 }

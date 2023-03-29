@@ -1977,8 +1977,17 @@ struct anv_pipeline_binding {
       uint8_t dynamic_offset_index;
    };
 
-   /** For a storage image, whether it requires a lowered surface */
-   uint8_t lowered_storage_surface;
+   union {
+      /** For a storage image, whether it requires a lowered surface */
+      uint8_t lowered_storage_surface;
+
+      /** For an input attachment, whether it is in a feedback loop
+       *
+       * This is determined based on whether the image layout in the render
+       * pass is VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT.
+       */
+      uint8_t input_att_feedback_loop;
+   };
 };
 
 struct anv_push_range {

@@ -1081,6 +1081,15 @@ analyze_shader_before_culling_walk(nir_ssa_def *ssa,
    default:
       break;
    }
+
+   assert(instr->block->cf_node.type == nir_cf_node_block);
+   assert(instr->block->cf_node.parent);
+   nir_cf_node *parent_cf_node = instr->block->cf_node.parent;
+
+   if (parent_cf_node->type == nir_cf_node_if) {
+      nir_if *nif = nir_cf_node_as_if(parent_cf_node);
+      analyze_shader_before_culling_walk(nif->condition.ssa, flag, s);
+   }
 }
 
 static void

@@ -180,6 +180,7 @@ typedef struct {
    bool force_vrs;
 
    /* VS */
+   struct ac_repacked_args needs_deferred;
    unsigned num_vertices_per_primitive;
    bool early_prim_export;
    bool passthrough;
@@ -191,6 +192,16 @@ typedef struct {
    /* GS */
    unsigned gs_out_vtx_bytes;
 } ac_nir_lower_ngg_options;
+
+typedef struct {
+   uint64_t inputs_needed_by_pos;
+   uint64_t inputs_needed_by_others;
+   uint32_t instance_rate_inputs;
+   struct ac_repacked_args needs_deferred;
+} ac_nir_before_cull_analysis;
+
+void
+ac_nir_analyze_shader_before_culling(nir_shader *shader, ac_nir_before_cull_analysis *out);
 
 void
 ac_nir_lower_ngg_nogs(nir_shader *shader, const ac_nir_lower_ngg_options *options);

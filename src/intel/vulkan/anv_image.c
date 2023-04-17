@@ -2096,22 +2096,6 @@ anv_layout_to_aux_state(const struct intel_device_info * const devinfo,
    bool aux_supported = true;
    bool clear_supported = isl_aux_usage_has_fast_clears(aux_usage);
 
-   if ((usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) && !read_only) {
-      /* This image could be used as both an input attachment and a render
-       * target (depth, stencil, or color) at the same time and this can cause
-       * corruption.
-       *
-       * We currently only disable aux in this way for depth even though we
-       * disable it for color in GL.
-       *
-       * TODO: Should we be disabling this in more cases?
-       */
-      if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT && devinfo->ver <= 9) {
-         aux_supported = false;
-         clear_supported = false;
-      }
-   }
-
    if (usage & (VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                 VK_IMAGE_USAGE_SAMPLED_BIT |
                 VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) {
@@ -2149,6 +2133,21 @@ anv_layout_to_aux_state(const struct intel_device_info * const devinfo,
          unreachable("Unsupported aux usage");
       }
    }
+
+   /* When running in a feedback loop, we have to disable compression because
+    * texturing and rendering may race.  Since aux data and color data are
+    * stored separately, they are not updated atomically with respect to each
+    * other, leading to this race.  MCS should be fine because it's entirely
+    * local to a single pixel and we're guaranteed texturing from and writing
+    * to the same pixel simultaneously cannot happen.
+    *
+    * TODO: Stencil CCS may not work but we don't have stencil resolve code
+    * at the moment and it's unlikely that anyone will hit this potential
+    * corruption in practice.
+    */
+   if (layout == VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT &&
+       aux_usage != ISL_AUX_USAGE_MCS && aux_usage != ISL_AUX_USAGE_STC_CCS)
+      aux_supported = false;
 
    switch (aux_usage) {
    case ISL_AUX_USAGE_HIZ:
@@ -2665,6 +2664,23 @@ anv_CreateImageView(VkDevice _device,
                                       &iview->planes[vplane].general_sampler_surface_state);
       }
 
+      if ((iview->vk.usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) ||
+          ((iview->vk.usage & VK_IMAGE_USAGE_SAMPLED_BIT) &&
+           (iview->vk.usage & VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT))) {
+         iview->planes[vplane].fb_loop_sampler_surface_state.state =
+            alloc_bindless_surface_state(device);
+         enum isl_aux_usage fb_loop_aux_usage =
+            anv_layout_to_aux_usage(device->info, image, 1UL << iaspect_bit,
+                                    VK_IMAGE_USAGE_SAMPLED_BIT,
+                                    VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT);
+         anv_image_fill_surface_state(device, image, 1ULL << iaspect_bit,
+                                      &iview->planes[vplane].isl,
+                                      ISL_SURF_USAGE_TEXTURE_BIT,
+                                      fb_loop_aux_usage, NULL,
+                                      0,
+                                      &iview->planes[vplane].fb_loop_sampler_surface_state);
+      }
+
       /* NOTE: This one needs to go last since it may stomp isl_view.format */
       if (iview->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT) {
          struct isl_view storage_view = iview->planes[vplane].isl;
@@ -2742,7 +2758,12 @@ anv_DestroyImageView(VkDevice _device, VkImageView _iview,
                              iview->planes[plane].general_sampler_surface_state.state);
       }
 
-      if (iview->planes[plane].storage_surface_state.state.alloc_size) {
+      if (iview->planes[plane].fb_loop_sampler_surface_state.state.offset) {
+         anv_state_pool_free(&device->bindless_surface_state_pool,
+                             iview->planes[plane].fb_loop_sampler_surface_state.state);
+      }
+
+      if (iview->planes[plane].storage_surface_state.state.offset) {
          anv_state_pool_free(&device->bindless_surface_state_pool,
                              iview->planes[plane].storage_surface_state.state);
       }
@@ -2755,7 +2776,6 @@ anv_DestroyImageView(VkDevice _device, VkImageView _iview,
 
    vk_image_view_destroy(&device->vk, pAllocator, &iview->vk);
 }
-
 
 VkResult
 anv_CreateBufferView(VkDevice _device,

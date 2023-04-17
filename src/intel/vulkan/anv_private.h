@@ -1986,8 +1986,17 @@ struct anv_pipeline_binding {
       uint8_t dynamic_offset_index;
    };
 
-   /** For a storage image, whether it requires a lowered surface */
-   uint8_t lowered_storage_surface;
+   union {
+      /** For a storage image, whether it requires a lowered surface */
+      uint8_t lowered_storage_surface;
+
+      /** For an input attachment, whether it is in a feedback loop
+       *
+       * This is determined based on whether the image layout in the render
+       * pass is VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT.
+       */
+      uint8_t input_att_feedback_loop;
+   };
 };
 
 struct anv_push_range {
@@ -3986,6 +3995,12 @@ struct anv_image_view {
       struct anv_surface_state general_sampler_surface_state;
 
       /**
+       * RENDER_SURFACE_STATE when using image as a sampler surface with an
+       * image layout of ATTACHMENT_FEEDBACK_LOOP_OPTIMAL.
+       */
+      struct anv_surface_state fb_loop_sampler_surface_state;
+
+      /**
        * RENDER_SURFACE_STATE when using image as a storage image. Separate
        * states for vanilla (with the original format) and one which has been
        * lowered to a format suitable for reading.  This may be a raw surface
@@ -4013,6 +4028,29 @@ void anv_image_fill_surface_state(struct anv_device *device,
                                   const union isl_color_value *clear_color,
                                   enum anv_image_view_state_flags flags,
                                   struct anv_surface_state *state_inout);
+
+static inline const struct anv_surface_state *
+anv_image_view_texture_surface_state(const struct anv_image_view *iview,
+                                     uint32_t plane, VkImageLayout layout)
+{
+   switch (layout) {
+   case VK_IMAGE_LAYOUT_GENERAL:
+      return &iview->planes[plane].general_sampler_surface_state;
+   case VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT:
+      return &iview->planes[plane].fb_loop_sampler_surface_state;
+   default:
+      return &iview->planes[plane].optimal_sampler_surface_state;
+   }
+}
+
+static inline const struct anv_surface_state *
+anv_image_view_storage_surface_state(const struct anv_image_view *iview,
+                                     bool lowered_storage_surface)
+{
+   return lowered_storage_surface ?
+          &iview->planes[0].lowered_storage_surface_state :
+          &iview->planes[0].storage_surface_state;
+}
 
 struct anv_image_create_info {
    const VkImageCreateInfo *vk_info;

@@ -1289,8 +1289,13 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
           initial_aux_usage == final_aux_usage);
 
    /* If initial aux usage is NONE, there is nothing to resolve */
-   if (initial_aux_usage == ISL_AUX_USAGE_NONE)
+   if (initial_aux_usage == ISL_AUX_USAGE_NONE) {
+      if (GFX_VERx10 == 120 && final_aux_usage == ISL_AUX_USAGE_CCS_E) {
+         anv_add_pending_pipe_bits(cmd_buffer, ANV_PIPE_TILE_CACHE_FLUSH_BIT,
+                                   "Due to re-enabling CCS");
+      }
       return;
+   }
 
    enum isl_aux_op resolve_op = ISL_AUX_OP_NONE;
 
@@ -2163,15 +2168,14 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
             continue;
 
          case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-         case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: {
+         case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: {
             if (desc->image_view) {
-               struct anv_surface_state sstate =
-                  (desc->layout == VK_IMAGE_LAYOUT_GENERAL) ?
-                  desc->image_view->planes[binding->plane].general_sampler_surface_state :
-                  desc->image_view->planes[binding->plane].optimal_sampler_surface_state;
+               const struct anv_surface_state *sstate =
+                  anv_image_view_texture_surface_state(desc->image_view,
+                                                       binding->plane,
+                                                       desc->layout);
                surface_state =
-                  anv_bindless_state_for_binding_table(sstate.state);
+                  anv_bindless_state_for_binding_table(sstate->state);
                assert(surface_state.alloc_size);
             } else {
                surface_state =
@@ -2181,15 +2185,36 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
             break;
          }
 
+         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: {
+            /* Normally, we can trust the layout provided by the client.
+             * However, when an input attachment is used in a feedback loop,
+             * the common render pass code will smash the layout to
+             * VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT, causing
+             * us to disable compression in most cases.  We need to ensure we
+             * use the same layout here as was used when the image view was
+             * bound as a render target.
+             */
+            VkImageLayout layout = desc->layout;
+            if (binding->input_att_feedback_loop)
+               layout = VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT;
+
+            assert(binding->plane == 0);
+            const struct anv_surface_state *sstate =
+               anv_image_view_texture_surface_state(desc->image_view,
+                                                    0, layout);
+            surface_state = sstate->state;
+            assert(surface_state.alloc_size);
+            break;
+         }
+
          case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: {
             if (desc->image_view) {
-               struct anv_surface_state sstate =
-                  binding->lowered_storage_surface
-                  ? desc->image_view->planes[binding->plane].lowered_storage_surface_state
-                  : desc->image_view->planes[binding->plane].storage_surface_state;
+               const struct anv_surface_state *sstate =
+                  anv_image_view_storage_surface_state(desc->image_view,
+                                                       binding->lowered_storage_surface);
                const bool lowered_surface_state_is_null =
                   desc->image_view->planes[binding->plane].lowered_surface_state_is_null;
-               surface_state = anv_bindless_state_for_binding_table(sstate.state);
+               surface_state = anv_bindless_state_for_binding_table(sstate->state);
                assert(surface_state.alloc_size);
                if (binding->lowered_storage_surface && lowered_surface_state_is_null) {
                   mesa_loge("Bound a image to a descriptor where the "

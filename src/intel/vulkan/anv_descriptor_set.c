@@ -246,6 +246,20 @@ anv_descriptor_supports_bindless(const struct anv_physical_device *pdevice,
                                  const struct anv_descriptor_set_binding_layout *binding,
                                  bool sampler)
 {
+   /* We need these to be in the bind map so that we can use the image layout
+    * from the render pass.  From the Vulkan 1.3.223 spec:
+    *
+    *    VUID-VkDescriptorSetLayoutBindingFlagsCreateInfo-None-03011
+    *
+    *    "All bindings with descriptor type
+    *    VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+    *    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, or
+    *    VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC must not use
+    *    VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT"
+    */
+   if (binding->type == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)
+      return false;
+
    return anv_descriptor_data_supports_bindless(pdevice, binding->data,
                                                 sampler);
 }
@@ -1420,11 +1434,10 @@ anv_descriptor_set_write_image_view(struct anv_device *device,
 
       if (image_view) {
          for (unsigned p = 0; p < image_view->n_planes; p++) {
-            struct anv_surface_state sstate =
-               (desc->layout == VK_IMAGE_LAYOUT_GENERAL) ?
-               image_view->planes[p].general_sampler_surface_state :
-               image_view->planes[p].optimal_sampler_surface_state;
-            desc_data[p].image = anv_surface_state_to_handle(sstate.state);
+            const struct anv_surface_state *sstate =
+               anv_image_view_texture_surface_state(image_view, p,
+                                                    desc->layout);
+            desc_data[p].image = anv_surface_state_to_handle(sstate->state);
          }
       }
 
@@ -1448,9 +1461,9 @@ anv_descriptor_set_write_image_view(struct anv_device *device,
       assert(image_view->n_planes == 1);
       struct anv_storage_image_descriptor desc_data = {
          .vanilla = anv_surface_state_to_handle(
-                           image_view->planes[0].storage_surface_state.state),
+            anv_image_view_storage_surface_state(image_view, false)->state),
          .lowered = anv_surface_state_to_handle(
-                           image_view->planes[0].lowered_storage_surface_state.state),
+            anv_image_view_storage_surface_state(image_view, true)->state),
       };
       memcpy(desc_map, &desc_data, sizeof(desc_data));
    }

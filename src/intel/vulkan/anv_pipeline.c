@@ -635,6 +635,7 @@ struct anv_pipeline_stage {
 static void
 anv_pipeline_hash_graphics(struct anv_graphics_pipeline *pipeline,
                            struct anv_pipeline_layout *layout,
+                           const struct vk_subpass *subpass,
                            struct anv_pipeline_stage *stages,
                            unsigned char *sha1_out)
 {
@@ -646,6 +647,14 @@ anv_pipeline_hash_graphics(struct anv_graphics_pipeline *pipeline,
 
    if (layout)
       _mesa_sha1_update(&ctx, layout->sha1, sizeof(layout->sha1));
+
+   if (subpass != NULL) {
+      for (uint32_t i = 0; i < subpass->input_count; i++) {
+         bool is_fb_loop = subpass->input_attachments[i].layout ==
+            VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT;
+         _mesa_sha1_update(&ctx, &is_fb_loop, sizeof(is_fb_loop));
+      }
+   }
 
    const struct anv_device *device = pipeline->base.device;
 
@@ -809,6 +818,7 @@ anv_pipeline_lower_nir(struct anv_pipeline *pipeline,
                        void *mem_ctx,
                        struct anv_pipeline_stage *stage,
                        struct anv_pipeline_layout *layout,
+                       const struct vk_subpass *subpass,
                        bool use_primitive_replication)
 {
    const struct anv_physical_device *pdevice = pipeline->device->physical;
@@ -868,7 +878,7 @@ anv_pipeline_lower_nir(struct anv_pipeline *pipeline,
    /* Apply the actual pipeline layout to UBOs, SSBOs, and textures */
    NIR_PASS_V(nir, anv_nir_apply_pipeline_layout,
               pdevice, pipeline->device->vk.enabled_features.robustBufferAccess,
-              layout, &stage->bind_map);
+              layout, subpass, &stage->bind_map);
 
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_ubo,
             anv_nir_ubo_addr_format(pdevice,
@@ -1692,6 +1702,13 @@ anv_graphics_pipeline_compile(struct anv_graphics_pipeline *pipeline,
    const struct intel_device_info *devinfo = device->info;
    const struct brw_compiler *compiler = device->physical->compiler;
 
+   const struct vk_subpass *subpass = NULL;
+   if (state->rp != NULL && state->rp->render_pass != VK_NULL_HANDLE) {
+      VK_FROM_HANDLE(vk_render_pass, render_pass, state->rp->render_pass);
+      assert(state->rp->subpass < render_pass->subpass_count);
+      subpass = &render_pass->subpasses[state->rp->subpass];
+   }
+
    struct anv_pipeline_stage stages[ANV_GRAPHICS_SHADER_STAGE_COUNT] = {};
    for (uint32_t i = 0; i < info->stageCount; i++) {
       gl_shader_stage stage = vk_to_mesa_shader_stage(info->pStages[i].stage);
@@ -1702,7 +1719,7 @@ anv_graphics_pipeline_compile(struct anv_graphics_pipeline *pipeline,
    anv_graphics_pipeline_init_keys(pipeline, state, stages);
 
    unsigned char sha1[20];
-   anv_pipeline_hash_graphics(pipeline, layout, stages, sha1);
+   anv_pipeline_hash_graphics(pipeline, layout, subpass, stages, sha1);
 
    for (unsigned s = 0; s < ARRAY_SIZE(stages); s++) {
       if (!stages[s].info)
@@ -1806,7 +1823,7 @@ anv_graphics_pipeline_compile(struct anv_graphics_pipeline *pipeline,
       void *stage_ctx = ralloc_context(NULL);
 
       anv_pipeline_lower_nir(&pipeline->base, stage_ctx, stage, layout,
-                             use_primitive_replication);
+                             subpass, use_primitive_replication);
 
       struct shader_info *cur_info = &stage->nir->info;
 
@@ -2048,6 +2065,7 @@ anv_pipeline_compile_cs(struct anv_compute_pipeline *pipeline,
       }
 
       anv_pipeline_lower_nir(&pipeline->base, mem_ctx, &stage, layout,
+                             NULL /* subpass */,
                              false /* use_primitive_replication */);
 
       anv_fixup_subgroup_size(device, &stage.nir->info);
@@ -2742,7 +2760,8 @@ anv_pipeline_compile_ray_tracing(struct anv_ray_tracing_pipeline *pipeline,
       }
 
       anv_pipeline_lower_nir(&pipeline->base, pipeline_ctx, &stages[i],
-                             layout, false /* use_primitive_replication */);
+                             layout, NULL /* subpass */,
+                             false /* use_primitive_replication */);
 
       stages[i].feedback.duration += os_time_get_nano() - stage_start;
    }

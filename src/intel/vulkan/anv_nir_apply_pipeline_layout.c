@@ -25,6 +25,7 @@
 #include "program/prog_parameter.h"
 #include "nir/nir_builder.h"
 #include "compiler/brw_nir.h"
+#include "vk_render_pass.h"
 #include "util/mesa-sha1.h"
 #include "util/set.h"
 
@@ -1283,6 +1284,7 @@ anv_nir_apply_pipeline_layout(nir_shader *shader,
                               const struct anv_physical_device *pdevice,
                               bool robust_buffer_access,
                               const struct anv_pipeline_layout *layout,
+                              const struct vk_subpass *subpass,
                               struct anv_pipeline_bind_map *map)
 {
    void *mem_ctx = ralloc_context(NULL);
@@ -1481,8 +1483,19 @@ anv_nir_apply_pipeline_layout(nir_shader *shader,
          assert(pipe_binding[i].set == set);
          assert(pipe_binding[i].index == bind_layout->descriptor_index + i);
 
-         pipe_binding[i].lowered_storage_surface =
-            image_binding_needs_lowered_surface(var);
+         const struct glsl_type *image_type = glsl_without_array(var->type);
+         assert(glsl_type_is_image(image_type));
+         const enum glsl_sampler_dim dim = glsl_get_sampler_dim(image_type);
+         if (dim == GLSL_SAMPLER_DIM_SUBPASS ||
+             dim == GLSL_SAMPLER_DIM_SUBPASS_MS) {
+            assert(var->data.index <= subpass->input_count);
+            pipe_binding[i].input_att_feedback_loop =
+               subpass->input_attachments[var->data.index].layout ==
+               VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT;
+         } else {
+            pipe_binding[i].lowered_storage_surface =
+               image_binding_needs_lowered_surface(var);
+         }
       }
    }
 

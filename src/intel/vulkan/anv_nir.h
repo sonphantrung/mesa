@@ -64,10 +64,13 @@ anv_nir_ubo_addr_format(const struct anv_physical_device *pdevice,
 
 bool anv_nir_lower_ubo_loads(nir_shader *shader);
 
+struct vk_subpass;
+
 void anv_nir_apply_pipeline_layout(nir_shader *shader,
                                    const struct anv_physical_device *pdevice,
                                    bool robust_buffer_access,
                                    const struct anv_pipeline_layout *layout,
+                                   const struct vk_subpass *subpass,
                                    struct anv_pipeline_bind_map *map);
 
 void anv_nir_compute_push_layout(nir_shader *nir,

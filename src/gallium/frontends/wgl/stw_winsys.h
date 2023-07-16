@@ -53,7 +53,8 @@ struct stw_winsys_framebuffer
 
    bool
    (*present)(struct stw_winsys_framebuffer *fb,
-              int interval);
+              int interval,
+              struct pipe_resource *res);
 
    void
    (*resize)(struct stw_winsys_framebuffer *fb,
@@ -63,6 +64,8 @@ struct stw_winsys_framebuffer
    struct pipe_resource *
    (*get_resource)(struct stw_winsys_framebuffer *fb,
                    enum st_attachment_type statt);
+
+   bool needs_fake_front;
 };
 
 struct stw_winsys

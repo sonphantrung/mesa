@@ -30,6 +30,7 @@
 #include "clb1c0.h"
 #include "clc0c0.h"
 #include "clc1c0.h"
+#include "clc397.h"
 #include "clc3c0.h"
 #include "clc597.h"
 #include "clc5c0.h"
@@ -390,6 +391,7 @@ nvk_get_device_extensions(const struct nv_device_info *info,
       .EXT_custom_border_color = true,
       .EXT_depth_clip_control = true,
       .EXT_depth_clip_enable = true,
+      .EXT_depth_range_unrestricted = info->cls_eng3d >= VOLTA_A,
       .EXT_descriptor_indexing = true,
       .EXT_extended_dynamic_state = true,
       .EXT_extended_dynamic_state2 = true,

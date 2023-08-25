@@ -96,6 +96,7 @@
 #include "vk_log.h"
 #include "vk_ycbcr_conversion.h"
 #include "vk_video.h"
+#include "util/u_gralloc/u_gralloc.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -1298,6 +1299,9 @@ struct anv_device {
 
     uint32_t                                    draw_call_count;
     struct anv_state                            breakpoint;
+#ifdef ANDROID
+    struct u_gralloc                            *u_gralloc;
+#endif
 };
 
 static inline struct anv_state

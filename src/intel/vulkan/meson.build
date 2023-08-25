@@ -234,6 +234,17 @@ libanv_common = static_library(
   dependencies : anv_deps
 )
 
+anv_dependencies = [
+    dep_thread, dep_dl, dep_m, anv_deps, idep_libintel_common,
+    idep_nir, idep_genxml, idep_vulkan_util, idep_vulkan_wsi,
+    idep_vulkan_runtime, idep_mesautil, idep_xmlconfig,
+    idep_intel_driver_ds, idep_intel_dev,
+  ]
+
+if with_platform_android
+  anv_dependencies += idep_u_gralloc
+endif
+
 libvulkan_intel = shared_library(
   'vulkan_intel',
   [files('anv_gem.c'), anv_entrypoints[0]],
@@ -244,12 +255,7 @@ libvulkan_intel = shared_library(
   link_with : [
     libintel_compiler, libisl, libblorp, libintel_perf,
   ],
-  dependencies : [
-    dep_thread, dep_dl, dep_m, anv_deps, idep_libintel_common,
-    idep_nir, idep_genxml, idep_vulkan_util, idep_vulkan_wsi,
-    idep_vulkan_runtime, idep_mesautil, idep_xmlconfig,
-    idep_intel_driver_ds, idep_intel_dev,
-  ],
+  dependencies : anv_dependencies,
   c_args : anv_flags,
   gnu_symbol_visibility : 'hidden',
   link_args : [vulkan_icd_link_args, ld_args_build_id, ld_args_bsymbolic, ld_args_gc_sections],

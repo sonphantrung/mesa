@@ -3431,6 +3431,10 @@ VkResult anv_CreateDevice(
       goto fail_internal_cache;
    }
 
+#ifdef ANDROID
+   device->u_gralloc = u_gralloc_create(U_GRALLOC_TYPE_AUTO);
+#endif
+
    device->robust_buffer_access =
       device->vk.enabled_features.robustBufferAccess ||
       device->vk.enabled_features.nullDescriptor;
@@ -3529,6 +3533,10 @@ void anv_DestroyDevice(
 
    if (!device)
       return;
+
+#ifdef ANDROID
+   u_gralloc_destroy(&device->u_gralloc);
+#endif
 
    struct anv_physical_device *pdevice = device->physical;
 

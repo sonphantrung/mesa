@@ -30,6 +30,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_android.h>
 #include <vulkan/vk_android_native_buffer.h>
+#include <isl/isl.h>
 
 struct anv_device_memory;
 struct anv_device;
@@ -52,4 +53,8 @@ VkResult anv_import_ahw_memory(VkDevice device_h,
 VkResult anv_create_ahw_memory(VkDevice device_h,
                                struct anv_device_memory *mem,
                                const VkMemoryDedicatedAllocateInfo *dedicated_info);
+#ifdef ANDROID
+VkResult anv_get_tiling_from_mod(uint64_t modifier, enum isl_tiling *tiling_out);
+#endif
+
 #endif /* ANV_ANDROID_H */

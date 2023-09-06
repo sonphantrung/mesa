@@ -1656,8 +1656,28 @@ resolve_ahw_image(struct anv_device *device,
 
    /* Check tiling. */
    enum isl_tiling tiling;
-   result = anv_device_get_bo_tiling(device, mem->bo, &tiling);
-   assert(result == VK_SUCCESS);
+   const native_handle_t *handle =
+      AHardwareBuffer_getNativeHandle(mem->vk.ahardware_buffer);
+   struct u_gralloc_buffer_handle hnd = {
+         .handle = handle,
+         .hal_format = desc.format,
+         .pixel_stride = desc.stride
+   };
+   struct u_gralloc_buffer_basic_info u_info;
+   result = u_gralloc_get_buffer_basic_info(device->u_gralloc, &hnd, &u_info);
+   assert(result == 0);
+
+   if (u_info.modifier != DRM_FORMAT_MOD_INVALID) {
+      const struct isl_drm_modifier_info *isl_mod_info =
+                   isl_drm_modifier_get_info(u_info.modifier);
+      assert(isl_mod_info != NULL);
+      tiling = isl_mod_info->tiling;
+   } else {
+      /* FALLBACK gralloc case */
+      result = anv_device_get_bo_tiling(device, mem->bo, &tiling);
+      assert(result == VK_SUCCESS);
+   }
+
    isl_tiling_flags_t isl_tiling_flags = (1u << tiling);
 
    /* Check format. */
@@ -1670,7 +1690,29 @@ resolve_ahw_image(struct anv_device *device,
    vk_image_set_format(&image->vk, vk_format);
    image->n_planes = anv_get_format_planes(image->vk.format);
 
-   result = add_all_surfaces_implicit_layout(device, image, NULL, desc.stride,
+   VkSubresourceLayout layouts[4];
+   for (uint32_t i = 0; i < u_info.num_planes; i++) {
+      layouts[i].offset = u_info.offsets[i];
+      layouts[i].rowPitch = u_info.strides[i];
+   }
+
+   /* YVU420 has a chroma order of CrCb. So we must swap the planes for CrCb
+   * to align with VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM. This is to serve
+   * VkImageDrmFormatModifierExplicitCreateInfoEXT explicit plane layouts.
+   */
+   if (u_info.drm_fourcc == DRM_FORMAT_YVU420) {
+      layouts[1].rowPitch = u_info.strides[2];
+      layouts[1].offset = u_info.offsets[2];
+      layouts[2].rowPitch = u_info.strides[1];
+      layouts[2].offset = u_info.offsets[1];
+   }
+   const VkImageDrmFormatModifierExplicitCreateInfoEXT mod_explicit_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT,
+      .drmFormatModifier = u_info.modifier,
+      .drmFormatModifierPlaneCount = u_info.num_planes,
+      .pPlaneLayouts = layouts,
+   };
+   result = add_all_surfaces_explicit_layout(device, image, NULL, &mod_explicit_info,
                                              isl_tiling_flags,
                                              ISL_SURF_USAGE_DISABLE_AUX_BIT);
    assert(result == VK_SUCCESS);

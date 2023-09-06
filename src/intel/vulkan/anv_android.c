@@ -358,14 +358,33 @@ anv_image_init_from_gralloc(struct anv_device *device,
    }
 
    enum isl_tiling tiling;
-   result = anv_device_get_bo_tiling(device, bo, &tiling);
-   if (result != VK_SUCCESS) {
-      return vk_errorf(device, result,
-                       "failed to get tiling from VkNativeBufferANDROID");
+   struct u_gralloc_buffer_handle hnd = {
+      .handle = gralloc_info->handle,
+      .hal_format = gralloc_info->format,
+      .pixel_stride = gralloc_info->stride
+   };
+   struct u_gralloc_buffer_basic_info u_info;
+   result = u_gralloc_get_buffer_basic_info(device->u_gralloc, &hnd, &u_info);
+   if (result != 0)
+      return vk_errorf(device, result,"failed to get information from gralloc");
+
+   anv_info.stride = u_info.strides[0];
+   if (u_info.modifier != DRM_FORMAT_MOD_INVALID) {
+      const struct isl_drm_modifier_info *isl_mod_info = NULL;
+      isl_mod_info = isl_drm_modifier_get_info(u_info.modifier);
+      if (isl_mod_info == NULL) {
+         return vk_errorf(device, result,"drm modifier failed to get information");
+      }
+      tiling = isl_mod_info->tiling;
+   } else {
+      /* FALLBACK gralloc case */
+      result = anv_device_get_bo_tiling(device, bo, &tiling);
+      if (result != VK_SUCCESS) {
+         return vk_errorf(device, result,
+                          "failed to get tiling from VkNativeBufferANDROID");
+      }
    }
    anv_info.isl_tiling_flags = 1u << tiling;
-
-   anv_info.stride = gralloc_info->stride;
 
    result = anv_image_init(device, image, &anv_info);
    if (result != VK_SUCCESS)

@@ -1656,7 +1656,23 @@ resolve_ahw_image(struct anv_device *device,
 
    /* Check tiling. */
    enum isl_tiling tiling;
-   result = anv_device_get_bo_tiling(device, mem->bo, &tiling);
+   uint32_t stride;
+   bool gralloc_supported = false;
+   const native_handle_t *handle =
+      AHardwareBuffer_getNativeHandle(mem->vk.ahardware_buffer);
+   struct u_gralloc_buffer_handle hnd = {
+         .handle = handle,
+         .hal_format = desc.format,
+         .pixel_stride = desc.stride
+   };
+   struct u_gralloc_buffer_basic_info u_info;
+   if (!u_gralloc_get_buffer_basic_info(device->u_gralloc, &hnd, &u_info) &&
+       !anv_get_tiling_from_mod(u_info.modifier, &tiling)) {
+      result = VK_SUCCESS;
+      gralloc_supported = true;
+   } else {
+      result = anv_device_get_bo_tiling(device, mem->bo, &tiling);
+   }
    assert(result == VK_SUCCESS);
    isl_tiling_flags_t isl_tiling_flags = (1u << tiling);
 
@@ -1669,10 +1685,28 @@ resolve_ahw_image(struct anv_device *device,
     */
    vk_image_set_format(&image->vk, vk_format);
    image->n_planes = anv_get_format_planes(image->vk.format);
+   if (gralloc_supported) {
+      VkSubresourceLayout layouts[4];
+      for (uint32_t i = 0; i < u_info.num_planes; i++) {
+         layouts[i].offset = u_info.offsets[i];
+         layouts[i].rowPitch = u_info.strides[i];
+      }
+      const VkImageDrmFormatModifierExplicitCreateInfoEXT mod_explicit_info = {
+         .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT,
+         .drmFormatModifier = u_info.modifier,
+         .drmFormatModifierPlaneCount = u_info.num_planes,
+         .pPlaneLayouts = layouts,
+      };
+      result = add_all_surfaces_explicit_layout(device, image, NULL, &mod_explicit_info,
+                                                isl_tiling_flags,
+                                                ISL_SURF_USAGE_DISABLE_AUX_BIT);
+   } else {
+      result = add_all_surfaces_implicit_layout(device, image, NULL, stride,
+                                                isl_tiling_flags,
+                                                ISL_SURF_USAGE_DISABLE_AUX_BIT);
+   }
 
-   result = add_all_surfaces_implicit_layout(device, image, NULL, desc.stride,
-                                             isl_tiling_flags,
-                                             ISL_SURF_USAGE_DISABLE_AUX_BIT);
+
    assert(result == VK_SUCCESS);
 #endif
 }

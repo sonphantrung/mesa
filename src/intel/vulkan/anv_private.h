@@ -99,6 +99,7 @@
 #include "vk_log.h"
 #include "vk_ycbcr_conversion.h"
 #include "vk_video.h"
+#include "util/u_gralloc/u_gralloc.h"
 
 #ifdef __cplusplus
 extern "C" {

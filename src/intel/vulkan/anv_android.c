@@ -358,15 +358,29 @@ anv_image_init_from_gralloc(struct anv_device *device,
    }
 
    enum isl_tiling tiling;
-   result = anv_device_get_bo_tiling(device, bo, &tiling);
-   if (result != VK_SUCCESS) {
-      return vk_errorf(device, result,
-                       "failed to get tiling from VkNativeBufferANDROID");
+   VkResult res = VK_NOT_READY;
+#ifdef ANDROID
+   struct u_gralloc_buffer_handle hnd = {
+       .handle = gralloc_info->handle,
+       .hal_format = gralloc_info->format,
+       .pixel_stride = gralloc_info->stride
+   };
+   struct u_gralloc_buffer_basic_info u_info;
+   if (!u_gralloc_get_buffer_basic_info(device->u_gralloc, &hnd, &u_info) &&
+       !anv_get_tiling_from_mod(u_info.modifier, &tiling)) {
+      anv_info.stride = u_info.strides[0];
+      res = VK_SUCCESS;
+   }
+#endif
+   if (res != VK_SUCCESS) {
+      res = anv_device_get_bo_tiling(device, bo, &tiling);
+      if (res != VK_SUCCESS) {
+         return vk_errorf(device, result,
+                        "failed to get tiling from VkNativeBufferANDROID");
+      }
+      anv_info.stride = gralloc_info->stride;
    }
    anv_info.isl_tiling_flags = 1u << tiling;
-
-   anv_info.stride = gralloc_info->stride;
-
    result = anv_image_init(device, image, &anv_info);
    if (result != VK_SUCCESS)
       goto fail_init;
@@ -408,6 +422,31 @@ anv_image_init_from_gralloc(struct anv_device *device,
 
    return result;
 }
+
+#ifdef ANDROID
+VkResult anv_get_tiling_from_mod(uint64_t modifier, enum isl_tiling *tiling_out)
+{
+   enum isl_tiling tiling;
+   switch (modifier) {
+      case DRM_FORMAT_MOD_LINEAR:
+         tiling = ISL_TILING_LINEAR;
+         break;
+      case I915_FORMAT_MOD_X_TILED:
+         tiling = ISL_TILING_X;
+         break;
+      case I915_FORMAT_MOD_4_TILED:
+         tiling = ISL_TILING_4;
+         break;
+      case I915_FORMAT_MOD_Y_TILED:
+         tiling = ISL_TILING_Y0;
+         break;
+      default:
+         return VK_ERROR_UNKNOWN;
+   }
+   *tiling_out = tiling;
+   return VK_SUCCESS;
+}
+#endif
 
 VkResult
 anv_image_bind_from_gralloc(struct anv_device *device,

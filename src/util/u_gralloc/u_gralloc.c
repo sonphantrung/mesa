@@ -52,7 +52,8 @@ u_gralloc_create(enum u_gralloc_type type)
    for (int i = 0; i < ARRAY_SIZE(u_grallocs); i++) {
       if (u_grallocs[i].type != type && type != U_GRALLOC_TYPE_AUTO)
          continue;
-
+      if (u_grallocs[i].type == U_GRALLOC_TYPE_FALLBACK && type == U_GRALLOC_TYPE_AUTO)
+         continue;
       u_gralloc_cache[type].u_gralloc = u_grallocs[i].create();
       if (u_gralloc_cache[type].u_gralloc) {
          assert(u_gralloc_cache[type].u_gralloc->ops.get_buffer_basic_info);

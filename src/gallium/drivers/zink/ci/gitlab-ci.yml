@@ -123,6 +123,8 @@ zink-lvp:
   variables:
     VK_DRIVER: intel
     GPU_VERSION: zink-anv-tgl
+    # Capture all buffers in case of hang, useful to replay on simulation
+    INTEL_DEBUG: "capture-all"
 
 zink-anv-tgl:
   extends:

@@ -1989,6 +1989,12 @@ v3dv_CreateDevice(VkPhysicalDevice physicalDevice,
 #ifdef ANDROID
    device->gralloc = u_gralloc_create(U_GRALLOC_TYPE_AUTO);
    assert(device->gralloc);
+   if (u_gralloc_get_type(device->gralloc) == U_GRALLOC_TYPE_FALLBACK) {
+      mesa_loge("v3dv is not compatible with your gralloc. "
+                "Please consider using minigbm instead.");
+      result = VK_ERROR_INITIALIZATION_FAILED;
+      goto fail;
+   }
 #endif
 
    device->instance = instance;

@@ -2507,7 +2507,6 @@ const __DRIextension *dri_swrast_kms_driver_extensions[] = {
     &driCoreExtension.base,
     &swkmsMesaCoreExtension.base,
     &driImageDriverExtension.base,
-    &swkmsDRI2Extension.base,
     &gallium_config_options.base,
     NULL
 };

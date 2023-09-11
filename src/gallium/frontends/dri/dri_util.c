@@ -182,16 +182,6 @@ dri2CreateNewScreen(int scrn, int fd,
                               driver_configs, data);
 }
 
-static __DRIscreen *
-swkmsCreateNewScreen(int scrn, int fd,
-                     const __DRIextension **extensions,
-                     const __DRIconfig ***driver_configs, void *data)
-{
-   return driCreateNewScreen2(scrn, fd, extensions,
-                              dri_swrast_kms_driver_extensions,
-                              driver_configs, data);
-}
-
 /** swrast driver createNewScreen entrypoint. */
 static __DRIscreen *
 driSWRastCreateNewScreen(int scrn, const __DRIextension **extensions,
@@ -875,20 +865,6 @@ const __DRIdri2Extension driDRI2Extension = {
     .base = { __DRI_DRI2, 4 },
 
     .createNewScreen            = dri2CreateNewScreen,
-    .createNewDrawable          = driCreateNewDrawable,
-    .createNewContext           = driCreateNewContext,
-    .getAPIMask                 = driGetAPIMask,
-    .createNewContextForAPI     = driCreateNewContextForAPI,
-    .allocateBuffer             = dri2AllocateBuffer,
-    .releaseBuffer              = dri2ReleaseBuffer,
-    .createContextAttribs       = driCreateContextAttribs,
-    .createNewScreen2           = driCreateNewScreen2,
-};
-
-const __DRIdri2Extension swkmsDRI2Extension = {
-    .base = { __DRI_DRI2, 4 },
-
-    .createNewScreen            = swkmsCreateNewScreen,
     .createNewDrawable          = driCreateNewDrawable,
     .createNewContext           = driCreateNewContext,
     .getAPIMask                 = driGetAPIMask,

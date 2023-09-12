@@ -74,6 +74,12 @@ mme_value64(struct mme_value lo, struct mme_value hi)
 }
 
 static inline struct mme_value64
+mme_zero64()
+{
+   return mme_value64(mme_zero(), mme_zero());
+}
+
+static inline struct mme_value64
 mme_imm64(uint64_t imm)
 {
    struct mme_value64 val = {

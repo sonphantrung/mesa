@@ -482,6 +482,8 @@ radv_postprocess_nir(struct radv_device *device, const struct radv_graphics_stat
          .rotate_cluster_sizes = 64 | 32 | 16 | 8 | 4 | 2 | 1,
          .shuffle_zero_fill_cluster_sizes = gfx_level >= GFX8 ? 16 : 0,
          .subgroup_size = stage->info.wave_size,
+         .ballot_bit_size = stage->info.wave_size,
+         .ballot_num_comp = 1,
       };
       NIR_PASS(_, stage->nir, nir_opt_tid_function, &options);
    }

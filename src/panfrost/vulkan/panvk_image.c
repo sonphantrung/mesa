@@ -31,6 +31,7 @@
 #include "drm-uapi/drm_fourcc.h"
 #include "util/u_atomic.h"
 #include "util/u_debug.h"
+#include "vk_android.h"
 #include "vk_format.h"
 #include "vk_object.h"
 #include "vk_util.h"
@@ -72,10 +73,26 @@ panvk_image_create(VkDevice _device, const VkImageCreateInfo *pCreateInfo,
    VK_FROM_HANDLE(panvk_device, device, _device);
    const struct panfrost_device *pdev = &device->physical_device->pdev;
    struct panvk_image *image = NULL;
+   VkResult result;
 
    image = vk_image_create(&device->vk, pCreateInfo, alloc, sizeof(*image));
    if (!image)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+#define PANVK_MAX_PLANES 1
+
+   /* This section is removed by the optimizer for non-ANDROID builds */
+   VkImageDrmFormatModifierExplicitCreateInfoEXT eci;
+   VkSubresourceLayout a_plane_layouts[PANVK_MAX_PLANES];
+   if (vk_image_is_android_native_buffer(&image->vk)) {
+      result = vk_android_get_anb_layout(pCreateInfo, &eci, a_plane_layouts,
+                                         PANVK_MAX_PLANES);
+      if (result != VK_SUCCESS)
+         goto fail;
+
+      plane_layouts = a_plane_layouts;
+      modifier = eci.drmFormatModifier;
+   }
 
    image->pimage.layout = (struct pan_image_layout){
       .modifier = modifier,
@@ -91,8 +108,20 @@ panvk_image_create(VkDevice _device, const VkImageCreateInfo *pCreateInfo,
 
    pan_image_layout_init(pdev, &image->pimage.layout, NULL);
 
+   /* This section is removed by the optimizer for non-ANDROID builds */
+   if (vk_image_is_android_native_buffer(&image->vk)) {
+      result =
+         vk_android_import_anb(&device->vk, pCreateInfo, alloc, &image->vk);
+      if (result != VK_SUCCESS)
+         goto fail;
+   }
+
    *pImage = panvk_image_to_handle(image);
    return VK_SUCCESS;
+
+fail:
+   vk_image_destroy(&device->vk, alloc, &image->vk);
+   return result;
 }
 
 static uint64_t

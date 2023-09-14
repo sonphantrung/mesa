@@ -48,6 +48,7 @@
 #include "util/disk_cache.h"
 #include "util/strtod.h"
 #include "util/u_debug.h"
+#include "vk_android.h"
 #include "vk_drm_syncobj.h"
 #include "vk_format.h"
 #include "vk_util.h"
@@ -55,6 +56,10 @@
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
 #include "wayland-drm-client-protocol.h"
 #include <wayland-client.h>
+#endif
+
+#ifdef ANDROID
+#include "util/u_gralloc/u_gralloc.h"
 #endif
 
 #include "panvk_cs.h"
@@ -160,6 +165,12 @@ panvk_get_device_extensions(const struct panvk_physical_device *device,
       .EXT_index_type_uint8 = true,
       .EXT_vertex_attribute_divisor = true,
    };
+
+#ifdef ANDROID
+   if (vk_android_get_ugralloc() != NULL) {
+      ext->ANDROID_native_buffer = true;
+   }
+#endif
 }
 
 static void
@@ -720,6 +731,21 @@ panvk_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
          properties->maxVertexAttribDivisor = UINT32_MAX / (16 * 2048);
          break;
       }
+#ifdef ANDROID
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wswitch"
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENTATION_PROPERTIES_ANDROID: {
+         VkPhysicalDevicePresentationPropertiesANDROID *props =
+            (VkPhysicalDevicePresentationPropertiesANDROID *)ext;
+         uint64_t front_rendering_usage = 0;
+         if (vk_android_get_ugralloc())
+            u_gralloc_get_front_rendering_usage(vk_android_get_ugralloc(),
+                                                &front_rendering_usage);
+         props->sharedImage = front_rendering_usage ? VK_TRUE : VK_FALSE;
+         break;
+      }
+#pragma GCC diagnostic pop
+#endif
       default:
          break;
       }

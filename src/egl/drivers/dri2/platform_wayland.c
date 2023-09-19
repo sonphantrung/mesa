@@ -2623,10 +2623,46 @@ dri2_wl_swrast_swap_buffers(_EGLDisplay *disp, _EGLSurface *draw)
    if (!dri2_surf->wl_win)
       return _eglError(EGL_BAD_NATIVE_WINDOW, "dri2_swap_buffers");
 
-   dri2_dpy->core->swapBuffers(dri2_surf->dri_drawable);
+   /* Flush (and finish glthread) before:
+    *   - update_buffers_if_needed because the unmarshalling thread
+    *     may be running currently, and we would concurrently alloc/free
+    *     the back bo.
+    *   - swapping current/back because flushing may free the buffer and
+    *     dri_image and reallocate them using get_back_bo (which causes a
+    *     a crash because 'current' becomes NULL).
+    *   - using any wl_* function because accessing them from this thread
+    *     and glthread causes troubles (see #7624 and #8136)
+    */
+   dri2_flush_drawable_for_swapbuffers(disp, draw);
+   dri2_dpy->flush->invalidate(dri2_surf->dri_drawable);
+
+   while (dri2_surf->throttle_callback != NULL)
+      if (wl_display_dispatch_queue(dri2_dpy->wl_dpy, dri2_surf->wl_queue) ==
+          -1)
+         return EGL_FALSE;
+
+   if (draw->SwapInterval > 0) {
+      dri2_surf->throttle_callback =
+         wl_surface_frame(dri2_surf->wl_surface_wrapper);
+      wl_callback_add_listener(dri2_surf->throttle_callback, &throttle_listener,
+                               dri2_surf);
+   }
    if (disp->Options.Zink) {
       dri2_surf->current = dri2_surf->back;
       dri2_surf->back = NULL;
+   }
+
+   if (dri2_dpy->kopper) {
+      /* From the EGL 1.4 spec (page 52):
+       *
+       *     "The contents of ancillary buffers are always undefined
+       *      after calling eglSwapBuffers."
+       */
+      dri2_dpy->kopper->swapBuffers(dri2_surf->dri_drawable,
+                                    __DRI2_FLUSH_INVALIDATE_ANCILLARY);
+   } else if (!dri2_dpy->flush) {
+      /* aka the swrast path, which does the swap in the gallium driver. */
+      dri2_dpy->core->swapBuffers(dri2_surf->dri_drawable);
    }
    return EGL_TRUE;
 }
@@ -2680,6 +2716,7 @@ static const struct dri2_egl_display_vtbl dri2_wl_swrast_display_vtbl = {
    .create_window_surface = dri2_wl_create_window_surface,
    .create_pixmap_surface = dri2_wl_create_pixmap_surface,
    .destroy_surface = dri2_wl_destroy_surface,
+   .swap_interval = dri2_wl_swap_interval,
    .create_image = dri2_create_image_khr,
    .swap_buffers = dri2_wl_swrast_swap_buffers,
    .get_dri_drawable = dri2_surface_get_dri_drawable,

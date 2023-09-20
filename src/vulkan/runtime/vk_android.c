@@ -43,6 +43,20 @@
 #if ANDROID_API_LEVEL >= 26
 #include <vndk/hardware_buffer.h>
 
+static struct u_gralloc *u_gralloc;
+
+struct u_gralloc *
+vk_android_get_ugralloc(void)
+{
+   return u_gralloc;
+}
+
+struct u_gralloc **
+vk_android_get_ugralloc_ptr(void)
+{
+   return &u_gralloc;
+}
+
 /* From the Android hardware_buffer.h header:
  *
  *    "The buffer will be written to by the GPU as a framebuffer attachment.

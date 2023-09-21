@@ -310,6 +310,11 @@ a6xx_gen1 = dict(
         supports_double_threadsize = True,
     )
 
+a6xx_gen1_a620 = {**a6xx_gen1, **dict(
+        # TODO: check if true
+        enable_lrz_feedback = True,
+)}
+
 # a605, a608, a610, 612
 a6xx_gen1_low = {**a6xx_gen1, **dict(
         has_gmem_fast_clear = False,
@@ -353,6 +358,7 @@ a6xx_gen3 = dict(
         has_lrz_dir_tracking = True,
         enable_lrz_fast_clear = True,
         lrz_track_quirk = True,
+        enable_lrz_feedback = True,
         has_per_view_viewport = True,
         supports_double_threadsize = True,
     )
@@ -378,6 +384,7 @@ a6xx_gen4 = dict(
         has_dp4acc = True,
         enable_lrz_fast_clear = True,
         has_lrz_dir_tracking = True,
+        enable_lrz_feedback = True,
         has_per_view_viewport = True,
         supports_double_threadsize = True,
     )
@@ -450,7 +457,7 @@ add_gpus([
         GPUId(620),
     ], A6xxGPUInfo(
         CHIP.A6XX,
-        a6xx_gen1,
+        a6xx_gen1_a620,
         num_ccu = 1,
         tile_align_w = 32,
         tile_align_h = 16,

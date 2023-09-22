@@ -130,7 +130,7 @@ endif
 
 if with_platform_android
   vulkan_runtime_files += files('vk_android.c', 'vk_android.h')
-  vulkan_runtime_deps += dep_android
+  vulkan_runtime_deps += [dep_android, idep_u_gralloc]
 endif
 
 vk_common_entrypoints = custom_target(

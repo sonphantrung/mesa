@@ -1001,7 +1001,7 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
       set_bin_size<CHIP>(ring, gmem, {
             .render_mode = BINNING_PASS,
             .buffers_location = BUFFERS_IN_GMEM,
-            .lrz_feedback_zmode_mask = (a6xx_lrz_feedback_mask) (LRZ_FEEDBACK_LATE_Z | LRZ_FEEDBACK_EARLY_LRZ_LATE_Z),
+            .lrz_feedback_zmode_mask = LRZ_FEEDBACK_NONE,
       });
       update_render_cntl<CHIP>(batch, pfb, true);
       emit_binning_pass(batch);
@@ -1015,12 +1015,13 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
        * the reset of these cmds:
        */
 
-      // NOTE a618 not setting .FORCE_LRZ_WRITE_DIS .. 
       set_bin_size<CHIP>(ring, gmem, {
             .render_mode = RENDERING_PASS,
-            .force_lrz_write_dis = true,
+            .force_lrz_write_dis = !screen->info->a6xx.enable_lrz_feedback,
             .buffers_location = BUFFERS_IN_GMEM,
-            .lrz_feedback_zmode_mask = (a6xx_lrz_feedback_mask) (LRZ_FEEDBACK_LATE_Z | LRZ_FEEDBACK_EARLY_LRZ_LATE_Z),
+            .lrz_feedback_zmode_mask = screen->info->a6xx.enable_lrz_feedback
+                                          ? LRZ_FEEDBACK_EARLY_LRZ_LATE_Z
+                                          : LRZ_FEEDBACK_NONE,
       });
 
       OUT_PKT4(ring, REG_A6XX_VFD_MODE_CNTL, 1);
@@ -1040,8 +1041,12 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
 
       set_bin_size<CHIP>(ring, gmem, {
             .render_mode = RENDERING_PASS,
+            .force_lrz_write_dis = !screen->info->a6xx.enable_lrz_feedback,
             .buffers_location = BUFFERS_IN_GMEM,
-            .lrz_feedback_zmode_mask = (a6xx_lrz_feedback_mask) (LRZ_FEEDBACK_LATE_Z | LRZ_FEEDBACK_EARLY_LRZ_LATE_Z),
+            .lrz_feedback_zmode_mask =
+               screen->info->a6xx.enable_lrz_feedback
+                  ? LRZ_FEEDBACK_EARLY_Z_OR_EARLY_LRZ_LATE_Z
+                  : LRZ_FEEDBACK_NONE,
       });
    }
 
@@ -1118,8 +1123,11 @@ fd6_emit_tile_prep(struct fd_batch *batch, const struct fd_tile *tile)
       const struct fd_gmem_stateobj *gmem = batch->gmem_state;
       set_bin_size<CHIP>(ring, gmem, {
             .render_mode = RENDERING_PASS,
+            .force_lrz_write_dis = !ctx->screen->info->a6xx.enable_lrz_feedback,
             .buffers_location = BUFFERS_IN_GMEM,
-            .lrz_feedback_zmode_mask = (a6xx_lrz_feedback_mask) (LRZ_FEEDBACK_LATE_Z | LRZ_FEEDBACK_EARLY_LRZ_LATE_Z),
+            .lrz_feedback_zmode_mask = ctx->screen->info->a6xx.enable_lrz_feedback
+                                          ? LRZ_FEEDBACK_EARLY_LRZ_LATE_Z
+                                          : LRZ_FEEDBACK_NONE,
       });
 
       OUT_PKT7(ring, CP_SET_MODE, 1);

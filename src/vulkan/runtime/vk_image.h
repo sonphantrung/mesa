@@ -85,6 +85,7 @@ struct vk_image {
 
 #ifdef ANDROID
    enum android_buffer_type android_buffer_type;
+   VkDeviceMemory anb_memory;
 
    /* AHARDWAREBUFFER_FORMAT for this image or 0
     *

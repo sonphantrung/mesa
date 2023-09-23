@@ -1440,6 +1440,8 @@ ntq_emit_alu(struct v3d_compile *c, nir_alu_instr *instr)
         case nir_op_b2f32:
                 result = vir_AND(c, src[0], vir_uniform_f(c, 1.0));
                 break;
+        case nir_op_b2i8:
+        case nir_op_b2i16:
         case nir_op_b2i32:
                 result = vir_AND(c, src[0], vir_uniform_ui(c, 1));
                 break;
@@ -2062,6 +2064,51 @@ mem_vectorize_callback(unsigned align_mul, unsigned align_offset,
         return true;
 }
 
+static unsigned
+lower_bit_size_cb(const nir_instr *instr, void *)
+{
+        if (instr->type != nir_instr_type_alu)
+                return 0;
+
+        nir_alu_instr *alu = nir_instr_as_alu(instr);
+
+        switch (alu->op) {
+        case nir_op_mov:
+        case nir_op_vec2:
+        case nir_op_vec3:
+        case nir_op_vec4:
+        case nir_op_vec5:
+        case nir_op_vec8:
+        case nir_op_vec16:
+        case nir_op_b2f32:
+        case nir_op_b2i32:
+        case nir_op_f2f16:
+        case nir_op_f2f16_rtne:
+        case nir_op_f2f16_rtz:
+        case nir_op_f2f32:
+        case nir_op_f2i32:
+        case nir_op_f2u32:
+        case nir_op_i2f32:
+        case nir_op_i2i8:
+        case nir_op_i2i16:
+        case nir_op_i2i32:
+        case nir_op_u2u8:
+        case nir_op_u2u16:
+        case nir_op_u2f32:
+        case nir_op_u2u32:
+        case nir_op_pack_32_2x16_split:
+        case nir_op_pack_32_4x8_split:
+        case nir_op_pack_half_2x16_split:
+                return 0;
+
+        /* we need to handle those here as they only work with 32 bits */
+        default:
+                if (alu->src[0].src.ssa->bit_size != 1 && alu->src[0].src.ssa->bit_size < 32)
+                        return 32;
+                return 0;
+        }
+}
+
 void
 v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s)
 {
@@ -2106,6 +2153,8 @@ v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s)
                 NIR_PASS(progress, s, nir_opt_cse);
                 NIR_PASS(progress, s, nir_opt_peephole_select, 0, false, false);
                 NIR_PASS(progress, s, nir_opt_peephole_select, 24, true, true);
+                NIR_PASS(progress, s, nir_lower_bit_size, lower_bit_size_cb, NULL);
+                NIR_PASS(progress, s, nir_lower_pack);
                 NIR_PASS(progress, s, nir_opt_algebraic);
                 NIR_PASS(progress, s, nir_opt_constant_folding);
 
@@ -2191,6 +2240,12 @@ v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s)
                        progress |= local_progress;
                 }
         } while (progress);
+
+        /* needs to be outside of optimization loop, otherwise it fights with
+         * opt_algebraic optimizing the conversion lowering
+         */
+        NIR_PASS(progress, s, v3d_nir_lower_algebraic);
+        NIR_PASS(progress, s, nir_opt_cse);
 
         nir_move_options sink_opts =
                 nir_move_const_undef | nir_move_comparisons | nir_move_copies |

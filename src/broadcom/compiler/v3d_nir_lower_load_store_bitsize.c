@@ -136,7 +136,7 @@ lower_load_bitsize(nir_builder *b,
         nir_def *offset = nir_trim_vector(b, intr->src[offset_idx].ssa, 1);
 
         /* Split vector store to multiple scalar loads */
-        nir_def *dest_components[4] = { NULL };
+        nir_def *dest_components[16] = { NULL };
         const nir_intrinsic_info *info = &nir_intrinsic_infos[intr->intrinsic];
         for (int component = 0; component < num_comp; component++) {
                 nir_def *scalar_offset;

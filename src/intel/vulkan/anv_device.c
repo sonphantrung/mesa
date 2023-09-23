@@ -49,11 +49,13 @@
 #include "util/os_misc.h"
 #include "util/u_atomic.h"
 #ifdef ANDROID
+#include <vndk/hardware_buffer.h>
 #include "util/u_gralloc/u_gralloc.h"
 #endif
 #include "util/u_string.h"
 #include "util/driconf.h"
 #include "git_sha1.h"
+#include "vk_android.h"
 #include "vk_common_entrypoints.h"
 #include "vk_util.h"
 #include "vk_deferred_operation.h"
@@ -379,10 +381,6 @@ get_device_extensions(const struct anv_physical_device *device,
       .EXT_vertex_attribute_divisor          = true,
       .EXT_vertex_input_dynamic_state        = true,
       .EXT_ycbcr_image_arrays                = true,
-#ifdef ANDROID
-      .ANDROID_external_memory_android_hardware_buffer = true,
-      .ANDROID_native_buffer                 = true,
-#endif
       .GOOGLE_decorate_string                = true,
       .GOOGLE_hlsl_functionality1            = true,
       .GOOGLE_user_type                      = true,
@@ -393,6 +391,13 @@ get_device_extensions(const struct anv_physical_device *device,
       .NV_compute_shader_derivatives         = true,
       .VALVE_mutable_descriptor_type         = true,
    };
+
+#ifdef ANDROID
+   if (vk_android_get_ugralloc() != NULL) {
+      ext->ANDROID_external_memory_android_hardware_buffer = true;
+      ext->ANDROID_native_buffer = true;
+   }
+#endif
 }
 
 static void
@@ -2469,11 +2474,9 @@ void anv_GetPhysicalDeviceProperties2(
          VkPhysicalDevicePresentationPropertiesANDROID *props =
             (VkPhysicalDevicePresentationPropertiesANDROID *)ext;
          uint64_t front_rendering_usage = 0;
-         struct u_gralloc *gralloc = u_gralloc_create(U_GRALLOC_TYPE_AUTO);
-         if (gralloc != NULL) {
-            u_gralloc_get_front_rendering_usage(gralloc, &front_rendering_usage);
-            u_gralloc_destroy(&gralloc);
-         }
+         if (vk_android_get_ugralloc())
+            u_gralloc_get_front_rendering_usage(vk_android_get_ugralloc(),
+                                                &front_rendering_usage);
          props->sharedImage = front_rendering_usage ? VK_TRUE : VK_FALSE;
          break;
       }
@@ -3472,10 +3475,6 @@ VkResult anv_CreateDevice(
       goto fail_internal_cache;
    }
 
-#ifdef ANDROID
-   device->u_gralloc = u_gralloc_create(U_GRALLOC_TYPE_AUTO);
-#endif
-
    device->robust_buffer_access =
       device->vk.enabled_features.robustBufferAccess ||
       device->vk.enabled_features.nullDescriptor;
@@ -3618,10 +3617,6 @@ void anv_DestroyDevice(
 
    if (!device)
       return;
-
-#ifdef ANDROID
-   u_gralloc_destroy(&device->u_gralloc);
-#endif
 
    struct anv_physical_device *pdevice = device->physical;
 
@@ -3939,11 +3934,19 @@ VkResult anv_AllocateMemory(
       alloc_flags |= (ANV_BO_ALLOC_EXTERNAL | ANV_BO_ALLOC_IMPLICIT_SYNC);
 
    if (mem->vk.ahardware_buffer) {
-      result = anv_import_ahw_memory(_device, mem);
+#ifdef ANDROID
+      const native_handle_t *handle = AHardwareBuffer_getNativeHandle(mem->vk.ahardware_buffer);
+      assert(handle->numFds > 0);
+      result = anv_device_import_bo(device, handle->data[0], alloc_flags,
+                                    client_address, &mem->bo);
       if (result != VK_SUCCESS)
          goto fail;
 
       goto success;
+#else
+      result = VK_ERROR_FEATURE_NOT_PRESENT;
+      goto fail;
+#endif
    }
 
    /* The Vulkan spec permits handleType to be 0, in which case the struct is

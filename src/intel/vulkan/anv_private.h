@@ -62,9 +62,6 @@
 #include "util/set.h"
 #include "util/sparse_array.h"
 #include "util/u_atomic.h"
-#ifdef ANDROID
-#include "util/u_gralloc/u_gralloc.h"
-#endif
 #include "util/u_vector.h"
 #include "util/u_math.h"
 #include "util/vma.h"
@@ -124,7 +121,6 @@ struct intel_perf_query_result;
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_icd.h>
 
-#include "anv_android.h"
 #include "anv_entrypoints.h"
 #include "anv_kmd_backend.h"
 #include "isl/isl.h"
@@ -1635,9 +1631,6 @@ struct anv_device {
 
     uint32_t                                    draw_call_count;
     struct anv_state                            breakpoint;
-#ifdef ANDROID
-    struct u_gralloc                            *u_gralloc;
-#endif
 
     /** Precompute all dirty graphics bits
      *
@@ -4428,8 +4421,16 @@ bool anv_formats_ccs_e_compatible(const struct intel_device_info *devinfo,
                                   VkImageUsageFlags vk_usage,
                                   const VkImageFormatListCreateInfo *fmt_list);
 
+#ifdef ANDROID
 extern VkFormat
 vk_format_from_android(unsigned android_format, unsigned android_usage);
+#else
+static inline VkFormat
+vk_format_from_android(unsigned android_format, unsigned android_usage)
+{
+   return VK_FORMAT_UNDEFINED;
+}
+#endif
 
 static inline struct isl_swizzle
 anv_swizzle_for_render(struct isl_swizzle swizzle)
@@ -4528,18 +4529,6 @@ struct anv_image {
     * Image is a WSI image
     */
    bool from_wsi;
-
-   /**
-    * Image was imported from an struct AHardwareBuffer.  We have to delay
-    * final image creation until bind time.
-    */
-   bool from_ahb;
-
-   /**
-    * Image was imported from gralloc with VkNativeBufferANDROID. The gralloc bo
-    * must be released when the image is destroyed.
-    */
-   bool from_gralloc;
 
    /**
     * The memory bindings created by vkCreateImage and vkBindImageMemory.

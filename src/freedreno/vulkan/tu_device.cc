@@ -19,6 +19,7 @@
 #include "util/hex.h"
 #include "util/driconf.h"
 #include "util/os_misc.h"
+#include "vk_android.h"
 #include "vk_shader_module.h"
 #include "vk_sampler.h"
 #include "vk_util.h"
@@ -37,6 +38,10 @@
 #include "tu_query.h"
 #include "tu_tracepoints.h"
 #include "tu_wsi.h"
+
+#ifdef ANDROID
+#include "util/u_gralloc/u_gralloc.h"
+#endif
 
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR) || \
      defined(VK_USE_PLATFORM_XCB_KHR) || \
@@ -269,13 +274,16 @@ get_device_extensions(const struct tu_physical_device *device,
 
       /* For Graphics Flight Recorder (GFR) */
       .AMD_buffer_marker = true,
-#ifdef ANDROID
-      .ANDROID_native_buffer = true,
-#endif
       .ARM_rasterization_order_attachment_access = true,
       .IMG_filter_cubic = device->info->a6xx.has_tex_filter_cubic,
       .VALVE_mutable_descriptor_type = true,
    } };
+
+#ifdef ANDROID
+   if (vk_android_get_ugralloc() != NULL) {
+      ext->ANDROID_native_buffer = true;
+   }
+#endif
 }
 
 static void

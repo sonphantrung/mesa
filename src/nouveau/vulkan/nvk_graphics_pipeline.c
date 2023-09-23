@@ -35,19 +35,50 @@ emit_pipeline_vp_state(struct nv_push *p,
 }
 
 static void
-emit_pipeline_rs_state(struct nv_push *p,
-                       const struct vk_rasterization_state *rs)
+emit_pipeline_rs_state(struct nvk_device *dev,
+                       struct nv_push *p,
+                       const struct vk_rasterization_state *rs,
+                       bool depth_is_float,
+                       bool unrestricted_depth)
 {
    bool depth_clip_enable = vk_rasterization_state_depth_clip_enable(rs);
-   P_IMMD(p, NV9097, SET_VIEWPORT_CLIP_CONTROL, {
-      .min_z_zero_max_z_one      = MIN_Z_ZERO_MAX_Z_ONE_TRUE,
-      .pixel_min_z               = !depth_clip_enable ? PIXEL_MIN_Z_CLAMP : PIXEL_MIN_Z_CLIP,
-      .pixel_max_z               = !depth_clip_enable ? PIXEL_MAX_Z_CLAMP : PIXEL_MAX_Z_CLIP,
-      .geometry_guardband        = GEOMETRY_GUARDBAND_SCALE_256,
-      .line_point_cull_guardband = LINE_POINT_CULL_GUARDBAND_SCALE_256,
-      .geometry_clip             = !rs->depth_clip_enable ? GEOMETRY_CLIP_WZERO_CLIP_NO_Z_CULL : GEOMETRY_CLIP_WZERO_CLIP,
-      .geometry_guardband_z      = GEOMETRY_GUARDBAND_Z_SAME_AS_XY_GUARDBAND,
-   });
+
+   if (dev->pdev->info.cls_eng3d >= VOLTA_A) {
+      bool z_clip_unrestrict = depth_is_float && unrestricted_depth;
+
+      unsigned geom_clip = NVC397_SET_VIEWPORT_CLIP_CONTROL_GEOMETRY_CLIP_WZERO_CLIP;
+      if (!rs->depth_clip_enable)
+         geom_clip = NVC397_SET_VIEWPORT_CLIP_CONTROL_GEOMETRY_CLIP_WZERO_CLIP_NO_Z_CULL;
+      if (unrestricted_depth) {
+         if (depth_is_float) {
+            geom_clip = NVC397_SET_VIEWPORT_CLIP_CONTROL_GEOMETRY_CLIP_PASSTHRU;
+         } else {
+            if (!rs->depth_clamp_enable) {//TODO this case is broken
+            }
+         }
+      }
+
+      P_IMMD(p, NVC397, SET_VIEWPORT_CLIP_CONTROL, {
+            .min_z_zero_max_z_one      = MIN_Z_ZERO_MAX_Z_ONE_TRUE,
+            .z_clip_range              = z_clip_unrestrict ? Z_CLIP_RANGE_MIN_Z_MAX_Z : Z_CLIP_RANGE_USE_FIELD_MIN_Z_ZERO_MAX_Z_ONE,
+            .pixel_min_z               = !depth_clip_enable ? PIXEL_MIN_Z_CLAMP : PIXEL_MIN_Z_CLIP,
+            .pixel_max_z               = !depth_clip_enable ? PIXEL_MAX_Z_CLAMP : PIXEL_MAX_Z_CLIP,
+            .geometry_guardband        = GEOMETRY_GUARDBAND_SCALE_256,
+            .line_point_cull_guardband = LINE_POINT_CULL_GUARDBAND_SCALE_256,
+            .geometry_clip             = geom_clip,
+            .geometry_guardband_z      = GEOMETRY_GUARDBAND_Z_SAME_AS_XY_GUARDBAND,
+      });
+   } else {
+      P_IMMD(p, NV9097, SET_VIEWPORT_CLIP_CONTROL, {
+            .min_z_zero_max_z_one      = MIN_Z_ZERO_MAX_Z_ONE_TRUE,
+            .pixel_min_z               = !depth_clip_enable ? PIXEL_MIN_Z_CLAMP : PIXEL_MIN_Z_CLIP,
+            .pixel_max_z               = !depth_clip_enable ? PIXEL_MAX_Z_CLAMP : PIXEL_MAX_Z_CLIP,
+            .geometry_guardband        = GEOMETRY_GUARDBAND_SCALE_256,
+            .line_point_cull_guardband = LINE_POINT_CULL_GUARDBAND_SCALE_256,
+            .geometry_clip             = !rs->depth_clip_enable ? GEOMETRY_CLIP_WZERO_CLIP_NO_Z_CULL : GEOMETRY_CLIP_WZERO_CLIP,
+            .geometry_guardband_z      = GEOMETRY_GUARDBAND_Z_SAME_AS_XY_GUARDBAND,
+      });
+   }
 
    P_IMMD(p, NV9097, SET_RASTER_INPUT, rs->rasterization_stream);
 }
@@ -483,9 +514,13 @@ nvk_graphics_pipeline_create(struct nvk_device *dev,
       emit_pipeline_xfb_state(&push, last_geom->xfb);
    }
 
+   bool depth_is_float = (state.rp->depth_attachment_format == VK_FORMAT_D32_SFLOAT ||
+                          state.rp->depth_attachment_format == VK_FORMAT_D32_SFLOAT_S8_UINT);
+   bool unrestricted_depth = dev->vk.enabled_extensions.EXT_depth_range_unrestricted;
+
    if (state.ts) emit_pipeline_ts_state(&push, state.ts);
    if (state.vp) emit_pipeline_vp_state(&push, state.vp);
-   if (state.rs) emit_pipeline_rs_state(&push, state.rs);
+   if (state.rs) emit_pipeline_rs_state(dev, &push, state.rs, depth_is_float, unrestricted_depth);
    if (state.ms) emit_pipeline_ms_state(&push, state.ms, force_max_samples);
    if (state.cb) emit_pipeline_cb_state(&push, state.cb);
 

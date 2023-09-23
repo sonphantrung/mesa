@@ -39,6 +39,7 @@ value_src(nir_intrinsic_op intrinsic)
    switch (intrinsic) {
    case nir_intrinsic_store_ssbo:
    case nir_intrinsic_store_scratch:
+   case nir_intrinsic_store_global:
    case nir_intrinsic_store_global_2x32:
       return 0;
    default:
@@ -53,11 +54,14 @@ offset_src(nir_intrinsic_op intrinsic)
    case nir_intrinsic_load_uniform:
    case nir_intrinsic_load_shared:
    case nir_intrinsic_load_scratch:
+   case nir_intrinsic_load_global:
    case nir_intrinsic_load_global_2x32:
+   case nir_intrinsic_load_global_constant:
       return 0;
    case nir_intrinsic_load_ubo:
    case nir_intrinsic_load_ssbo:
    case nir_intrinsic_store_scratch:
+   case nir_intrinsic_store_global:
    case nir_intrinsic_store_global_2x32:
       return 1;
    case nir_intrinsic_store_ssbo:
@@ -237,11 +241,14 @@ lower_load_store_bitsize(nir_builder *b, nir_intrinsic_instr *intr,
         case nir_intrinsic_load_ubo:
         case nir_intrinsic_load_uniform:
         case nir_intrinsic_load_scratch:
+        case nir_intrinsic_load_global:
         case nir_intrinsic_load_global_2x32:
+        case nir_intrinsic_load_global_constant:
                return lower_load_bitsize(b, intr);
 
         case nir_intrinsic_store_ssbo:
         case nir_intrinsic_store_scratch:
+        case nir_intrinsic_store_global:
         case nir_intrinsic_store_global_2x32:
                 return lower_store_bitsize(b, intr);
 

@@ -4117,8 +4117,9 @@ VkResult anv_AllocateMemory(
              fd_info->handleType ==
                VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
 
-      result = anv_device_import_bo(device, fd_info->fd, alloc_flags,
-                                    client_address, &mem->bo);
+      result = anv_shared_bo_pool_from_fd(&device->shared_bo_pool,
+                                          fd_info->fd, alloc_flags,
+                                          client_address, &mem->bo);
       if (result != VK_SUCCESS)
          goto fail;
 
@@ -4136,7 +4137,7 @@ VkResult anv_AllocateMemory(
                             "VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT: "
                             "%"PRIu64"B > %"PRIu64"B",
                             aligned_alloc_size, mem->bo->size);
-         anv_device_release_bo(device, mem->bo);
+         anv_shared_bo_pool_release(&device->shared_bo_pool, mem->bo);
          goto fail;
       }
 
@@ -4163,12 +4164,12 @@ VkResult anv_AllocateMemory(
       assert(mem->vk.import_handle_type ==
              VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT);
 
-      result = anv_device_import_bo_from_host_ptr(device,
-                                                  mem->vk.host_ptr,
-                                                  mem->vk.size,
-                                                  alloc_flags,
-                                                  client_address,
-                                                  &mem->bo);
+      result = anv_shared_bo_pool_from_host_ptr(&device->shared_bo_pool,
+                                                mem->vk.host_ptr,
+                                                mem->vk.size,
+                                                alloc_flags,
+                                                client_address,
+                                                &mem->bo);
       if (result != VK_SUCCESS)
          goto fail;
 
@@ -4189,8 +4190,9 @@ VkResult anv_AllocateMemory(
 
    /* Regular allocate (not importing memory). */
 
-   result = anv_device_alloc_bo(device, "user", pAllocateInfo->allocationSize,
-                                alloc_flags, client_address, &mem->bo);
+   result = anv_shared_bo_pool_alloc(&device->shared_bo_pool,
+                                     "user", pAllocateInfo->allocationSize, 4096,
+                                     alloc_flags, client_address, &mem->bo);
    if (result != VK_SUCCESS)
       goto fail;
 
@@ -4202,11 +4204,12 @@ VkResult anv_AllocateMemory(
        */
       if (image->vk.wsi_legacy_scanout) {
          const struct isl_surf *surf = &image->planes[0].primary_surface.isl;
-         result = anv_device_set_bo_tiling(device, mem->bo,
+         result = anv_device_set_bo_tiling(device,
+                                           anv_shared_bo_bo(mem->bo),
                                            surf->row_pitch_B,
                                            surf->tiling);
          if (result != VK_SUCCESS) {
-            anv_device_release_bo(device, mem->bo);
+            anv_shared_bo_pool_release(&device->shared_bo_pool, mem->bo);
             goto fail;
          }
       }
@@ -4216,7 +4219,7 @@ VkResult anv_AllocateMemory(
    mem_heap_used = p_atomic_add_return(&mem_heap->used, mem->bo->size);
    if (mem_heap_used > mem_heap->size) {
       p_atomic_add(&mem_heap->used, -mem->bo->size);
-      anv_device_release_bo(device, mem->bo);
+      anv_shared_bo_pool_release(&device->shared_bo_pool, mem->bo);
       result = vk_errorf(device, VK_ERROR_OUT_OF_DEVICE_MEMORY,
                          "Out of heap memory");
       goto fail;
@@ -4251,7 +4254,7 @@ VkResult anv_GetMemoryFdKHR(
    assert(pGetFdInfo->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT ||
           pGetFdInfo->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
 
-   return anv_device_export_bo(dev, mem->bo, pFd);
+   return anv_device_export_bo(dev, anv_shared_bo_bo(mem->bo), pFd);
 }
 
 VkResult anv_GetMemoryFdPropertiesKHR(
@@ -4331,7 +4334,7 @@ void anv_FreeMemory(
    p_atomic_add(&device->physical->memory.heaps[mem->type->heapIndex].used,
                 -mem->bo->size);
 
-   anv_device_release_bo(device, mem->bo);
+   anv_shared_bo_pool_release(&device->shared_bo_pool, mem->bo);
 
    ANV_RMV(resource_destroy, device, mem);
 
@@ -4388,25 +4391,23 @@ VkResult anv_MapMemory2KHR(
    }
 
    /* GEM will fail to map if the offset isn't 4k-aligned.  Round down. */
-   uint64_t map_offset;
-   if (!device->physical->info.has_mmap_offset)
-      map_offset = offset & ~4095ull;
-   else
-      map_offset = 0;
-   assert(offset >= map_offset);
-   uint64_t map_size = (offset + size) - map_offset;
+   uint64_t map_offset = (mem->bo->address.offset + offset) & ~4095ull;
+   assert((mem->bo->address.offset + offset) >= map_offset);
+   uint64_t map_size = (mem->bo->address.offset + offset + size) - map_offset;
 
    /* Let's map whole pages */
    map_size = align64(map_size, 4096);
 
    void *map;
-   VkResult result = anv_device_map_bo(device, mem->bo, map_offset, map_size, &map);
+   VkResult result = anv_device_map_bo(device,
+                                       anv_shared_bo_bo(mem->bo),
+                                       map_offset, map_size, &map);
    if (result != VK_SUCCESS)
       return result;
 
    mem->map = map;
    mem->map_size = map_size;
-   mem->map_delta = (offset - map_offset);
+   mem->map_delta = (mem->bo->address.offset + offset - map_offset);
    *ppData = mem->map + mem->map_delta;
 
    return VK_SUCCESS;
@@ -4422,7 +4423,7 @@ VkResult anv_UnmapMemory2KHR(
    if (mem == NULL || mem->vk.host_ptr)
       return VK_SUCCESS;
 
-   anv_device_unmap_bo(device, mem->bo, mem->map, mem->map_size);
+   anv_device_unmap_bo(device, anv_shared_bo_bo(mem->bo), mem->map, mem->map_size);
 
    mem->map = NULL;
    mem->map_size = 0;
@@ -4517,10 +4518,8 @@ anv_bind_buffer_memory(struct anv_device *device,
    if (mem) {
       assert(pBindInfo->memoryOffset < mem->vk.size);
       assert(mem->vk.size - pBindInfo->memoryOffset >= buffer->vk.size);
-      buffer->address = (struct anv_address) {
-         .bo = mem->bo,
-         .offset = pBindInfo->memoryOffset,
-      };
+      buffer->address = anv_address_add(
+         anv_shared_bo_address(mem->bo), pBindInfo->memoryOffset);
    } else {
       buffer->address = ANV_NULL_ADDRESS;
    }
@@ -4837,9 +4836,11 @@ uint64_t anv_GetDeviceMemoryOpaqueCaptureAddress(
 {
    ANV_FROM_HANDLE(anv_device_memory, memory, pInfo->memory);
 
-   assert(memory->bo->alloc_flags & ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS);
+   assert(anv_shared_bo_bo(memory->bo)->alloc_flags &
+          ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS);
 
-   return intel_48b_address(memory->bo->offset);
+   return intel_48b_address(
+      anv_address_physical(anv_shared_bo_address(memory->bo)));
 }
 
 void

@@ -201,82 +201,64 @@ anv_h265_decode_video(struct anv_cmd_buffer *cmd_buffer,
          .MOCS = anv_mocs(cmd_buffer->device, buf.DecodedPictureAddress.bo, 0),
       };
 
-      buf.DeblockingFilterLineBufferAddress = (struct anv_address) {
-         vid->vid_mem[ANV_VID_MEM_H265_DEBLOCK_FILTER_ROW_STORE_LINE].mem->bo,
-         vid->vid_mem[ANV_VID_MEM_H265_DEBLOCK_FILTER_ROW_STORE_LINE].offset
-      };
+      buf.DeblockingFilterLineBufferAddress =
+         anv_vid_mem_address(&vid->vid_mem[ANV_VID_MEM_H265_DEBLOCK_FILTER_ROW_STORE_LINE]);
 
       buf.DeblockingFilterLineBufferMemoryAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.DeblockingFilterLineBufferAddress.bo, 0),
       };
 
-      buf.DeblockingFilterTileLineBufferAddress = (struct anv_address) {
-         vid->vid_mem[ANV_VID_MEM_H265_DEBLOCK_FILTER_ROW_STORE_TILE_LINE].mem->bo,
-         vid->vid_mem[ANV_VID_MEM_H265_DEBLOCK_FILTER_ROW_STORE_TILE_LINE].offset
-      };
+      buf.DeblockingFilterTileLineBufferAddress =
+         anv_vid_mem_address(&vid->vid_mem[ANV_VID_MEM_H265_DEBLOCK_FILTER_ROW_STORE_TILE_LINE]);
 
       buf.DeblockingFilterTileLineBufferMemoryAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.DeblockingFilterTileLineBufferAddress.bo, 0),
       };
 
-      buf.DeblockingFilterTileColumnBufferAddress = (struct anv_address) {
-         vid->vid_mem[ANV_VID_MEM_H265_DEBLOCK_FILTER_ROW_STORE_TILE_COLUMN].mem->bo,
-         vid->vid_mem[ANV_VID_MEM_H265_DEBLOCK_FILTER_ROW_STORE_TILE_COLUMN].offset
-      };
+      buf.DeblockingFilterTileColumnBufferAddress =
+         anv_vid_mem_address(&vid->vid_mem[ANV_VID_MEM_H265_DEBLOCK_FILTER_ROW_STORE_TILE_COLUMN]);
 
       buf.DeblockingFilterTileColumnBufferMemoryAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.DeblockingFilterTileColumnBufferAddress.bo, 0),
       };
 
-      buf.MetadataLineBufferAddress = (struct anv_address) {
-         vid->vid_mem[ANV_VID_MEM_H265_METADATA_LINE].mem->bo,
-         vid->vid_mem[ANV_VID_MEM_H265_METADATA_LINE].offset
-      };
+      buf.MetadataLineBufferAddress =
+         anv_vid_mem_address(&vid->vid_mem[ANV_VID_MEM_H265_METADATA_LINE]);
 
       buf.MetadataLineBufferMemoryAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.MetadataLineBufferAddress.bo, 0),
       };
 
-      buf.MetadataTileLineBufferAddress = (struct anv_address) {
-         vid->vid_mem[ANV_VID_MEM_H265_METADATA_TILE_LINE].mem->bo,
-         vid->vid_mem[ANV_VID_MEM_H265_METADATA_TILE_LINE].offset
-      };
+      buf.MetadataTileLineBufferAddress =
+         anv_vid_mem_address(&vid->vid_mem[ANV_VID_MEM_H265_METADATA_TILE_LINE]);
 
       buf.MetadataTileLineBufferMemoryAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.MetadataTileLineBufferAddress.bo, 0),
       };
 
-      buf.MetadataTileColumnBufferAddress = (struct anv_address) {
-         vid->vid_mem[ANV_VID_MEM_H265_METADATA_TILE_COLUMN].mem->bo,
-         vid->vid_mem[ANV_VID_MEM_H265_METADATA_TILE_COLUMN].offset
-      };
+      buf.MetadataTileColumnBufferAddress =
+         anv_vid_mem_address(&vid->vid_mem[ANV_VID_MEM_H265_METADATA_TILE_COLUMN]);
 
       buf.MetadataTileColumnBufferMemoryAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.MetadataTileColumnBufferAddress.bo, 0),
       };
 
-      buf.SAOLineBufferAddress = (struct anv_address) {
-         vid->vid_mem[ANV_VID_MEM_H265_SAO_LINE].mem->bo,
-         vid->vid_mem[ANV_VID_MEM_H265_SAO_LINE].offset
-      };
+      buf.SAOLineBufferAddress =
+         anv_vid_mem_address(&vid->vid_mem[ANV_VID_MEM_H265_SAO_LINE]);
 
       buf.SAOLineBufferMemoryAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.SAOLineBufferAddress.bo, 0),
       };
 
-      buf.SAOTileLineBufferAddress = (struct anv_address) {
-         vid->vid_mem[ANV_VID_MEM_H265_SAO_TILE_LINE].mem->bo,
-         vid->vid_mem[ANV_VID_MEM_H265_SAO_TILE_LINE].offset
-      };
+      buf.SAOTileLineBufferAddress =
+         anv_vid_mem_address(&vid->vid_mem[ANV_VID_MEM_H265_SAO_TILE_LINE]);
 
       buf.SAOTileLineBufferMemoryAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.SAOTileLineBufferAddress.bo, 0),
       };
 
-      buf.SAOTileColumnBufferAddress = (struct anv_address) {
-         vid->vid_mem[ANV_VID_MEM_H265_SAO_TILE_COLUMN].mem->bo,
-         vid->vid_mem[ANV_VID_MEM_H265_SAO_TILE_COLUMN].offset
-      };
+      buf.SAOTileColumnBufferAddress =
+         anv_vid_mem_address(&vid->vid_mem[ANV_VID_MEM_H265_SAO_TILE_COLUMN]);
 
       buf.SAOTileColumnBufferMemoryAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.SAOTileColumnBufferAddress.bo, 0),
@@ -879,11 +861,13 @@ anv_h264_decode_video(struct anv_cmd_buffer *cmd_buffer,
          .MOCS = anv_mocs(cmd_buffer->device, buf.PostDeblockingDestinationAddress.bo, 0),
       };
 
-      buf.IntraRowStoreScratchBufferAddress = (struct anv_address) { vid->vid_mem[ANV_VID_MEM_H264_INTRA_ROW_STORE].mem->bo, vid->vid_mem[ANV_VID_MEM_H264_INTRA_ROW_STORE].offset };
+      buf.IntraRowStoreScratchBufferAddress =
+         anv_vid_mem_address(&vid->vid_mem[ANV_VID_MEM_H264_INTRA_ROW_STORE]);
       buf.IntraRowStoreScratchBufferAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.IntraRowStoreScratchBufferAddress.bo, 0),
       };
-      buf.DeblockingFilterRowStoreScratchAddress = (struct anv_address) { vid->vid_mem[ANV_VID_MEM_H264_DEBLOCK_FILTER_ROW_STORE].mem->bo, vid->vid_mem[ANV_VID_MEM_H264_DEBLOCK_FILTER_ROW_STORE].offset };
+      buf.DeblockingFilterRowStoreScratchAddress =
+         anv_vid_mem_address(&vid->vid_mem[ANV_VID_MEM_H264_DEBLOCK_FILTER_ROW_STORE]);
       buf.DeblockingFilterRowStoreScratchAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.DeblockingFilterRowStoreScratchAddress.bo, 0),
       };
@@ -943,14 +927,14 @@ anv_h264_decode_video(struct anv_cmd_buffer *cmd_buffer,
    }
 
    anv_batch_emit(&cmd_buffer->batch, GENX(MFX_BSP_BUF_BASE_ADDR_STATE), bsp) {
-      bsp.BSDMPCRowStoreScratchBufferAddress = (struct anv_address) { vid->vid_mem[ANV_VID_MEM_H264_BSD_MPC_ROW_SCRATCH].mem->bo,
-         vid->vid_mem[ANV_VID_MEM_H264_BSD_MPC_ROW_SCRATCH].offset };
+      bsp.BSDMPCRowStoreScratchBufferAddress =
+         anv_vid_mem_address(&vid->vid_mem[ANV_VID_MEM_H264_BSD_MPC_ROW_SCRATCH]);
 
       bsp.BSDMPCRowStoreScratchBufferAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, bsp.BSDMPCRowStoreScratchBufferAddress.bo, 0),
       };
-      bsp.MPRRowStoreScratchBufferAddress = (struct anv_address) { vid->vid_mem[ANV_VID_MEM_H264_MPR_ROW_SCRATCH].mem->bo,
-         vid->vid_mem[ANV_VID_MEM_H264_BSD_MPC_ROW_SCRATCH].offset };
+      bsp.MPRRowStoreScratchBufferAddress =
+         anv_vid_mem_address(&vid->vid_mem[ANV_VID_MEM_H264_MPR_ROW_SCRATCH]);
 
       bsp.MPRRowStoreScratchBufferAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, bsp.MPRRowStoreScratchBufferAddress.bo, 0),

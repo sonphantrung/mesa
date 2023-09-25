@@ -334,7 +334,7 @@ anv_rmv_log_heap_create(struct anv_device *device,
    };
 
    vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_RESOURCE_CREATE, &token);
-   log_resource_bind_locked(device, token.resource_id, memory->bo, 0, memory->vk.size);
+   log_resource_bind_shared_locked(device, token.resource_id, memory->bo);
    simple_mtx_unlock(&device->vk.memory_trace_data.token_mtx);
 }
 

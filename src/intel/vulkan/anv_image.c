@@ -2294,10 +2294,8 @@ anv_bind_image_memory(struct anv_device *device,
          struct anv_image_binding *binding =
             anv_image_aspect_to_binding(image, plane_info->planeAspect);
 
-         binding->address = (struct anv_address) {
-            .bo = mem->bo,
-            .offset = bind_info->memoryOffset,
-         };
+         binding->address = anv_address_add(
+            anv_shared_bo_address(mem->bo), bind_info->memoryOffset);
 
          ANV_RMV(image_bind, device, image,
                  binding - image->bindings);
@@ -2360,10 +2358,8 @@ anv_bind_image_memory(struct anv_device *device,
       assert(!image->disjoint);
 
       image->bindings[ANV_IMAGE_MEMORY_BINDING_MAIN].address =
-         (struct anv_address) {
-         .bo = mem->bo,
-         .offset = bind_info->memoryOffset,
-      };
+         anv_address_add(anv_shared_bo_address(mem->bo),
+                         bind_info->memoryOffset);
 
       ANV_RMV(image_bind, device, image,
               ANV_IMAGE_MEMORY_BINDING_MAIN);

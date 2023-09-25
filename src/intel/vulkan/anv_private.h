@@ -2371,7 +2371,7 @@ struct anv_device_memory {
 
    struct list_head                             link;
 
-   struct anv_bo *                              bo;
+   struct anv_shared_bo *                       bo;
    const struct anv_memory_type *               type;
 
    void *                                       map;
@@ -2380,6 +2380,12 @@ struct anv_device_memory {
    /* The map, from the user PoV is map + map_delta */
    uint64_t                                     map_delta;
 };
+
+static inline struct anv_address
+anv_device_memory_address(const struct anv_device_memory *mem)
+{
+   return anv_shared_bo_address(mem->bo);
+}
 
 /**
  * Header for Vertex URB Entry (VUE)
@@ -5580,6 +5586,12 @@ struct anv_vid_mem {
    VkDeviceSize       offset;
    VkDeviceSize       size;
 };
+
+static inline struct anv_address
+anv_vid_mem_address(const struct anv_vid_mem *mem)
+{
+   return anv_address_add(anv_device_memory_address(mem->mem), mem->offset);
+}
 
 #define ANV_VIDEO_MEM_REQS_H264 4
 #define ANV_VIDEO_MEM_REQS_H265 9

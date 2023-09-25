@@ -433,7 +433,7 @@ setup_execbuf_for_cmd_buffers(struct anv_execbuf *execbuf,
     */
    list_for_each_entry(struct anv_device_memory, mem,
                        &device->memory_objects, link) {
-      result = anv_execbuf_add_bo(device, execbuf, mem->bo, NULL, 0);
+      result = anv_execbuf_add_bo(device, execbuf, anv_shared_bo_bo(mem->bo), NULL, 0);
       if (result != VK_SUCCESS)
          return result;
    }

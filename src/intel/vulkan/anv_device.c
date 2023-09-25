@@ -3264,6 +3264,14 @@ VkResult anv_CreateDevice(
    if (result != VK_SUCCESS)
       goto fail_queue_cond;
 
+   const uint32_t min_gem_allocation_size =
+      (intel_device_info_is_mtl(device->info) ||
+       device->info->platform == INTEL_PLATFORM_LNL) ?
+      2 * 1024 * 1024 : 64 * 1024;
+
+   anv_shared_bo_pool_init(&device->shared_bo_pool, device,
+                           min_gem_allocation_size);
+
    anv_bo_pool_init(&device->batch_bo_pool, device, "batch",
                     ANV_BO_ALLOC_MAPPED |
                     ANV_BO_ALLOC_HOST_CACHED_COHERENT |
@@ -3699,6 +3707,7 @@ VkResult anv_CreateDevice(
    if (device->vk.enabled_extensions.KHR_acceleration_structure)
       anv_bo_pool_finish(&device->bvh_bo_pool);
    anv_bo_pool_finish(&device->batch_bo_pool);
+   anv_shared_bo_pool_fini(&device->shared_bo_pool);
    anv_bo_cache_finish(&device->bo_cache);
  fail_queue_cond:
    pthread_cond_destroy(&device->queue_submit);
@@ -3820,6 +3829,8 @@ void anv_DestroyDevice(
    if (device->vk.enabled_extensions.KHR_acceleration_structure)
       anv_bo_pool_finish(&device->bvh_bo_pool);
    anv_bo_pool_finish(&device->batch_bo_pool);
+
+   anv_shared_bo_pool_fini(&device->shared_bo_pool);
 
    anv_bo_cache_finish(&device->bo_cache);
 

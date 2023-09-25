@@ -497,6 +497,7 @@ struct anv_bo {
    /** Flags to pass to the kernel through drm_i915_exec_object2::flags */
    uint32_t flags;
 
+   /** Original allocation flags for this BO in anv_device_alloc_bo(). */
    enum anv_bo_alloc_flags alloc_flags;
 
    /** True if this BO wraps a host pointer */
@@ -858,6 +859,106 @@ anv_state_table_get(struct anv_state_table *table, uint32_t idx)
 {
    return &table->map[idx].state;
 }
+
+/**
+ * Implements a pool of BOs that can be shared down to a 64byte granularity.
+ *
+ * This helps reducing the number of small BOs that need to be allocated
+ * especially for things like UBOs. Working with bigger chunks also allows to
+ * use the PDE/PTE fast path in the page tables.
+ */
+struct anv_shared_slab;
+
+struct anv_shared_bo {
+   /* Shared BO this slab belongs to */
+   struct anv_shared_slab *slab;
+   /* Address of the BO (with correct anv_bo + offset) */
+   struct anv_address      address;
+   /* Size of this BO */
+   uint64_t                size;
+   /* Next chunk in the free list */
+   struct anv_shared_bo   *next;
+};
+
+struct anv_shared_slab {
+   struct list_head        link;
+   /* BO shared by multiple allocations */
+   struct anv_shared_bo   *slab_bo;
+   /* BO shared by multiple allocations */
+   struct anv_bo          *bo;
+   /* Size of the entire slab allocation */
+   uint64_t                size;
+   unsigned                bucket;
+   /* Allocation flags */
+   enum anv_bo_alloc_flags alloc_flags;
+   /* Chunks of this BO */
+   struct anv_shared_bo   *free_bos;
+   /* Number of items in the free list */
+   uint32_t                free_count;
+   /* */
+   bool                    external;
+};
+
+struct anv_shared_bo_pool {
+   struct anv_device *device;
+   uint64_t slab_size;
+
+   simple_mtx_t mutex;
+
+   /* Minimum power of 2 size */
+   unsigned min_order;
+   /* Maximum power of 2 size */
+   unsigned max_order;
+
+   struct list_head slabs[13 * 2];
+};
+
+static inline struct anv_address
+anv_shared_bo_address(const struct anv_shared_bo *bo)
+{
+   return bo ? bo->address : ANV_NULL_ADDRESS;
+}
+
+static inline void *
+anv_shared_bo_map(const struct anv_shared_bo *bo)
+{
+   if (bo->address.bo->map == NULL)
+      return NULL;
+   return bo->address.bo->map + bo->address.offset;
+}
+
+static inline struct anv_bo *
+anv_shared_bo_bo(const struct anv_shared_bo *bo)
+{
+   return bo->address.bo;
+}
+
+void anv_shared_bo_pool_init(struct anv_shared_bo_pool *pool,
+                             struct anv_device *device,
+                             uint64_t slab_size);
+void anv_shared_bo_pool_fini(struct anv_shared_bo_pool *pool);
+
+VkResult anv_shared_bo_pool_alloc(struct anv_shared_bo_pool *pool,
+                                  const char *name,
+                                  uint64_t size,
+                                  uint64_t alignment,
+                                  enum anv_bo_alloc_flags alloc_flags,
+                                  uint64_t explicit_address,
+                                  struct anv_shared_bo **bo_out);
+void anv_shared_bo_pool_release(struct anv_shared_bo_pool *pool,
+                                struct anv_shared_bo *bo);
+
+VkResult anv_shared_bo_pool_from_host_ptr(struct anv_shared_bo_pool *pool,
+                                          void *host_ptr, uint32_t size,
+                                          enum anv_bo_alloc_flags alloc_flags,
+                                          uint64_t client_address,
+                                          struct anv_shared_bo **bo_out);
+
+VkResult anv_shared_bo_pool_from_fd(struct anv_shared_bo_pool *pool, int fd,
+                                    enum anv_bo_alloc_flags alloc_flags,
+                                    uint64_t client_address,
+                                    struct anv_shared_bo **bo_out);
+
 /**
  * Implements a pool of re-usable BOs.  The interface is identical to that
  * of block_pool except that each block is its own BO.
@@ -1672,6 +1773,8 @@ struct anv_device {
     struct anv_bo_pool                          bvh_bo_pool;
 
     struct anv_bo_cache                         bo_cache;
+
+    struct anv_shared_bo_pool                   shared_bo_pool;
 
     struct anv_state_pool                       general_state_pool;
     struct anv_state_pool                       dynamic_state_pool;

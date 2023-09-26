@@ -1866,6 +1866,10 @@ struct anv_device {
     bool                                         using_sparse;
 
     struct anv_device_astc_emu                   astc_emu;
+
+    struct {
+       uint32_t trash;
+    } debug;
 };
 
 static inline uint32_t

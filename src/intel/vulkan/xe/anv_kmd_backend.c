@@ -112,6 +112,11 @@ xe_gem_mmap(struct anv_device *device, struct anv_bo *bo, uint64_t offset,
    if (ptr == MAP_FAILED)
       return ptr;
 
+   {
+      uint32_t *plop = ptr + offset;
+      device->debug.trash = plop[0];
+   }
+
    if (offset != 0)
       munmap(ptr, offset);
 

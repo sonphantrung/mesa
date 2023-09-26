@@ -175,6 +175,11 @@ i915_gem_mmap_offset(struct anv_device *device, struct anv_bo *bo,
    if (ptr == MAP_FAILED)
       return ptr;
 
+   {
+      uint32_t *plop = ptr + offset;
+      device->debug.trash = plop[0];
+   }
+
    if (offset != 0)
       munmap(ptr, offset);
 

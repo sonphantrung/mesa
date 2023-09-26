@@ -160,7 +160,7 @@ i915_gem_close(struct anv_device *device, struct anv_bo *bo)
 
 static void *
 i915_gem_mmap_offset(struct anv_device *device, struct anv_bo *bo,
-                     uint64_t size, uint32_t flags)
+                     uint64_t offset, uint64_t size, uint32_t flags)
 {
    struct drm_i915_gem_mmap_offset gem_mmap = {
       .handle = bo->gem_handle,
@@ -169,8 +169,16 @@ i915_gem_mmap_offset(struct anv_device *device, struct anv_bo *bo,
    if (intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_MMAP_OFFSET, &gem_mmap))
       return MAP_FAILED;
 
-   return mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED,
-               device->fd, gem_mmap.offset);
+   void *ptr = mmap(NULL, offset + size,
+                    PROT_READ | PROT_WRITE, MAP_SHARED,
+                    device->fd, gem_mmap.offset);
+   if (ptr == MAP_FAILED)
+      return ptr;
+
+   if (offset != 0)
+      munmap(ptr, offset);
+
+   return ptr + offset;
 }
 
 static void *
@@ -219,7 +227,7 @@ i915_gem_mmap(struct anv_device *device, struct anv_bo *bo, uint64_t offset,
    const uint32_t flags = mmap_calc_flags(device, bo);
 
    if (likely(device->physical->info.has_mmap_offset))
-      return i915_gem_mmap_offset(device, bo, size, flags);
+      return i915_gem_mmap_offset(device, bo, offset, size, flags);
    return i915_gem_mmap_legacy(device, bo, offset, size, flags);
 }
 

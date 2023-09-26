@@ -107,8 +107,15 @@ xe_gem_mmap(struct anv_device *device, struct anv_bo *bo, uint64_t offset,
    if (intel_ioctl(device->fd, DRM_IOCTL_XE_GEM_MMAP_OFFSET, &args))
       return MAP_FAILED;
 
-   return mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED,
-               device->fd, args.offset);
+   void *ptr = mmap(NULL, offset + size, PROT_READ | PROT_WRITE, MAP_SHARED,
+                    device->fd, args.offset);
+   if (ptr == MAP_FAILED)
+      return ptr;
+
+   if (offset != 0)
+      munmap(ptr, offset);
+
+   return ptr + offset;
 }
 
 static inline int

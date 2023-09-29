@@ -1282,6 +1282,85 @@ intel_device_info_update_cs_workgroup_threads(struct intel_device_info *devinfo)
                                MIN2(devinfo->max_cs_threads, 64);
 }
 
+static bool
+parse_force_probe_entry(int pci_id, const char *entry, bool *force_on,
+                        bool *force_off)
+{
+   const char *cp = entry;
+
+   bool negated = *cp == '!';
+   if (negated)
+      cp++;
+
+   if (*cp == '\0')
+      return false;
+
+   bool wildcard = *cp == '*';
+   long val = 0;
+
+   if (wildcard) {
+      cp++;
+   } else {
+      char *end;
+      val = strtol(cp, &end, 16);
+      if (end == cp)
+         return false;
+      cp = end;
+   }
+
+   if (*cp != '\0')
+      return false;
+
+   bool matched = wildcard || (long)pci_id == val;
+   if (matched) {
+      *force_on = !negated;
+      *force_off = negated;
+   }
+
+   return matched;
+}
+
+static void
+scan_for_force_probe(int pci_id, bool *force_on, bool *force_off)
+{
+   *force_on = false;
+   *force_off = false;
+
+   const char *env = getenv("INTEL_FORCE_PROBE");
+   if (env == NULL)
+      return;
+
+   size_t len = strlen(env);
+   if (len == 0)
+      return;
+
+   char *dup = strndup(env, len);
+   if (dup == NULL)
+      return;
+
+   /* We scan backward through the string and the first item that matches the
+    * PCI ID is used. (Later entries in the string take precedence.)
+    */
+   char *end = &dup[len];
+   while (end > dup) {
+      *end = '\0';
+      char *sep = end;
+      while (sep > dup && *sep != ',')
+         sep--;
+      if (sep == end)
+         break;
+      char *start = *sep == ',' ? sep + 1 : sep;
+      if (parse_force_probe_entry(pci_id, start, force_on, force_off))
+         break;
+      if (sep == dup)
+         break;
+      end = sep;
+   }
+
+   free(dup);
+   assert(!*force_on || !*force_off);
+}
+
 struct device_init_config {
    bool require_force_probe;
 };
@@ -1332,8 +1411,23 @@ intel_device_info_init_common(int pci_id,
       strncpy(devinfo->name, "Intel Unknown", sizeof(devinfo->name));
    }
 
-   if (device_config.require_force_probe)
+   bool force_on = false;
+   bool force_off = false;
+   scan_for_force_probe(pci_id, &force_on, &force_off);
+   if (force_off) {
+      mesa_logw("%s (0x%x) disabled with INTEL_FORCE_PROBE", devinfo->name,
+                pci_id);
       return false;
+   } else if (device_config.require_force_probe) {
+      if (force_on) {
+         mesa_logw("Forcing probe of unsupported: %s (0x%x)", devinfo->name,
+                   pci_id);
+      } else {
+         mesa_loge("%s (0x%x) requires INTEL_FORCE_PROBE", devinfo->name,
+                   pci_id);
+         return false;
+      }
+   }
 
    devinfo->pci_device_id = pci_id;
 

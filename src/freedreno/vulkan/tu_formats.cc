@@ -8,12 +8,17 @@
 
 #include "fdl/fd6_format_table.h"
 
+#ifdef ANDROID
+#include "vk_android.h"
+#endif
 #include "vk_enum_defines.h"
 #include "vk_util.h"
 #include "drm-uapi/drm_fourcc.h"
 
 #include "tu_device.h"
 #include "tu_image.h"
+
+#include <vulkan/vulkan_android.h>
 
 /* Map non-colorspace-converted YUV formats to RGB pipe formats where we can,
  * since our hardware doesn't support colorspace conversion.
@@ -655,6 +660,12 @@ tu_get_external_image_format_properties(
                           handleType, pImageFormatInfo->type);
       }
       break;
+   case VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID:
+      flags = VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT |
+              VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
+              VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT;
+      compat_flags = VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
+      break;
    case VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT:
       flags = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT;
       compat_flags = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
@@ -687,6 +698,7 @@ tu_GetPhysicalDeviceImageFormatProperties2(
    const VkPhysicalDeviceExternalImageFormatInfo *external_info = NULL;
    const VkPhysicalDeviceImageViewImageFormatInfoEXT *image_view_info = NULL;
    VkExternalImageFormatProperties *external_props = NULL;
+   VkAndroidHardwareBufferUsageANDROID *android_usage = NULL;
    VkFilterCubicImageViewImageFormatPropertiesEXT *cubic_props = NULL;
    VkFormatFeatureFlags format_feature_flags;
    VkSamplerYcbcrConversionImageFormatProperties *ycbcr_props = NULL;
@@ -718,6 +730,9 @@ tu_GetPhysicalDeviceImageFormatProperties2(
       switch (s->sType) {
       case VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES:
          external_props = (VkExternalImageFormatProperties *) s;
+         break;
+      case VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_USAGE_ANDROID:
+         android_usage = (VkAndroidHardwareBufferUsageANDROID *) s;
          break;
       case VK_STRUCTURE_TYPE_FILTER_CUBIC_IMAGE_VIEW_IMAGE_FORMAT_PROPERTIES_EXT:
          cubic_props = (VkFilterCubicImageViewImageFormatPropertiesEXT *) s;
@@ -757,6 +772,13 @@ tu_GetPhysicalDeviceImageFormatProperties2(
          cubic_props->filterCubic = false;
          cubic_props->filterCubicMinmax = false;
       }
+   }
+
+   if (android_usage) {
+#ifdef ANDROID
+      android_usage->androidHardwareBufferUsage =
+         vk_image_usage_to_ahb_usage(base_info->flags, base_info->usage);
+#endif
    }
 
    if (ycbcr_props)

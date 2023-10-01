@@ -748,6 +748,15 @@ tu_CreateImage(VkDevice _device,
    if (result != VK_SUCCESS)
       goto fail;
 
+   /* This section is removed by the optimizer for non-ANDROID builds */
+   if (vk_image_is_android_hardware_buffer(&image->vk)) {
+      /* At this time, an AHB handle is not yet provided.
+       * Image layout will be filled up during vkBindImageMemory2
+       */
+      *pImage = tu_image_to_handle(image);
+      return VK_SUCCESS;
+   }
+
    result = tu_image_update_layout(device, image, modifier,
                                    plane_layouts);
    if (result != VK_SUCCESS)

@@ -88,7 +88,7 @@ anv_utrace_delete_submit(struct u_trace_context *utctx, void *submit_data)
    if (submit->trace_bo)
       anv_bo_pool_free(&device->utrace_bo_pool, submit->trace_bo);
 
-   util_dynarray_foreach(&submit->batch_bos, struct anv_bo *, bo)
+   util_dynarray_foreach(&submit->batch_bos, struct anv_shared_bo *, bo)
       anv_bo_pool_free(&device->utrace_bo_pool, *bo);
    util_dynarray_fini(&submit->batch_bos);
 
@@ -157,18 +157,18 @@ anv_utrace_submit_extend_batch(struct anv_batch *batch, uint32_t size,
    struct anv_utrace_submit *submit = user_data;
 
    uint32_t alloc_size = 0;
-   util_dynarray_foreach(&submit->batch_bos, struct anv_bo *, bo)
+   util_dynarray_foreach(&submit->batch_bos, struct anv_shared_bo *, bo)
       alloc_size += (*bo)->size;
    alloc_size = MAX2(alloc_size * 2, 8192);
 
-   struct anv_bo *bo;
+   struct anv_shared_bo *bo;
    VkResult result = anv_bo_pool_alloc(&submit->queue->device->utrace_bo_pool,
                                        align(alloc_size, 4096),
                                        &bo);
    if (result != VK_SUCCESS)
       return result;
 
-   util_dynarray_append(&submit->batch_bos, struct anv_bo *, bo);
+   util_dynarray_append(&submit->batch_bos, struct anv_shared_bo *, bo);
 
    batch->end += 4 * GFX9_MI_BATCH_BUFFER_START_length;
 
@@ -177,12 +177,12 @@ anv_utrace_submit_extend_batch(struct anv_batch *batch, uint32_t size,
                                       GFX9_MI_BATCH_BUFFER_START_length_bias;
       bbs.SecondLevelBatchBuffer    = Firstlevelbatch;
       bbs.AddressSpaceIndicator     = ASI_PPGTT;
-      bbs.BatchBufferStartAddress   = (struct anv_address) { bo, 0 };
+      bbs.BatchBufferStartAddress   = anv_shared_bo_address(bo);
    }
 
    anv_batch_set_storage(batch,
-                         (struct anv_address) { .bo = bo, },
-                         bo->map,
+                         anv_shared_bo_address(bo),
+                         anv_shared_bo_map(bo),
                          bo->size - 4 * GFX9_MI_BATCH_BUFFER_START_length);
 
    return VK_SUCCESS;
@@ -336,7 +336,7 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
 
  error_batch:
    anv_reloc_list_finish(&submit->relocs);
-   util_dynarray_foreach(&submit->batch_bos, struct anv_bo *, bo)
+   util_dynarray_foreach(&submit->batch_bos, struct anv_shared_bo *, bo)
       anv_bo_pool_free(&device->utrace_bo_pool, *bo);
  error_reloc_list:
    anv_bo_pool_free(&device->utrace_bo_pool, submit->trace_bo);
@@ -357,18 +357,18 @@ anv_utrace_create_ts_buffer(struct u_trace_context *utctx, uint32_t size_b)
    uint32_t anv_ts_size_b = (size_b / sizeof(uint64_t)) *
       sizeof(union anv_utrace_timestamp);
 
-   struct anv_bo *bo = NULL;
+   struct anv_shared_bo *bo = NULL;
    UNUSED VkResult result =
       anv_bo_pool_alloc(&device->utrace_bo_pool,
                         align(anv_ts_size_b, 4096),
                         &bo);
    assert(result == VK_SUCCESS);
 
-   memset(bo->map, 0, bo->size);
+   memset(anv_shared_bo_map(bo), 0, bo->size);
 #ifdef SUPPORT_INTEL_INTEGRATED_GPUS
    if (device->physical->memory.need_flush &&
-       anv_bo_needs_host_cache_flush(bo->alloc_flags))
-      intel_flush_range(bo->map, bo->size);
+       anv_bo_needs_host_cache_flush(anv_shared_bo_bo(bo)->alloc_flags))
+      intel_flush_range(anv_shared_bo_map(bo), bo->size);
 #endif
 
    return bo;
@@ -379,7 +379,7 @@ anv_utrace_destroy_ts_buffer(struct u_trace_context *utctx, void *timestamps)
 {
    struct anv_device *device =
       container_of(utctx, struct anv_device, ds.trace_context);
-   struct anv_bo *bo = timestamps;
+   struct anv_shared_bo *bo = timestamps;
 
    anv_bo_pool_free(&device->utrace_bo_pool, bo);
 }
@@ -395,12 +395,11 @@ anv_utrace_record_ts(struct u_trace *ut, void *cs,
       container_of(ut, struct anv_cmd_buffer, trace);
    /* cmd_buffer is only valid if cs == NULL */
    struct anv_batch *batch = cs != NULL ? cs : &cmd_buffer->batch;
-   struct anv_bo *bo = timestamps;
+   struct anv_shared_bo *bo = timestamps;
 
-   struct anv_address ts_address = (struct anv_address) {
-      .bo = bo,
-      .offset = idx * sizeof(union anv_utrace_timestamp)
-   };
+   struct anv_address ts_address = anv_address_add(
+      anv_shared_bo_address(bo),
+      idx * sizeof(union anv_utrace_timestamp));
 
    /* Is this a end of compute trace point? */
    const bool is_end_compute =
@@ -435,7 +434,7 @@ anv_utrace_read_ts(struct u_trace_context *utctx,
 {
    struct anv_device *device =
       container_of(utctx, struct anv_device, ds.trace_context);
-   struct anv_bo *bo = timestamps;
+   struct anv_shared_bo *bo = timestamps;
    struct anv_utrace_submit *submit = flush_data;
 
    /* Only need to stall on results for the first entry: */
@@ -450,7 +449,7 @@ anv_utrace_read_ts(struct u_trace_context *utctx,
       assert(result == VK_SUCCESS);
    }
 
-   union anv_utrace_timestamp *ts = (union anv_utrace_timestamp *)bo->map;
+   union anv_utrace_timestamp *ts = anv_shared_bo_map(bo);
 
    /* Don't translate the no-timestamp marker: */
    if (ts[idx].timestamp == U_TRACE_NO_TIMESTAMP)
@@ -639,7 +638,7 @@ anv_queue_trace(struct anv_queue *queue, const char *label, bool frame, bool beg
 
  error_reloc_list:
    anv_reloc_list_finish(&submit->relocs);
-   util_dynarray_foreach(&submit->batch_bos, struct anv_bo *, bo)
+   util_dynarray_foreach(&submit->batch_bos, struct anv_shared_bo *, bo)
       anv_bo_pool_free(&device->utrace_bo_pool, *bo);
  error_sync:
    vk_sync_destroy(&device->vk, submit->sync);

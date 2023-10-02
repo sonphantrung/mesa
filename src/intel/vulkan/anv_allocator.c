@@ -1112,11 +1112,8 @@ anv_bo_pool_init(struct anv_bo_pool *pool, struct anv_device *device,
    pool->device = device;
    pool->bo_alloc_flags = alloc_flags;
 
-   for (unsigned i = 0; i < ARRAY_SIZE(pool->free_list); i++) {
-      util_sparse_array_free_list_init(&pool->free_list[i],
-                                       &device->bo_cache.bo_map, 0,
-                                       offsetof(struct anv_bo, free_index));
-   }
+   for (unsigned i = 0; i < ARRAY_SIZE(pool->free_list); i++)
+      p_atomic_set(&pool->free_list[i], NULL);
 
    VG(VALGRIND_CREATE_MEMPOOL(pool, 0, false));
 }
@@ -1125,15 +1122,14 @@ void
 anv_bo_pool_finish(struct anv_bo_pool *pool)
 {
    for (unsigned i = 0; i < ARRAY_SIZE(pool->free_list); i++) {
-      while (1) {
-         struct anv_bo *bo =
-            util_sparse_array_free_list_pop_elem(&pool->free_list[i]);
-         if (bo == NULL)
-            break;
-
+      struct anv_shared_bo *bo = p_atomic_read(&pool->free_list[i]);
+      while (bo) {
+         struct anv_shared_bo *next_bo = bo->next;
          /* anv_device_release_bo is going to "free" it */
-         VG(VALGRIND_MALLOCLIKE_BLOCK(bo->map, bo->size, 0, 1));
-         anv_device_release_bo(pool->device, bo);
+         VG(VALGRIND_MEMPOOL_ALLOC(&pool->device->shared_bo_pool,
+                                   anv_shared_bo_map(bo), bo->size));
+         anv_shared_bo_pool_release(&pool->device->shared_bo_pool, bo);
+         bo = next_bo;
       }
    }
 
@@ -1142,33 +1138,40 @@ anv_bo_pool_finish(struct anv_bo_pool *pool)
 
 VkResult
 anv_bo_pool_alloc(struct anv_bo_pool *pool, uint32_t size,
-                  struct anv_bo **bo_out)
+                  struct anv_shared_bo **bo_out)
 {
    const unsigned size_log2 = size < 4096 ? 12 : util_logbase2_ceil(size);
    const unsigned pow2_size = 1 << size_log2;
    const unsigned bucket = size_log2 - 12;
    assert(bucket < ARRAY_SIZE(pool->free_list));
+   struct anv_shared_bo *bo, *next_bo;
 
-   struct anv_bo *bo =
-      util_sparse_array_free_list_pop_elem(&pool->free_list[bucket]);
-   if (bo != NULL) {
-      VG(VALGRIND_MEMPOOL_ALLOC(pool, bo->map, size));
-      *bo_out = bo;
-      return VK_SUCCESS;
+   do {
+      bo = p_atomic_read(&pool->free_list[bucket]);
+      next_bo = p_atomic_cmpxchg(&pool->free_list[bucket], bo, bo ? bo->next : NULL);
+   } while (bo && bo != next_bo);
+
+   if (bo == NULL) {
+      VkResult result = anv_shared_bo_pool_alloc(&pool->device->shared_bo_pool,
+                                                 "batch", pow2_size, 64,
+                                                 pool->bo_alloc_flags,
+                                                 0 /* explicit_address */,
+                                                 &bo);
+      if (result != VK_SUCCESS)
+         return result;
+
+      if (pool->bo_alloc_flags & ANV_BO_ALLOC_MAPPED) {
+         VG(VALGRIND_MEMPOOL_FREE(&pool->device->shared_bo_pool,
+                                  anv_shared_bo_map(bo)));
+      }
    }
 
-   VkResult result = anv_device_alloc_bo(pool->device,
-                                         pool->name,
-                                         pow2_size,
-                                         pool->bo_alloc_flags,
-                                         0 /* explicit_address */,
-                                         &bo);
-   if (result != VK_SUCCESS)
-      return result;
-
    /* We want it to look like it came from this pool */
-   VG(VALGRIND_FREELIKE_BLOCK(bo->map, 0));
-   VG(VALGRIND_MEMPOOL_ALLOC(pool, bo->map, size));
+   if (pool->bo_alloc_flags & ANV_BO_ALLOC_MAPPED) {
+      VG(VALGRIND_MEMPOOL_ALLOC(pool,
+                                anv_shared_bo_map(bo),
+                                bo->size));
+   }
 
    *bo_out = bo;
 
@@ -1176,19 +1179,23 @@ anv_bo_pool_alloc(struct anv_bo_pool *pool, uint32_t size,
 }
 
 void
-anv_bo_pool_free(struct anv_bo_pool *pool, struct anv_bo *bo)
+anv_bo_pool_free(struct anv_bo_pool *pool, struct anv_shared_bo *bo)
 {
-   VG(VALGRIND_MEMPOOL_FREE(pool, bo->map));
+   if (pool->bo_alloc_flags & ANV_BO_ALLOC_MAPPED)
+      VG(VALGRIND_MEMPOOL_FREE(pool, anv_shared_bo_map(bo)));
 
    assert(util_is_power_of_two_or_zero(bo->size));
    const unsigned size_log2 = util_logbase2_ceil(bo->size);
    const unsigned bucket = size_log2 - 12;
    assert(bucket < ARRAY_SIZE(pool->free_list));
+   struct anv_shared_bo *cur_bo, *old_bo;
 
-   assert(util_sparse_array_get(&pool->device->bo_cache.bo_map,
-                                bo->gem_handle) == bo);
-   util_sparse_array_free_list_push(&pool->free_list[bucket],
-                                    &bo->gem_handle, 1);
+   old_bo = p_atomic_read(&pool->free_list[bucket]);
+   do {
+      cur_bo = old_bo;
+      bo->next = cur_bo;
+      old_bo = p_atomic_cmpxchg(&pool->free_list[bucket], cur_bo, bo);
+   } while (cur_bo != old_bo);
 }
 
 // Scratch pool

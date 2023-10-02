@@ -919,6 +919,12 @@ anv_shared_bo_address(const struct anv_shared_bo *bo)
    return bo ? bo->address : ANV_NULL_ADDRESS;
 }
 
+static inline uint64_t
+anv_shared_bo_address_u64(const struct anv_shared_bo *bo)
+{
+   return anv_address_physical(bo->address);
+}
+
 static inline void *
 anv_shared_bo_map(const struct anv_shared_bo *bo)
 {
@@ -970,15 +976,15 @@ struct anv_bo_pool {
 
    enum anv_bo_alloc_flags bo_alloc_flags;
 
-   struct util_sparse_array_free_list free_list[16];
+   struct anv_shared_bo *free_list[16];
 };
 
 void anv_bo_pool_init(struct anv_bo_pool *pool, struct anv_device *device,
                       const char *name, enum anv_bo_alloc_flags alloc_flags);
 void anv_bo_pool_finish(struct anv_bo_pool *pool);
 VkResult anv_bo_pool_alloc(struct anv_bo_pool *pool, uint32_t size,
-                           struct anv_bo **bo_out);
-void anv_bo_pool_free(struct anv_bo_pool *pool, struct anv_bo *bo);
+                           struct anv_shared_bo **bo_out);
+void anv_bo_pool_free(struct anv_bo_pool *pool, struct anv_shared_bo *bo);
 
 struct anv_scratch_pool {
    /* Indexed by Per-Thread Scratch Space number (the hardware value) and stage */
@@ -1727,7 +1733,7 @@ struct anv_device_astc_emu {
 };
 
 struct anv_trtt_batch_bo {
-   struct anv_bo *bo;
+   struct anv_shared_bo *bo;
    uint32_t size;
 
    /* Once device->trtt.timeline_handle signals timeline_val as complete we
@@ -2174,7 +2180,7 @@ struct anv_batch_bo {
    /* Link in the anv_cmd_buffer.owned_batch_bos list */
    struct list_head                             link;
 
-   struct anv_bo *                              bo;
+   struct anv_shared_bo                        *bo;
 
    /* Bytes actually consumed in this batch BO */
    uint32_t                                     length;
@@ -3773,7 +3779,7 @@ struct anv_cmd_buffer {
        * When generating draws in ring mode, this buffer will hold generated
        * 3DPRIMITIVE commands.
        */
-      struct anv_bo                            *ring_bo;
+      struct anv_shared_bo                     *ring_bo;
 
       /**
        * State tracking of the generation shader (only used for the non-ring
@@ -5691,7 +5697,11 @@ struct anv_utrace_submit {
     */
    struct anv_reloc_list relocs;
    struct anv_batch batch;
+
+   /* List of anv_shared_bo */
    struct util_dynarray batch_bos;
+
+   struct anv_shared_bo *batch_bo;
 
    /* Stream for temporary allocations */
    struct anv_state_stream dynamic_state_stream;
@@ -5704,7 +5714,7 @@ struct anv_utrace_submit {
    struct anv_queue *queue;
 
    /* Buffer of 64bits timestamps (only used for timestamp copies) */
-   struct anv_bo *trace_bo;
+   struct anv_shared_bo *trace_bo;
 
    /* Last fully read 64bit timestamp (used to rebuild the upper bits of 32bit
     * timestamps)

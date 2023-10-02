@@ -301,7 +301,8 @@ anv_batch_bo_clone(struct anv_cmd_buffer *cmd_buffer,
       goto fail_bo_alloc;
 
    bbo->length = other_bbo->length;
-   memcpy(bbo->bo->map, other_bbo->bo->map, other_bbo->length);
+   memcpy(anv_shared_bo_map(bbo->bo),
+          anv_shared_bo_map(other_bbo->bo), other_bbo->length);
    *bbo_out = bbo;
 
    return VK_SUCCESS;
@@ -318,8 +319,10 @@ static void
 anv_batch_bo_start(struct anv_batch_bo *bbo, struct anv_batch *batch,
                    size_t batch_padding)
 {
-   anv_batch_set_storage(batch, (struct anv_address) { .bo = bbo->bo, },
-                         bbo->bo->map, bbo->bo->size - batch_padding);
+   anv_batch_set_storage(batch,
+                         anv_shared_bo_address(bbo->bo),
+                         anv_shared_bo_map(bbo->bo),
+                         bbo->bo->size - batch_padding);
    batch->relocs = &bbo->relocs;
    anv_reloc_list_clear(&bbo->relocs);
 }
@@ -328,17 +331,17 @@ static void
 anv_batch_bo_continue(struct anv_batch_bo *bbo, struct anv_batch *batch,
                       size_t batch_padding)
 {
-   batch->start_addr = (struct anv_address) { .bo = bbo->bo, };
-   batch->start = bbo->bo->map;
-   batch->next = bbo->bo->map + bbo->length;
-   batch->end = bbo->bo->map + bbo->bo->size - batch_padding;
+   batch->start_addr = anv_shared_bo_address(bbo->bo);
+   batch->start = anv_shared_bo_map(bbo->bo);
+   batch->next = batch->start + bbo->length;
+   batch->end = batch->start + bbo->bo->size - batch_padding;
    batch->relocs = &bbo->relocs;
 }
 
 static void
 anv_batch_bo_finish(struct anv_batch_bo *bbo, struct anv_batch *batch)
 {
-   assert(batch->start == bbo->bo->map);
+   assert(batch->start == anv_shared_bo_map(bbo->bo));
    bbo->length = batch->next - batch->start;
    VG(VALGRIND_CHECK_MEM_IS_DEFINED(batch->start, bbo->length));
 }
@@ -351,18 +354,22 @@ anv_batch_bo_link(struct anv_cmd_buffer *cmd_buffer,
 {
    const uint32_t bb_start_offset =
       prev_bbo->length - GFX9_MI_BATCH_BUFFER_START_length * 4;
-   ASSERTED const uint32_t *bb_start = prev_bbo->bo->map + bb_start_offset;
+   ASSERTED const uint32_t *bb_start =
+      anv_shared_bo_map(prev_bbo->bo) + bb_start_offset;
 
    /* Make sure we're looking at a MI_BATCH_BUFFER_START */
    assert(((*bb_start >> 29) & 0x07) == 0);
    assert(((*bb_start >> 23) & 0x3f) == 49);
 
-   uint64_t *map = prev_bbo->bo->map + bb_start_offset + 4;
-   *map = intel_canonical_address(next_bbo->bo->offset + next_bbo_offset);
+   uint64_t *map = anv_shared_bo_map(prev_bbo->bo) + bb_start_offset + 4;
+   *map = intel_canonical_address(
+      anv_address_physical(
+         anv_address_add(anv_shared_bo_address(next_bbo->bo),
+                         next_bbo_offset)));
 
 #ifdef SUPPORT_INTEL_INTEGRATED_GPUS
    if (cmd_buffer->device->physical->memory.need_flush &&
-       anv_bo_needs_host_cache_flush(prev_bbo->bo->alloc_flags))
+       anv_bo_needs_host_cache_flush(anv_shared_bo_bo(prev_bbo->bo)->alloc_flags))
       intel_flush_range(map, sizeof(uint64_t));
 #endif
 }
@@ -455,14 +462,16 @@ anv_cmd_buffer_surface_base_address(struct anv_cmd_buffer *cmd_buffer)
 
 static void
 emit_batch_buffer_start(struct anv_batch *batch,
-                        struct anv_bo *bo, uint32_t offset)
+                        struct anv_shared_bo *bo,
+                        uint32_t offset)
 {
    anv_batch_emit(batch, GFX9_MI_BATCH_BUFFER_START, bbs) {
       bbs.DWordLength               = GFX9_MI_BATCH_BUFFER_START_length -
                                       GFX9_MI_BATCH_BUFFER_START_length_bias;
       bbs.SecondLevelBatchBuffer    = Firstlevelbatch;
       bbs.AddressSpaceIndicator     = ASI_PPGTT;
-      bbs.BatchBufferStartAddress   = (struct anv_address) { bo, offset };
+      bbs.BatchBufferStartAddress   = anv_address_add(
+         anv_shared_bo_address(bo), offset);
    }
 }
 
@@ -489,7 +498,7 @@ cmd_buffer_chain_to_batch_bo(struct anv_cmd_buffer *cmd_buffer,
     * chaining command, let's set it back where it should go.
     */
    batch->end += GFX9_MI_BATCH_BUFFER_START_length * 4;
-   assert(batch->end == current_bbo->bo->map + current_bbo->bo->size);
+   assert(batch->end == anv_shared_bo_map(current_bbo->bo) + current_bbo->bo->size);
 
    emit_batch_buffer_start(batch, bbo->bo, 0);
 
@@ -516,11 +525,11 @@ anv_cmd_buffer_record_chain_submit(struct anv_cmd_buffer *cmd_buffer_from,
       __anv_cmd_header(GFX9_MI_BATCH_BUFFER_START),
       .SecondLevelBatchBuffer    = Firstlevelbatch,
       .AddressSpaceIndicator     = ASI_PPGTT,
-      .BatchBufferStartAddress   = (struct anv_address) { first_bbo->bo, 0 },
+      .BatchBufferStartAddress   = anv_shared_bo_address(first_bbo->bo),
    };
    struct anv_batch local_batch = {
-      .start  = last_bbo->bo->map,
-      .end    = last_bbo->bo->map + last_bbo->bo->size,
+      .start  = anv_shared_bo_map(last_bbo->bo),
+      .end    = anv_shared_bo_map(last_bbo->bo) + last_bbo->bo->size,
       .relocs = &last_bbo->relocs,
       .alloc  = &cmd_buffer_from->vk.pool->alloc,
    };
@@ -804,7 +813,7 @@ anv_cmd_buffer_alloc_space(struct anv_cmd_buffer *cmd_buffer,
 
    assert(alignment <= 4096);
 
-   struct anv_bo *bo = NULL;
+   struct anv_shared_bo *bo = NULL;
    VkResult result =
       anv_bo_pool_alloc(mapped ?
                         &cmd_buffer->device->batch_bo_pool :
@@ -815,11 +824,11 @@ anv_cmd_buffer_alloc_space(struct anv_cmd_buffer *cmd_buffer,
       return ANV_EMPTY_ALLOC;
    }
 
-   struct anv_bo **bo_entry =
+   struct anv_shared_bo **bo_entry =
       u_vector_add(&cmd_buffer->dynamic_bos);
    if (bo_entry == NULL) {
       anv_batch_set_error(&cmd_buffer->batch, VK_ERROR_OUT_OF_HOST_MEMORY);
-      anv_bo_pool_free(bo->map != NULL ?
+      anv_bo_pool_free(mapped ?
                        &cmd_buffer->device->batch_bo_pool :
                        &cmd_buffer->device->bvh_bo_pool, bo);
       return ANV_EMPTY_ALLOC;
@@ -827,8 +836,8 @@ anv_cmd_buffer_alloc_space(struct anv_cmd_buffer *cmd_buffer,
    *bo_entry = bo;
 
    return (struct anv_cmd_alloc) {
-      .address = (struct anv_address) { .bo = bo },
-      .map = bo->map,
+      .address = anv_shared_bo_address(bo),
+      .map = anv_shared_bo_map(bo),
       .size = size,
    };
 }
@@ -1025,8 +1034,8 @@ anv_cmd_buffer_end_batch_buffer(struct anv_cmd_buffer *cmd_buffer)
        * with our BATCH_BUFFER_END in another BO.
        */
       cmd_buffer->batch.end += GFX9_MI_BATCH_BUFFER_START_length * 4;
-      assert(cmd_buffer->batch.start == batch_bo->bo->map);
-      assert(cmd_buffer->batch.end == batch_bo->bo->map + batch_bo->bo->size);
+      assert(cmd_buffer->batch.start == anv_shared_bo_map(batch_bo->bo));
+      assert(cmd_buffer->batch.end == anv_shared_bo_map(batch_bo->bo) + batch_bo->bo->size);
 
       /* Save end instruction location to override it later. */
       cmd_buffer->batch_end = cmd_buffer->batch.next;
@@ -1087,11 +1096,11 @@ anv_cmd_buffer_end_batch_buffer(struct anv_cmd_buffer *cmd_buffer)
           * chaining command, let's set it back where it should go.
           */
          cmd_buffer->batch.end += GFX9_MI_BATCH_BUFFER_START_length * 4;
-         assert(cmd_buffer->batch.start == batch_bo->bo->map);
-         assert(cmd_buffer->batch.end == batch_bo->bo->map + batch_bo->bo->size);
+         assert(cmd_buffer->batch.start == anv_shared_bo_map(batch_bo->bo));
+         assert(cmd_buffer->batch.end == anv_shared_bo_map(batch_bo->bo) + batch_bo->bo->size);
 
          emit_batch_buffer_start(&cmd_buffer->batch, batch_bo->bo, 0);
-         assert(cmd_buffer->batch.start == batch_bo->bo->map);
+         assert(cmd_buffer->batch.start == anv_shared_bo_map(batch_bo->bo));
       } else {
          cmd_buffer->exec_mode = ANV_CMD_BUFFER_EXEC_MODE_COPY_AND_CHAIN;
       }
@@ -1138,7 +1147,7 @@ anv_cmd_buffer_add_secondary(struct anv_cmd_buffer *primary,
       emit_batch_buffer_start(&primary->batch, first_bbo->bo, 0);
 
       struct anv_batch_bo *this_bbo = anv_cmd_buffer_current_batch_bo(primary);
-      assert(primary->batch.start == this_bbo->bo->map);
+      assert(primary->batch.start == anv_shared_bo_map(this_bbo->bo));
       uint32_t offset = primary->batch.next - primary->batch.start;
 
       /* Make the tail of the secondary point back to right after the
@@ -1179,7 +1188,7 @@ anv_cmd_buffer_add_secondary(struct anv_cmd_buffer *primary,
 
       anv_genX(primary->device->info, batch_emit_secondary_call)(
          &primary->batch,
-         (struct anv_address) { .bo = first_bbo->bo },
+         anv_shared_bo_address(first_bbo->bo),
          secondary->return_addr);
 
       anv_cmd_buffer_add_seen_bbos(primary, &secondary->batch_bos);
@@ -1233,12 +1242,20 @@ anv_print_batch(struct anv_device *device,
    }
 
    if (INTEL_DEBUG(DEBUG_BATCH)) {
-      intel_print_batch(ctx, bbo->bo->map,
-                        bbo->bo->size, bbo->bo->offset, false);
+      intel_print_batch(ctx,
+                        anv_shared_bo_map(bbo->bo),
+                        bbo->bo->size,
+                        anv_address_physical(
+                           anv_shared_bo_address(bbo->bo)),
+                        false);
    }
    if (INTEL_DEBUG(DEBUG_BATCH_STATS)) {
-      intel_batch_stats(ctx, bbo->bo->map,
-                        bbo->bo->size, bbo->bo->offset, false);
+      intel_batch_stats(ctx,
+                        anv_shared_bo_map(bbo->bo),
+                        bbo->bo->size,
+                        anv_address_physical(
+                           anv_shared_bo_address(bbo->bo)),
+                        false);
    }
    device->cmd_buffer_being_decoded = NULL;
 }
@@ -1635,16 +1652,16 @@ anv_queue_submit_simple_batch(struct anv_queue *queue,
 
    uint32_t batch_size = align(batch->next - batch->start, 8);
 
-   struct anv_bo *batch_bo = NULL;
+   struct anv_shared_bo *batch_bo = NULL;
    result = anv_bo_pool_alloc(&device->batch_bo_pool, batch_size, &batch_bo);
    if (result != VK_SUCCESS)
       return result;
 
-   memcpy(batch_bo->map, batch->start, batch_size);
+   memcpy(anv_shared_bo_map(batch_bo), batch->start, batch_size);
 #ifdef SUPPORT_INTEL_INTEGRATED_GPUS
    if (device->physical->memory.need_flush &&
-       anv_bo_needs_host_cache_flush(batch_bo->alloc_flags))
-      intel_flush_range(batch_bo->map, batch_size);
+       anv_bo_needs_host_cache_flush(anv_shared_bo_bo(batch_bo)->alloc_flags))
+      intel_flush_range(anv_shared_bo_map(batch_bo), batch_size);
 #endif
 
    if (INTEL_DEBUG(DEBUG_BATCH) &&
@@ -1654,7 +1671,11 @@ anv_queue_submit_simple_batch(struct anv_queue *queue,
       struct intel_batch_decode_ctx *ctx = is_companion_rcs_batch ?
                                            &device->decoder[render_queue_idx] :
                                            queue->decoder;
-      intel_print_batch(ctx, batch_bo->map, batch_bo->size, batch_bo->offset,
+      intel_print_batch(ctx,
+                        anv_shared_bo_map(batch_bo),
+                        batch_bo->size,
+                        anv_address_physical(
+                           anv_shared_bo_address(batch_bo)),
                         false);
    }
 
@@ -1681,16 +1702,18 @@ anv_queue_submit_trtt_batch(struct anv_sparse_submission *submit,
    if (result != VK_SUCCESS)
       return result;
 
-   memcpy(trtt_bbo->bo->map, batch->start, trtt_bbo->size);
+   memcpy(anv_shared_bo_map(trtt_bbo->bo), batch->start, trtt_bbo->size);
 #ifdef SUPPORT_INTEL_INTEGRATED_GPUS
    if (device->physical->memory.need_flush &&
-       anv_bo_needs_host_cache_flush(trtt_bbo->bo->alloc_flags))
-      intel_flush_range(trtt_bbo->bo->map, trtt_bbo->size);
+       anv_bo_needs_host_cache_flush(anv_shared_bo_bo(trtt_bbo->bo)->alloc_flags))
+      intel_flush_range(anv_shared_bo_map(trtt_bbo->bo), trtt_bbo->size);
 #endif
 
    if (INTEL_DEBUG(DEBUG_BATCH)) {
-      intel_print_batch(queue->decoder, trtt_bbo->bo->map, trtt_bbo->bo->size,
-                        trtt_bbo->bo->offset, false);
+      intel_print_batch(queue->decoder,
+                        anv_shared_bo_map(trtt_bbo->bo),
+                        trtt_bbo->bo->size,
+                        anv_shared_bo_address_u64(trtt_bbo->bo), false);
    }
 
    result = device->kmd_backend->execute_trtt_batch(submit, trtt_bbo);
@@ -1709,7 +1732,8 @@ anv_cmd_buffer_clflush(struct anv_cmd_buffer **cmd_buffers,
 
    for (uint32_t i = 0; i < num_cmd_buffers; i++) {
       u_vector_foreach(bbo, &cmd_buffers[i]->seen_bbos) {
-         intel_flush_range_no_fence((*bbo)->bo->map, (*bbo)->length);
+         intel_flush_range_no_fence(
+            anv_shared_bo_map((*bbo)->bo), (*bbo)->length);
       }
    }
 

@@ -3651,7 +3651,7 @@ struct anv_cmd_state {
 };
 
 #define ANV_MIN_CMD_BUFFER_BATCH_SIZE 8192
-#define ANV_MAX_CMD_BUFFER_BATCH_SIZE (16 * 1024 * 1024)
+#define ANV_MAX_CMD_BUFFER_BATCH_SIZE (1 * 1024 * 1024)
 
 enum anv_cmd_buffer_exec_mode {
    ANV_CMD_BUFFER_EXEC_MODE_PRIMARY,

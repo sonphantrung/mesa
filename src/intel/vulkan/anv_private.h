@@ -2758,7 +2758,7 @@ anv_descriptor_set_address(struct anv_descriptor_set *set)
 
 struct anv_descriptor_pool_heap {
    /* BO allocated to back the pool (unused for host pools) */
-   struct anv_bo        *bo;
+   struct anv_shared_bo *bo;
 
    /* Host memory allocated to back a host pool */
    void                 *host_mem;

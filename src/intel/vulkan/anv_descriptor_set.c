@@ -1171,18 +1171,18 @@ anv_descriptor_pool_heap_init(struct anv_device *device,
          device->physical->indirect_descriptors ? "indirect descriptors" :
          samplers ? "direct sampler" : "direct surfaces";
 
-      heap->size = align(size, 4096);
+      heap->size = align(size, 64);
 
-      VkResult result = anv_device_alloc_bo(device,
-                                            bo_name, heap->size,
-                                            ANV_BO_ALLOC_CAPTURE |
-                                            ANV_BO_ALLOC_MAPPED |
-                                            ANV_BO_ALLOC_HOST_CACHED_COHERENT |
-                                            (samplers ?
-                                             ANV_BO_ALLOC_SAMPLER_POOL :
-                                             ANV_BO_ALLOC_DESCRIPTOR_POOL),
-                                            0 /* explicit_address */,
-                                            &heap->bo);
+      VkResult result = anv_shared_bo_pool_alloc(&device->shared_bo_pool,
+                                                 bo_name, heap->size, 64,
+                                                 ANV_BO_ALLOC_CAPTURE |
+                                                 ANV_BO_ALLOC_MAPPED |
+                                                 ANV_BO_ALLOC_HOST_CACHED_COHERENT |
+                                                 (samplers ?
+                                                  ANV_BO_ALLOC_SAMPLER_POOL :
+                                                  ANV_BO_ALLOC_DESCRIPTOR_POOL),
+                                                 0 /* explicit_address */,
+                                                 &heap->bo);
       if (result != VK_SUCCESS)
          return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
    }
@@ -1202,7 +1202,7 @@ anv_descriptor_pool_heap_fini(struct anv_device *device,
    util_vma_heap_finish(&heap->heap);
 
    if (heap->bo)
-      anv_device_release_bo(device, heap->bo);
+      anv_shared_bo_pool_release(&device->shared_bo_pool, heap->bo);
 
    if (heap->host_mem)
       vk_free(&device->vk.alloc, heap->host_mem);
@@ -1238,7 +1238,7 @@ anv_descriptor_pool_heap_alloc(struct anv_descriptor_pool *pool,
    if (heap->host_mem)
       state->map = heap->host_mem + state->offset;
    else
-      state->map = heap->bo->map + state->offset;
+      state->map = anv_shared_bo_map(heap->bo) + state->offset;
 
    return VK_SUCCESS;
 }
@@ -1579,10 +1579,9 @@ anv_descriptor_set_create(struct anv_device *device,
          return result;
       }
 
-      set->desc_surface_addr = (struct anv_address) {
-         .bo = pool->surfaces.bo,
-         .offset = set->desc_surface_mem.offset,
-      };
+      set->desc_surface_addr = anv_address_add(
+         anv_shared_bo_address(pool->surfaces.bo),
+         set->desc_surface_mem.offset);
       set->desc_offset = anv_address_physical(set->desc_surface_addr) -
                          device->physical->va.internal_surface_state_pool.addr;
 
@@ -1618,10 +1617,9 @@ anv_descriptor_set_create(struct anv_device *device,
          return result;
       }
 
-      set->desc_sampler_addr = (struct anv_address) {
-         .bo = pool->samplers.bo,
-         .offset = set->desc_sampler_mem.offset,
-      };
+      set->desc_sampler_addr = anv_address_add(
+         anv_shared_bo_address(pool->samplers.bo),
+         set->desc_sampler_mem.offset);
    } else {
       set->desc_sampler_mem = ANV_STATE_NULL;
       set->desc_sampler_addr = ANV_NULL_ADDRESS;

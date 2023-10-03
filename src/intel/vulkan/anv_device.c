@@ -3536,10 +3536,6 @@ VkResult anv_CreateDevice(
    if (result != VK_SUCCESS)
       goto fail_btd_fifo_bo;
 
-   result = anv_genX(device->info, init_device_state)(device);
-   if (result != VK_SUCCESS)
-      goto fail_trtt;
-
    struct vk_pipeline_cache_create_info pcc_info = { };
    device->default_pipeline_cache =
       vk_pipeline_cache_create(&device->vk, &pcc_info, NULL);
@@ -3640,10 +3636,22 @@ VkResult anv_CreateDevice(
    if (device->info->ver > 9)
       BITSET_CLEAR(device->gfx_dirty_state, ANV_GFX_STATE_PMA_FIX);
 
+   result = anv_genX(device->info, init_device_state)(device);
+   if (result != VK_SUCCESS)
+      goto fail_companion_rcs_cmd_pool;
+
    *pDevice = anv_device_to_handle(device);
 
    return VK_SUCCESS;
 
+ fail_companion_rcs_cmd_pool:
+   anv_device_utrace_finish(device);
+   anv_device_finish_internal_kernels(device);
+   anv_device_finish_blorp(device);
+   if (device->info->verx10 >= 125) {
+      vk_common_DestroyCommandPool(anv_device_to_handle(device),
+                                   device->companion_rcs_cmd_pool, NULL);
+   }
  fail_internal_cache:
    vk_pipeline_cache_destroy(device->internal_cache, NULL);
  fail_default_pipeline_cache:

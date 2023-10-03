@@ -644,7 +644,8 @@ anv_state_pool_init(struct anv_state_pool *pool,
                     struct anv_device *device,
                     const struct anv_state_pool_params *params)
 {
-   uint32_t initial_size = MAX2(params->block_size * 16,
+   uint32_t initial_size = MAX3(params->initial_size,
+                                params->block_size * 16,
                                 device->info->mem_alignment);
 
    VkResult result = anv_block_pool_init(&pool->block_pool, device,

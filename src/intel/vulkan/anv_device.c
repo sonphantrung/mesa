@@ -3292,7 +3292,8 @@ VkResult anv_CreateDevice(
                                    .base_address = 0,
                                    .start_offset = device->physical->va.general_state_pool.addr,
                                    .block_size   = 16384,
-                                   .max_size     = device->physical->va.general_state_pool.size
+                                   .max_size     = device->physical->va.general_state_pool.size,
+                                   .initial_size = min_gem_allocation_size,
                                 });
    if (result != VK_SUCCESS)
       goto fail_batch_bo_pool;
@@ -3303,6 +3304,7 @@ VkResult anv_CreateDevice(
                                    .base_address = device->physical->va.dynamic_state_pool.addr,
                                    .block_size   = 16384,
                                    .max_size     = device->physical->va.dynamic_state_pool.size,
+                                   .initial_size = min_gem_allocation_size,
                                 });
    if (result != VK_SUCCESS)
       goto fail_general_state_pool;
@@ -3324,6 +3326,7 @@ VkResult anv_CreateDevice(
                                    .base_address = device->physical->va.instruction_state_pool.addr,
                                    .block_size   = 16384,
                                    .max_size     = device->physical->va.instruction_state_pool.size,
+                                   .initial_size = min_gem_allocation_size,
                                 });
    if (result != VK_SUCCESS)
       goto fail_dynamic_state_pool;
@@ -3338,6 +3341,7 @@ VkResult anv_CreateDevice(
                                       .base_address = device->physical->va.scratch_surface_state_pool.addr,
                                       .block_size   = 4096,
                                       .max_size     = device->physical->va.scratch_surface_state_pool.size,
+                                      .initial_size = min_gem_allocation_size,
                                    });
       if (result != VK_SUCCESS)
          goto fail_instruction_state_pool;
@@ -3349,6 +3353,7 @@ VkResult anv_CreateDevice(
                                       .start_offset = device->physical->va.scratch_surface_state_pool.size,
                                       .block_size   = 4096,
                                       .max_size     = device->physical->va.internal_surface_state_pool.size,
+                                      .initial_size = min_gem_allocation_size,
                                    });
    } else {
       result = anv_state_pool_init(&device->internal_surface_state_pool, device,
@@ -3357,6 +3362,7 @@ VkResult anv_CreateDevice(
                                       .base_address = device->physical->va.internal_surface_state_pool.addr,
                                       .block_size   = 4096,
                                       .max_size     = device->physical->va.internal_surface_state_pool.size,
+                                      .initial_size = min_gem_allocation_size,
                                    });
    }
    if (result != VK_SUCCESS)
@@ -3369,6 +3375,7 @@ VkResult anv_CreateDevice(
                                       .base_address = device->physical->va.bindless_surface_state_pool.addr,
                                       .block_size   = 4096,
                                       .max_size     = device->physical->va.bindless_surface_state_pool.size,
+                                      .initial_size = min_gem_allocation_size,
                                    });
       if (result != VK_SUCCESS)
          goto fail_internal_surface_state_pool;
@@ -3384,6 +3391,7 @@ VkResult anv_CreateDevice(
                                       .base_address = device->physical->va.binding_table_pool.addr,
                                       .block_size   = BINDING_TABLE_POOL_BLOCK_SIZE,
                                       .max_size     = device->physical->va.binding_table_pool.size,
+                                      .initial_size = min_gem_allocation_size,
                                    });
    } else {
       /* The binding table should be in front of the surface states in virtual
@@ -3402,6 +3410,7 @@ VkResult anv_CreateDevice(
                                       .start_offset = bt_pool_offset,
                                       .block_size   = BINDING_TABLE_POOL_BLOCK_SIZE,
                                       .max_size     = device->physical->va.internal_surface_state_pool.size,
+                                      .initial_size = min_gem_allocation_size,
                                    });
    }
    if (result != VK_SUCCESS)
@@ -3414,6 +3423,7 @@ VkResult anv_CreateDevice(
                                       .base_address = device->physical->va.indirect_push_descriptor_pool.addr,
                                       .block_size   = 4096,
                                       .max_size     = device->physical->va.indirect_push_descriptor_pool.size,
+                                      .initial_size = min_gem_allocation_size,
                                    });
       if (result != VK_SUCCESS)
          goto fail_binding_table_pool;

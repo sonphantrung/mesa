@@ -806,6 +806,7 @@ struct anv_state_pool_params {
    int64_t     start_offset;
    uint32_t    block_size;
    uint32_t    max_size;
+   uint32_t    initial_size;
 };
 
 VkResult anv_state_pool_init(struct anv_state_pool *pool,

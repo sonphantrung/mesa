@@ -424,7 +424,7 @@ struct tu_bin_size_params {
    enum a6xx_render_mode render_mode;
    bool force_lrz_write_dis;
    enum a6xx_buffers_location buffers_location;
-   unsigned lrz_feedback_zmode_mask;
+   enum a6xx_lrz_feedback_mask lrz_feedback_zmode_mask;
 };
 
 template <chip CHIP>
@@ -1627,9 +1627,13 @@ tu6_sysmem_render_begin(struct tu_cmd_buffer *cmd, struct tu_cs *cs,
 
    tu6_emit_bin_size<CHIP>(cs, 0, 0, {
       .render_mode = RENDERING_PASS,
-      .force_lrz_write_dis = true,
+      .force_lrz_write_dis =
+         !cmd->device->physical_device->info->a6xx.enable_lrz_feedback,
       .buffers_location = BUFFERS_IN_SYSMEM,
-      .lrz_feedback_zmode_mask = 0x0,
+      .lrz_feedback_zmode_mask =
+         cmd->device->physical_device->info->a6xx.enable_lrz_feedback
+            ? LRZ_FEEDBACK_EARLY_Z_OR_EARLY_LRZ_LATE_Z
+            : LRZ_FEEDBACK_NONE,
    });
 
    if (CHIP == A7XX) {
@@ -1714,20 +1718,27 @@ tu6_tile_render_begin(struct tu_cmd_buffer *cmd, struct tu_cs *cs,
                               {
                                  .render_mode = BINNING_PASS,
                                  .buffers_location = BUFFERS_IN_GMEM,
-                                 .lrz_feedback_zmode_mask = 0x6,
+                                 .lrz_feedback_zmode_mask = LRZ_FEEDBACK_NONE,
                               });
 
       tu6_emit_render_cntl<CHIP>(cmd, cmd->state.subpass, cs, true);
 
       tu6_emit_binning_pass<CHIP>(cmd, cs);
 
-      tu6_emit_bin_size<CHIP>(cs, tiling->tile0.width, tiling->tile0.height,
-                              {
-                                 .render_mode = RENDERING_PASS,
-                                 .force_lrz_write_dis = true,
-                                 .buffers_location = BUFFERS_IN_GMEM,
-                                 .lrz_feedback_zmode_mask = 0x6,
-                              });
+      tu6_emit_bin_size<CHIP>(
+         cs, tiling->tile0.width, tiling->tile0.height,
+         {
+            .render_mode = RENDERING_PASS,
+            .force_lrz_write_dis = !phys_dev->info->a6xx.enable_lrz_feedback,
+            .buffers_location = BUFFERS_IN_GMEM,
+            /* A7XX TODO: On a7xx sometimes feedback mask is
+             * LRZ_FEEDBACK_EARLY_Z_OR_EARLY_LRZ_LATE_Z
+             */
+            .lrz_feedback_zmode_mask =
+               phys_dev->info->a6xx.enable_lrz_feedback
+                  ? LRZ_FEEDBACK_EARLY_LRZ_LATE_Z
+                  : LRZ_FEEDBACK_NONE,
+         });
 
       tu_cs_emit_regs(cs,
                       A6XX_VFD_MODE_CNTL(RENDERING_PASS));
@@ -1743,12 +1754,17 @@ tu6_tile_render_begin(struct tu_cmd_buffer *cmd, struct tu_cs *cs,
       tu_cs_emit_pkt7(cs, CP_SKIP_IB2_ENABLE_LOCAL, 1);
       tu_cs_emit(cs, 0x1);
    } else {
-      tu6_emit_bin_size<CHIP>(cs, tiling->tile0.width, tiling->tile0.height,
-                              {
-                                 .render_mode = RENDERING_PASS,
-                                 .buffers_location = BUFFERS_IN_GMEM,
-                                 .lrz_feedback_zmode_mask = 0x6,
-                              });
+      tu6_emit_bin_size<CHIP>(
+         cs, tiling->tile0.width, tiling->tile0.height,
+         {
+            .render_mode = RENDERING_PASS,
+            .force_lrz_write_dis = !phys_dev->info->a6xx.enable_lrz_feedback,
+            .buffers_location = BUFFERS_IN_GMEM,
+            .lrz_feedback_zmode_mask =
+               phys_dev->info->a6xx.enable_lrz_feedback
+                  ? LRZ_FEEDBACK_EARLY_Z_OR_EARLY_LRZ_LATE_Z
+                  : LRZ_FEEDBACK_NONE,
+         });
 
       if (tiling->binning_possible) {
          /* Mark all tiles as visible for tu6_emit_cond_for_load_stores(), since

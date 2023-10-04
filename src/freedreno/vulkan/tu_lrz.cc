@@ -377,6 +377,11 @@ tu_lrz_tiling_end(struct tu_cmd_buffer *cmd, struct tu_cs *cs)
 void
 tu_lrz_sysmem_begin(struct tu_cmd_buffer *cmd, struct tu_cs *cs)
 {
+   if (cmd->device->physical_device->info->a6xx.enable_lrz_feedback) {
+      tu_lrz_tiling_begin(cmd, cs);
+      return;
+   }
+
    if (!cmd->state.lrz.image_view)
       return;
 
@@ -412,6 +417,11 @@ tu_lrz_sysmem_begin(struct tu_cmd_buffer *cmd, struct tu_cs *cs)
 void
 tu_lrz_sysmem_end(struct tu_cmd_buffer *cmd, struct tu_cs *cs)
 {
+   if (cmd->device->physical_device->info->a6xx.enable_lrz_feedback) {
+      tu_lrz_tiling_end(cmd, cs);
+      return;
+   }
+
    tu_emit_event_write<A6XX>(cmd, &cmd->cs, FD_LRZ_FLUSH);
 }
 

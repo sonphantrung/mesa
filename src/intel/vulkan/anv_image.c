@@ -677,7 +677,7 @@ add_aux_state_tracking_buffer(struct anv_device *device,
     * lack of testing.  And MI_LOAD/STORE operations require dword-alignment.
     */
    return image_binding_grow(device, image, binding,
-                             state_offset, state_size, 4096,
+                             state_offset, state_size, 256,
                              &image->planes[plane].fast_clear_memory_range);
 }
 
@@ -1159,7 +1159,7 @@ check_memory_bindings(const struct anv_device *device,
           * due to lack of testing.  And MI_LOAD/STORE operations require
           * dword-alignment.
           */
-         assert(plane->fast_clear_memory_range.alignment == 4096);
+         assert(plane->fast_clear_memory_range.alignment == 256);
          check_memory_range(accum_ranges,
                             .test_range = &plane->fast_clear_memory_range,
                             .expect_binding = binding);

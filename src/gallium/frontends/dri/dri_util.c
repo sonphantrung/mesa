@@ -1105,16 +1105,6 @@ driGLFormatToSizedInternalGLFormat(mesa_format format)
    return GL_NONE;
 }
 
-mesa_format
-driImageFormatToGLFormat(uint32_t image_format)
-{
-   for (size_t i = 0; i < ARRAY_SIZE(format_mapping); i++)
-      if (format_mapping[i].image_format == image_format)
-         return format_mapping[i].mesa_format;
-
-   return MESA_FORMAT_NONE;
-}
-
 /** Image driver interface */
 const __DRIimageDriverExtension driImageDriverExtension = {
     .base = { __DRI_IMAGE_DRIVER, 1 },

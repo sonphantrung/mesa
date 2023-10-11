@@ -1139,6 +1139,7 @@ dri2_create_image_from_name(__DRIscreen *_screen,
 
    img->dri_components = map->dri_components;
    img->dri_fourcc = map->dri_fourcc;
+   img->format = map->pipe_format;
    img->dri_format = map->dri_format;
 
    return img;
@@ -1226,6 +1227,7 @@ dri2_create_image_from_fd(__DRIscreen *_screen,
 
    img->dri_components = map->dri_components;
    img->dri_fourcc = fourcc;
+   img->format = map->pipe_format;
    img->dri_format = map->dri_format;
    img->imported_dmabuf = true;
 
@@ -1313,6 +1315,7 @@ dri2_create_image_common(__DRIscreen *_screen,
 
    img->level = 0;
    img->layer = 0;
+   img->format = map->pipe_format;
    img->dri_format = format;
    img->dri_fourcc = map->dri_fourcc;
    img->dri_components = 0;
@@ -1580,6 +1583,7 @@ dri2_dup_image(__DRIimage *image, void *loaderPrivate)
    pipe_resource_reference(&img->texture, image->texture);
    img->level = image->level;
    img->layer = image->layer;
+   img->format = image->format;
    img->dri_format = image->dri_format;
    img->internal_format = image->internal_format;
    /* This should be 0 for sub images, but dup is also used for base images. */
@@ -1651,6 +1655,7 @@ dri2_from_names(__DRIscreen *screen, int width, int height, int fourcc,
 
    img->dri_components = map->dri_components;
    img->dri_fourcc = map->dri_fourcc;
+   img->format = map->pipe_format;
    img->dri_format = map->dri_format;
 
    return img;

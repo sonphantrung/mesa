@@ -174,6 +174,7 @@ struct __DRIimageRec {
    struct pipe_resource *texture;
    unsigned level;
    unsigned layer;
+   enum pipe_format format;
    uint32_t dri_format;
    uint32_t dri_fourcc;
    uint32_t dri_components;

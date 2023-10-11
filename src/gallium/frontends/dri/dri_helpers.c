@@ -333,6 +333,7 @@ dri2_create_image_from_renderbuffer2(__DRIcontext *context,
       return NULL;
    }
 
+   img->format = rb->Format;
    img->dri_format = driGLFormatToImageFormat(rb->Format);
    img->internal_format = rb->InternalFormat;
    img->loader_private = loaderPrivate;
@@ -442,7 +443,8 @@ dri2_create_from_texture(__DRIcontext *context, int target, unsigned texture,
    img->level = level;
    img->layer = depth;
    img->in_fence_fd = -1;
-   img->dri_format = driGLFormatToImageFormat(obj->Image[face][level]->TexFormat);
+   img->format = obj->Image[face][level]->TexFormat;
+   img->dri_format = driGLFormatToImageFormat(img->format);
    img->internal_format = obj->Image[face][level]->InternalFormat;
 
    img->loader_private = loaderPrivate;

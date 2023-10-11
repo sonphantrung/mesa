@@ -1185,12 +1185,14 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
             /* The linear buffer was created in the display GPU's vram, so we
              * need to make it visible to render GPU
              */
-            dri2_surf->back->linear_copy = dri2_dpy->image->createImageFromFds2(
-               dri2_dpy->dri_screen_render_gpu, dri2_surf->base.Width,
-               dri2_surf->base.Height,
-               loader_image_format_to_fourcc(linear_dri_image_format),
-               &buffer_fds[0], num_planes, 0, &strides[0], &offsets[0],
-               dri2_surf->back);
+            dri2_surf->back->linear_copy =
+               dri2_dpy->image->createImageFromDmaBufs(
+                  dri2_dpy->dri_screen_render_gpu, dri2_surf->base.Width,
+                  dri2_surf->base.Height,
+                  loader_image_format_to_fourcc(linear_dri_image_format),
+                  DRM_FORMAT_MOD_INVALID, &buffer_fds[0], num_planes,
+                  &strides[0], &offsets[0], 0, 0, 0, 0, 0, NULL,
+                  dri2_surf->back);
             for (i = 0; i < num_planes; ++i) {
                if (buffer_fds[i] != -1)
                   close(buffer_fds[i]);
@@ -2254,12 +2256,12 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
    dri2_wl_setup_swap_interval(disp);
 
    if (dri2_dpy->wl_drm) {
-      /* To use Prime, we must have _DRI_IMAGE v7 at least. createImageFromFds
-       * support indicates that Prime export/import is supported by the driver.
-       * We deprecated the support to GEM names API, so we bail out if the
-       * driver does not support Prime. */
+      /* To use Prime, we must have _DRI_IMAGE v7 at least.
+       * createImageFromDmaBufs support indicates that Prime export/import is
+       * supported by the driver. We deprecated the support to GEM names API, so
+       * we bail out if the driver does not support Prime. */
       if (!(dri2_dpy->capabilities & WL_DRM_CAPABILITY_PRIME) ||
-          (dri2_dpy->image->createImageFromFds == NULL)) {
+          (dri2_dpy->image->createImageFromDmaBufs == NULL)) {
          _eglLog(_EGL_WARNING, "wayland-egl: display does not support prime");
          goto cleanup;
       }

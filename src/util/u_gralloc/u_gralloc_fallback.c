@@ -109,7 +109,7 @@ get_format_bpp(int native)
    return bpp;
 }
 
-/* createImageFromFds requires fourcc format */
+/* createImageFromDmaBufs requires fourcc format */
 static int
 get_fourcc(int native)
 {

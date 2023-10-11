@@ -238,9 +238,9 @@ get_dri_format(enum pipe_format pf)
 }
 
 /* the DRIimage createImage function takes __DRI_IMAGE_FORMAT codes, while
- * the createImageFromFds call takes DRM_FORMAT codes. To avoid
+ * the createImageFromDmaBufs call takes DRM_FORMAT codes. To avoid
  * complete confusion, just deal in __DRI_IMAGE_FORMAT codes for now and
- * translate to DRM_FORMAT codes in the call to createImageFromFds
+ * translate to DRM_FORMAT codes in the call to createImageFromDmaBufs
  */
 static int
 image_format_to_fourcc(int format)
@@ -333,17 +333,19 @@ dri3_create_image(xcb_connection_t *c,
    stride = bp_reply->stride;
    offset = 0;
 
-   /* createImageFromFds creates a wrapper __DRIimage structure which
+   /* createImageFromDmaBufs creates a wrapper __DRIimage structure which
     * can deal with multiple planes for things like Yuv images. So, once
     * we've gotten the planar wrapper, pull the single plane out of it and
     * discard the wrapper.
     */
-   image_planar = image->createImageFromFds2(opaque_dri_screen(screen),
-                                             bp_reply->width,
-                                             bp_reply->height,
-                                             image_format_to_fourcc(format),
-                                             fds, 1,
-                                             0, &stride, &offset, loaderPrivate);
+   image_planar = image->createImageFromDmaBufs(opaque_dri_screen(screen),
+                                                bp_reply->width,
+                                                bp_reply->height,
+                                                image_format_to_fourcc(format),
+                                                DRM_FORMAT_MOD_INVALID, fds, 1,
+                                                &stride, &offset,
+                                                0, 0, 0, 0, 0,
+                                                NULL, loaderPrivate);
    close(fds[0]);
    if (!image_planar)
       return NULL;
@@ -383,7 +385,7 @@ handle_in_fence(struct dri_context *ctx, __DRIimage *img)
 /** kopper_get_pixmap_buffer
  *
  * Get the DRM object for a pixmap from the X server and
- * wrap that with a __DRIimage structure using createImageFromFds
+ * wrap that with a __DRIimage structure using createImageFromDmaBufs
  */
 static struct pipe_resource *
 kopper_get_pixmap_buffer(struct dri_drawable *drawable,

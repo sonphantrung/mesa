@@ -47,7 +47,7 @@ const struct dri2_format_mapping *
 dri2_get_mapping_by_fourcc(int fourcc);
 
 const struct dri2_format_mapping *
-dri2_get_mapping_by_format(int format);
+dri2_get_mapping_by_format(enum pipe_format format);
 
 enum pipe_format
 dri2_get_pipe_format_for_dri_format(int format);

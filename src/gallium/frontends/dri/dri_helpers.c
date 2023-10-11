@@ -346,7 +346,7 @@ dri2_create_image_from_renderbuffer2(__DRIcontext *context,
     * it's in a shareable state. Do this now while we still have the access to
     * the context.
     */
-   if (dri2_get_mapping_by_format(img->dri_format))
+   if (dri2_get_mapping_by_format(img->format))
       p_ctx->flush_resource(p_ctx, tex);
 
    ctx->Shared->HasExternallySharedImages = true;
@@ -456,7 +456,7 @@ dri2_create_from_texture(__DRIcontext *context, int target, unsigned texture,
     * it's in a shareable state. Do this now while we still have the access to
     * the context.
     */
-   if (dri2_get_mapping_by_format(img->dri_format))
+   if (dri2_get_mapping_by_format(img->format))
       p_ctx->flush_resource(p_ctx, tex);
 
    ctx->Shared->HasExternallySharedImages = true;
@@ -697,13 +697,13 @@ dri2_get_mapping_by_fourcc(int fourcc)
 }
 
 const struct dri2_format_mapping *
-dri2_get_mapping_by_format(int format)
+dri2_get_mapping_by_format(enum pipe_format format)
 {
-   if (format == __DRI_IMAGE_FORMAT_NONE)
+   if (format == PIPE_FORMAT_NONE)
       return NULL;
 
    for (unsigned i = 0; i < ARRAY_SIZE(dri2_format_table); i++) {
-      if (dri2_format_table[i].dri_format == format)
+      if (dri2_format_table[i].pipe_format == format)
          return &dri2_format_table[i];
    }
 

@@ -1111,12 +1111,21 @@ dri2_create_image_from_winsys(__DRIscreen *_screen,
    return img;
 }
 
+static const struct dri2_format_mapping *
+dri2_get_mapping_by_dri_format(int format)
+{
+   enum pipe_format pf = dri2_get_pipe_format_for_dri_format(format);
+   if (pf == PIPE_FORMAT_NONE)
+      return NULL;
+   return dri2_get_mapping_by_format(pf);
+}
+
 static __DRIimage *
 dri2_create_image_from_name(__DRIscreen *_screen,
                             int width, int height, int format,
                             int name, int pitch, void *loaderPrivate)
 {
-   const struct dri2_format_mapping *map = dri2_get_mapping_by_format(format);
+   const struct dri2_format_mapping *map = dri2_get_mapping_by_dri_format(format);
    struct winsys_handle whandle;
    __DRIimage *img;
 
@@ -1246,7 +1255,7 @@ dri2_create_image_common(__DRIscreen *_screen,
                          const unsigned count,
                          void *loaderPrivate)
 {
-   const struct dri2_format_mapping *map = dri2_get_mapping_by_format(format);
+   const struct dri2_format_mapping *map = dri2_get_mapping_by_dri_format(format);
    struct dri_screen *screen = dri_screen(_screen);
    struct pipe_screen *pscreen = screen->base.screen;
    __DRIimage *img;
@@ -1384,7 +1393,7 @@ dri2_query_image_common(__DRIimage *image, int attrib, int *value)
       } else {
          const struct dri2_format_mapping *map;
 
-         map = dri2_get_mapping_by_format(image->dri_format);
+         map = dri2_get_mapping_by_format(image->format);
          if (!map)
             return false;
 
@@ -1947,7 +1956,7 @@ dri2_map_image(__DRIcontext *context, __DRIimage *image,
       return NULL;
 
    unsigned plane = image->plane;
-   if (plane >= dri2_get_mapping_by_format(image->dri_format)->nplanes)
+   if (plane >= dri2_get_mapping_by_format(image->format)->nplanes)
       return NULL;
 
    /* Wait for glthread to finish because we can't use pipe_context from

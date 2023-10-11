@@ -910,8 +910,7 @@ dri2_setup_screen(_EGLDisplay *disp)
    disp->Extensions.KHR_reusable_sync = EGL_TRUE;
 
    if (dri2_dpy->image) {
-      if (dri2_dpy->image->base.version >= 10 &&
-          dri2_dpy->image->getCapabilities != NULL) {
+      if (dri2_dpy->image->getCapabilities != NULL) {
          int capabilities;
 
          capabilities =
@@ -936,8 +935,7 @@ dri2_setup_screen(_EGLDisplay *disp)
          disp->Extensions.KHR_gl_texture_3D_image = EGL_TRUE;
 
 #ifdef HAVE_LIBDRM
-      if (dri2_dpy->image->base.version >= 8 &&
-          dri2_dpy->image->createImageFromDmaBufs) {
+      if (dri2_dpy->image->createImageFromDmaBufs) {
          disp->Extensions.EXT_image_dma_buf_import = EGL_TRUE;
          disp->Extensions.EXT_image_dma_buf_import_modifiers = EGL_TRUE;
       }
@@ -2218,8 +2216,7 @@ dri2_create_image_khr_renderbuffer(_EGLDisplay *disp, _EGLContext *ctx,
       return EGL_NO_IMAGE_KHR;
    }
 
-   if (dri2_dpy->image->base.version >= 17 &&
-       dri2_dpy->image->createImageFromRenderbuffer2) {
+   if (dri2_dpy->image->createImageFromRenderbuffer2) {
       unsigned error = ~0;
 
       dri_image = dri2_dpy->image->createImageFromRenderbuffer2(
@@ -2726,8 +2723,7 @@ dri2_query_dma_buf_formats(_EGLDisplay *disp, EGLint max, EGLint *formats,
       goto fail;
    }
 
-   if (dri2_dpy->image->base.version < 15 ||
-       dri2_dpy->image->queryDmaBufFormats == NULL)
+   if (dri2_dpy->image->queryDmaBufFormats == NULL)
       goto fail;
 
    if (!dri2_dpy->image->queryDmaBufFormats(dri2_dpy->dri_screen_render_gpu,
@@ -2774,8 +2770,7 @@ dri2_query_dma_buf_modifiers(_EGLDisplay *disp, EGLint format, EGLint max,
       return dri2_egl_error_unlock(dri2_dpy, EGL_BAD_PARAMETER,
                                    "invalid modifiers array");
 
-   if (dri2_dpy->image->base.version < 15 ||
-       dri2_dpy->image->queryDmaBufModifiers == NULL) {
+   if (dri2_dpy->image->queryDmaBufModifiers == NULL) {
       mtx_unlock(&dri2_dpy->lock);
       return EGL_FALSE;
    }
@@ -2855,8 +2850,7 @@ dri2_create_image_dma_buf(_EGLDisplay *disp, _EGLContext *ctx,
    }
 
    if (attrs.ProtectedContent) {
-      if (dri2_dpy->image->base.version < 18 ||
-          dri2_dpy->image->createImageFromDmaBufs3 == NULL) {
+      if (dri2_dpy->image->createImageFromDmaBufs3 == NULL) {
          _eglError(EGL_BAD_MATCH, "unsupported protected_content attribute");
          return EGL_NO_IMAGE_KHR;
       }
@@ -2872,8 +2866,7 @@ dri2_create_image_dma_buf(_EGLDisplay *disp, _EGLContext *ctx,
          attrs.ProtectedContent ? __DRI_IMAGE_PROTECTED_CONTENT_FLAG : 0,
          &error, NULL);
    } else if (has_modifier) {
-      if (dri2_dpy->image->base.version < 15 ||
-          dri2_dpy->image->createImageFromDmaBufs2 == NULL) {
+      if (dri2_dpy->image->createImageFromDmaBufs2 == NULL) {
          _eglError(EGL_BAD_MATCH, "unsupported dma_buf format modifier");
          return EGL_NO_IMAGE_KHR;
       }
@@ -3234,7 +3227,6 @@ dri2_bind_wayland_display_wl(_EGLDisplay *disp, struct wl_display *wl_dpy)
 
    if (drmGetCap(dri2_dpy->fd_render_gpu, DRM_CAP_PRIME, &cap) == 0 &&
        cap == (DRM_PRIME_CAP_IMPORT | DRM_PRIME_CAP_EXPORT) &&
-       dri2_dpy->image->base.version >= 7 &&
        dri2_dpy->image->createImageFromFds != NULL)
       flags |= WAYLAND_DRM_PRIME;
 

@@ -144,8 +144,7 @@ dri3_get_red_mask_for_depth(struct loader_dri3_drawable *draw, int depth)
  */
 static bool loader_dri3_have_image_blit(const struct loader_dri3_drawable *draw)
 {
-   return draw->ext->image->base.version >= 9 &&
-      draw->ext->image->blitImage != NULL;
+   return draw->ext->image->blitImage != NULL;
 }
 
 /**
@@ -1462,7 +1461,6 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int format,
    if (draw->dri_screen_render_gpu == draw->dri_screen_display_gpu) {
 #ifdef HAVE_DRI3_MODIFIERS
       if (draw->multiplanes_available &&
-          draw->ext->image->base.version >= 15 &&
           draw->ext->image->queryDmaBufModifiers &&
           draw->ext->image->createImageWithModifiers) {
          xcb_dri3_get_supported_modifiers_cookie_t mod_cookie;
@@ -1618,7 +1616,7 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int format,
       /* The linear buffer was created in the display GPU's vram, so we
        * need to make it visible to render GPU
        */
-      if (draw->ext->image->base.version >= 20)
+      if (draw->ext->image->createImageFromFds2 != NULL)
          buffer->linear_buffer =
             draw->ext->image->createImageFromFds2(draw->dri_screen_render_gpu,
                                                   width,
@@ -1974,7 +1972,6 @@ dri3_get_pixmap_buffer(__DRIdrawable *driDrawable, unsigned int format,
                           fence_fd);
 #ifdef HAVE_DRI3_MODIFIERS
    if (draw->multiplanes_available &&
-       draw->ext->image->base.version >= 15 &&
        draw->ext->image->createImageFromDmaBufs2) {
       xcb_dri3_buffers_from_pixmap_cookie_t bps_cookie;
       xcb_dri3_buffers_from_pixmap_reply_t *bps_reply;

@@ -884,7 +884,7 @@ dri3_create_screen(int screen, struct glx_display * priv)
 
    dri3_bind_extensions(psc, priv, driverName);
 
-   if (!psc->image || psc->image->base.version < 7 || !psc->image->createImageFromFds) {
+   if (!psc->image || !psc->image->createImageFromFds) {
       ErrorMessageF("Version 7 or imageFromFds image extension not found\n");
       goto handle_error;
    }

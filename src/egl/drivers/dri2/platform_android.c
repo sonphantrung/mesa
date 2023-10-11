@@ -416,8 +416,7 @@ droid_create_image_from_buffer_info(struct dri2_egl_display *dri2_dpy,
 {
    unsigned error;
 
-   if (dri2_dpy->image->base.version >= 15 &&
-       dri2_dpy->image->createImageFromDmaBufs2 != NULL) {
+   if (dri2_dpy->image->createImageFromDmaBufs2 != NULL) {
       return dri2_dpy->image->createImageFromDmaBufs2(
          dri2_dpy->dri_screen_render_gpu, buf_info->width, buf_info->height,
          buf_info->drm_fourcc, buf_info->modifier, buf_info->fds,
@@ -472,8 +471,7 @@ handle_in_fence_fd(struct dri2_egl_surface *dri2_surf, __DRIimage *img)
 
    validate_fence_fd(dri2_surf->in_fence_fd);
 
-   if (dri2_dpy->image->base.version >= 21 &&
-       dri2_dpy->image->setInFenceFd != NULL) {
+   if (dri2_dpy->image->setInFenceFd != NULL) {
       dri2_dpy->image->setInFenceFd(img, dri2_surf->in_fence_fd);
    } else {
       sync_wait(dri2_surf->in_fence_fd, -1);

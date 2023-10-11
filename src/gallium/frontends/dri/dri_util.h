@@ -118,9 +118,6 @@ driCreateContextAttribs(__DRIscreen *psp, int api,
                         void *data);
 
 extern uint32_t
-driGLFormatToImageFormat(mesa_format format);
-
-extern uint32_t
 driGLFormatToSizedInternalGLFormat(mesa_format format);
 
 extern const __DRIimageDriverExtension driImageDriverExtension;

@@ -863,6 +863,7 @@ static const struct dri2_format_mapping r8_b8_g8_mapping = {
    __DRI_IMAGE_FORMAT_NONE,
    __DRI_IMAGE_COMPONENTS_Y_U_V,
    PIPE_FORMAT_R8_B8_G8_420_UNORM,
+   GL_NONE,
    3,
    { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8 },
      { 2, 1, 1, __DRI_IMAGE_FORMAT_R8 },
@@ -874,6 +875,7 @@ static const struct dri2_format_mapping r8_g8_b8_mapping = {
    __DRI_IMAGE_FORMAT_NONE,
    __DRI_IMAGE_COMPONENTS_Y_U_V,
    PIPE_FORMAT_R8_G8_B8_420_UNORM,
+   GL_NONE,
    3,
    { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8 },
      { 1, 1, 1, __DRI_IMAGE_FORMAT_R8 },
@@ -885,6 +887,7 @@ static const struct dri2_format_mapping r8_g8b8_mapping = {
    __DRI_IMAGE_FORMAT_NONE,
    __DRI_IMAGE_COMPONENTS_Y_UV,
    PIPE_FORMAT_R8_G8B8_420_UNORM,
+   GL_NONE,
    2,
    { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8 },
      { 1, 1, 1, __DRI_IMAGE_FORMAT_GR88 } }
@@ -895,6 +898,7 @@ static const struct dri2_format_mapping r8_b8g8_mapping = {
    __DRI_IMAGE_FORMAT_NONE,
    __DRI_IMAGE_COMPONENTS_Y_UV,
    PIPE_FORMAT_R8_B8G8_420_UNORM,
+   GL_NONE,
    2,
    { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8 },
      { 1, 1, 1, __DRI_IMAGE_FORMAT_GR88 } }
@@ -905,6 +909,7 @@ static const struct dri2_format_mapping r8g8_r8b8_mapping = {
    __DRI_IMAGE_FORMAT_NONE,
    __DRI_IMAGE_COMPONENTS_Y_XUXV,
    PIPE_FORMAT_R8G8_R8B8_UNORM, 2,
+   GL_NONE,
    { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88 },
      { 0, 1, 0, __DRI_IMAGE_FORMAT_ARGB8888 } }
 };
@@ -914,6 +919,7 @@ static const struct dri2_format_mapping r8b8_r8g8_mapping = {
    __DRI_IMAGE_FORMAT_NONE,
    __DRI_IMAGE_COMPONENTS_Y_XUXV,
    PIPE_FORMAT_R8B8_R8G8_UNORM, 2,
+   GL_NONE,
    { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88 },
      { 0, 1, 0, __DRI_IMAGE_FORMAT_ARGB8888 } }
 };
@@ -923,6 +929,7 @@ static const struct dri2_format_mapping b8r8_g8r8_mapping = {
    __DRI_IMAGE_FORMAT_NONE,
    __DRI_IMAGE_COMPONENTS_Y_XUXV,
    PIPE_FORMAT_B8R8_G8R8_UNORM, 2,
+   GL_NONE,
    { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88 },
      { 0, 1, 0, __DRI_IMAGE_FORMAT_ABGR8888 } }
 };
@@ -932,6 +939,7 @@ static const struct dri2_format_mapping g8r8_b8r8_mapping = {
    __DRI_IMAGE_FORMAT_NONE,
    __DRI_IMAGE_COMPONENTS_Y_XUXV,
    PIPE_FORMAT_G8R8_B8R8_UNORM, 2,
+   GL_NONE,
    { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88 },
      { 0, 1, 0, __DRI_IMAGE_FORMAT_ABGR8888 } }
 };

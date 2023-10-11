@@ -773,7 +773,7 @@ dri_get_egl_image(struct pipe_frontend_screen *fscreen,
       /* Guess sized internal format for dma-bufs. Could be used
        * by EXT_EGL_image_storage.
        */
-      stimg->internalformat = driGLFormatToSizedInternalGLFormat(map->pipe_format);
+      stimg->internalformat = map->gl_format;
    } else {
       stimg->internalformat = img->internal_format;
    }

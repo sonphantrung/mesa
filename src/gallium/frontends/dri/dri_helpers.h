@@ -32,6 +32,11 @@ struct dri2_format_mapping {
    int dri_format; /* image format */
    int dri_components;
    enum pipe_format pipe_format;
+   /* The corresponding sized GLformat to set on a renderbuffer imported with
+    * this format.  GL_NONE if we don't have an appropriate one (such as for YUV
+    * image formats).
+    */
+   uint32_t gl_format;
    int nplanes;
    struct {
       int buffer_index;

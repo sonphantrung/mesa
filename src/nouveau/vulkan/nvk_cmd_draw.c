@@ -41,16 +41,18 @@ nvk_cmd_buffer_3d_cls(struct nvk_cmd_buffer *cmd)
    return nvk_cmd_buffer_device(cmd)->pdev->info.cls_eng3d;
 }
 
-void
-nvk_mme_set_priv_reg(struct mme_builder *b)
-{
+static void
+mme_set_priv_reg(struct mme_builder *b,
+                 struct mme_value value,
+                 struct mme_value mask,
+                 struct mme_value reg) {
    mme_mthd(b, NV9097_WAIT_FOR_IDLE);
    mme_emit(b, mme_zero());
 
    mme_mthd(b, NV9097_SET_MME_SHADOW_SCRATCH(0));
    mme_emit(b, mme_zero());
-   mme_emit(b, mme_load(b));
-   mme_emit(b, mme_load(b));
+   mme_emit(b, value);
+   mme_emit(b, mask);
 
    /* Not sure if this has to strictly go before SET_FALCON04, but it might.
     * We also don't really know what that value indicates and when and how it's
@@ -60,7 +62,7 @@ nvk_mme_set_priv_reg(struct mme_builder *b)
    s26 = mme_merge(b, mme_zero(), s26, 0, 8, 0);
 
    mme_mthd(b, NV9097_SET_FALCON04);
-   mme_emit(b, mme_load(b));
+   mme_emit(b, reg);
 
    mme_if(b, ieq, s26, mme_imm(2)) {
       struct mme_value loop_cond = mme_mov(b, mme_zero());
@@ -76,6 +78,27 @@ nvk_mme_set_priv_reg(struct mme_builder *b)
          mme_mthd(b, NV9097_NO_OPERATION);
          mme_emit(b, mme_zero());
       }
+   }
+}
+
+void
+nvk_mme_set_priv_reg(struct mme_builder *b)
+{
+   struct mme_value value = mme_load(b);
+   struct mme_value mask = mme_load(b);
+   struct mme_value reg = mme_load(b);
+
+   mme_set_priv_reg(b, value, mask, reg);
+}
+
+void
+nvk_mme_set_conservative_raster_state(struct mme_builder *b) {
+   struct mme_value new_state = mme_load(b);
+   struct mme_value old_state = nvk_mme_load_scratch(b, CONSERVATIVE_RASTER_STATE);
+
+   mme_if(b, ine, new_state, old_state) {
+      nvk_mme_store_scratch(b, CONSERVATIVE_RASTER_STATE, new_state);
+      mme_set_priv_reg(b, new_state, mme_imm(BITFIELD_RANGE(3, 23)), mme_imm(0x418800));
    }
 }
 
@@ -146,6 +169,12 @@ nvk_queue_init_context_draw_state(struct nvk_queue *queue)
       P_INLINE_DATA(p, BITFIELD_BIT(3));
       P_INLINE_DATA(p, reg);
    }
+
+   /* Set CONSERVATIVE_RASTER_STATE to an invalid value, to ensure the
+    * hardware reg is always set the first time conservative rasterization
+    * is enabled */
+   P_IMMD(p, NV9097, SET_MME_SHADOW_SCRATCH(NVK_MME_SCRATCH_CONSERVATIVE_RASTER_STATE),
+                     ~0);
 
    P_IMMD(p, NV9097, SET_RENDER_ENABLE_C, MODE_TRUE);
 
@@ -1256,7 +1285,7 @@ vk_to_nv9097_provoking_vertex(VkProvokingVertexModeEXT vk_mode)
 static void
 nvk_flush_rs_state(struct nvk_cmd_buffer *cmd)
 {
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 40);
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 44);
 
    const struct vk_dynamic_graphics_state *dyn =
       &cmd->vk.dynamic_graphics_state;
@@ -1398,6 +1427,26 @@ nvk_flush_rs_state(struct nvk_cmd_buffer *cmd)
 
    if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_RASTERIZATION_STREAM))
       P_IMMD(p, NV9097, SET_RASTER_INPUT, dyn->rs.rasterization_stream);
+
+   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_CONSERVATIVE_MODE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_EXTRA_PRIMITIVE_OVERESTIMATION_SIZE)) {
+
+      if (dyn->rs.conservative_mode == VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT) {
+         P_IMMD(p, NVB197, SET_CONSERVATIVE_RASTER, ENABLE_FALSE);
+      } else {
+         uint32_t mode;
+         if (dyn->rs.conservative_mode == VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT) {
+            mode = 0;
+         } else if (dyn->rs.conservative_mode == VK_CONSERVATIVE_RASTERIZATION_MODE_UNDERESTIMATE_EXT) {
+            mode = 1;
+         }
+         uint32_t extra_overestimate =
+            dyn->rs.extra_primitive_overestimation_size * 4;
+         P_IMMD(p, NVB197, SET_CONSERVATIVE_RASTER, ENABLE_TRUE);
+         P_1INC(p, NVB197, CALL_MME_MACRO(NVK_MME_SET_CONSERVATIVE_RASTER_STATE));
+         P_INLINE_DATA(p, (extra_overestimate | mode << 2) << 23);
+      }
+   }
 }
 
 static VkSampleLocationEXT

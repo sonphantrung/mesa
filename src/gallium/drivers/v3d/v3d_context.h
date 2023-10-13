@@ -635,6 +635,8 @@ struct v3d_rasterizer_state {
 
         uint8_t depth_offset[9];
         uint8_t depth_offset_z16[9];
+        uint8_t depth_offset_round[9];
+        uint8_t depth_offset_z16_round[9];
 };
 
 struct v3d_depth_stencil_alpha_state {

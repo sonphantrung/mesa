@@ -89,6 +89,9 @@ v3d_create_rasterizer_state(struct pipe_context *pctx,
                             const struct pipe_rasterizer_state *cso)
 {
         struct v3d_rasterizer_state *so;
+        struct pipe_framebuffer_state *fb = &v3d_context(pctx)->framebuffer;
+        struct pipe_surface *zsbuf = fb->zsbuf;
+        float depth_units = cso->offset_units;
 
         so = CALLOC_STRUCT(v3d_rasterizer_state);
         if (!so)
@@ -101,11 +104,18 @@ v3d_create_rasterizer_state(struct pipe_context *pctx,
          */
         so->point_size = MAX2(cso->point_size, .125f);
 
+        if (zsbuf &&
+            (zsbuf->format == PIPE_FORMAT_Z16_UNORM ||
+             zsbuf->format == PIPE_FORMAT_S8_UINT_Z24_UNORM ||
+             zsbuf->format == PIPE_FORMAT_X8Z24_UNORM)) {
+                depth_units += 0.5;
+        }
+
         STATIC_ASSERT(sizeof(so->depth_offset) >=
                       cl_packet_length(DEPTH_OFFSET));
         v3dx_pack(&so->depth_offset, DEPTH_OFFSET, depth) {
                 depth.depth_offset_factor = cso->offset_scale;
-                depth.depth_offset_units = cso->offset_units;
+                depth.depth_offset_units = depth_units;
 #if V3D_VERSION >= 41
                 depth.limit = cso->offset_clamp;
 #endif
@@ -116,9 +126,28 @@ v3d_create_rasterizer_state(struct pipe_context *pctx,
          */
         v3dx_pack(&so->depth_offset_z16, DEPTH_OFFSET, depth) {
                 depth.depth_offset_factor = cso->offset_scale;
-                depth.depth_offset_units = cso->offset_units * 256.0;
+                depth.depth_offset_units = (depth_units) * 256.0;
 #if V3D_VERSION >= 41
                 depth.limit = cso->offset_clamp;
+#endif
+        }
+
+        v3dx_pack(&so->depth_offset_round, DEPTH_OFFSET, depth) {
+                depth.depth_offset_factor = 0.0;
+                depth.depth_offset_units = 0.5;
+#if V3D_VERSION >= 41
+                depth.limit = 0.0;
+#endif
+        }
+
+        /* The HW treats polygon offset units based on a Z24 buffer, so we
+         * need to scale up offset_units if we're only Z16.
+         */
+        v3dx_pack(&so->depth_offset_z16_round, DEPTH_OFFSET, depth) {
+                depth.depth_offset_factor = 0.0;
+                depth.depth_offset_units = (0.5) * 256.0;
+#if V3D_VERSION >= 41
+                depth.limit = 0.0;
 #endif
         }
 

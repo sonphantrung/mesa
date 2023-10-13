@@ -397,6 +397,12 @@ v3dX(emit_state)(struct pipe_context *pctx)
         struct v3d_job *job = v3d->job;
         bool rasterizer_discard = v3d->rasterizer->base.rasterizer_discard;
 
+        bool fixed_point_zsbuf = (job->zsbuf &&
+                                  (job->zsbuf->format == PIPE_FORMAT_Z16_UNORM ||
+                                   job->zsbuf->format == PIPE_FORMAT_S8_UINT_Z24_UNORM ||
+                                   job->zsbuf->format == PIPE_FORMAT_X8Z24_UNORM));
+        bool polygon_offset = fixed_point_zsbuf || v3d->rasterizer->base.offset_tri;
+
         if (v3d->dirty & (V3D_DIRTY_SCISSOR | V3D_DIRTY_VIEWPORT |
                           V3D_DIRTY_RASTERIZER)) {
                 float *vpscale = v3d->viewport.scale;
@@ -489,8 +495,10 @@ v3dX(emit_state)(struct pipe_context *pctx)
                         config.clockwise_primitives =
                                 v3d->rasterizer->base.front_ccw;
 
-                        config.enable_depth_offset =
-                                v3d->rasterizer->base.offset_tri;
+                        /* Enable depth offset if rendering a fixed-point
+                         * format so that rounding is performed correctly
+                         */
+                        config.enable_depth_offset = polygon_offset;
 
                         /* V3D follows GL behavior where the sample mask only
                          * applies when MSAA is enabled.  Gallium has sample
@@ -540,16 +548,28 @@ v3dX(emit_state)(struct pipe_context *pctx)
         }
 
         if (v3d->dirty & V3D_DIRTY_RASTERIZER &&
-            v3d->rasterizer->base.offset_tri) {
+            polygon_offset) {
                 if (job->zsbuf &&
                     job->zsbuf->format == PIPE_FORMAT_Z16_UNORM) {
-                        cl_emit_prepacked_sized(&job->bcl,
-                                                v3d->rasterizer->depth_offset_z16,
-                                                cl_packet_length(DEPTH_OFFSET));
+                        if (v3d->rasterizer->base.offset_tri) {
+                                cl_emit_prepacked_sized(&job->bcl,
+                                                        v3d->rasterizer->depth_offset_z16,
+                                                        cl_packet_length(DEPTH_OFFSET));
+                        } else {
+                                cl_emit_prepacked_sized(&job->bcl,
+                                                        v3d->rasterizer->depth_offset_z16_round,
+                                                        cl_packet_length(DEPTH_OFFSET));
+                        }
                 } else {
-                        cl_emit_prepacked_sized(&job->bcl,
-                                                v3d->rasterizer->depth_offset,
-                                                cl_packet_length(DEPTH_OFFSET));
+                        if (v3d->rasterizer->base.offset_tri) {
+                                cl_emit_prepacked_sized(&job->bcl,
+                                                        v3d->rasterizer->depth_offset,
+                                                        cl_packet_length(DEPTH_OFFSET));
+                        } else {
+                                cl_emit_prepacked_sized(&job->bcl,
+                                                        v3d->rasterizer->depth_offset_round,
+                                                        cl_packet_length(DEPTH_OFFSET));
+                        }
                 }
         }
 

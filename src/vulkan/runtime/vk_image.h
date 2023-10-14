@@ -27,6 +27,14 @@
 
 #include "util/u_math.h"
 
+#ifdef ANDROID
+enum android_buffer_type {
+   ANDROID_BUFFER_NONE = 0,
+   ANDROID_BUFFER_NATIVE,
+   ANDROID_BUFFER_HARDWARE,
+};
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -76,6 +84,9 @@ struct vk_image {
 #endif
 
 #ifdef ANDROID
+   enum android_buffer_type android_buffer_type;
+   VkDeviceMemory anb_memory;
+
    /* AHARDWAREBUFFER_FORMAT for this image or 0
     *
     * A default is provided by the Vulkan runtime code based on the VkFormat
@@ -369,6 +380,32 @@ VkImageLayout vk_att_ref_stencil_layout(const VkAttachmentReference2 *att_ref,
                                         const VkAttachmentDescription2 *attachments);
 VkImageLayout vk_att_desc_stencil_layout(const VkAttachmentDescription2 *att_desc,
                                            bool final);
+
+#ifdef ANDROID
+static inline bool
+vk_image_is_android_native_buffer(struct vk_image *image)
+{
+   return image->android_buffer_type == ANDROID_BUFFER_NATIVE;
+}
+
+static inline bool
+vk_image_is_android_hardware_buffer(struct vk_image *image)
+{
+   return image->android_buffer_type == ANDROID_BUFFER_HARDWARE;
+}
+#else
+static inline bool
+vk_image_is_android_native_buffer(struct vk_image *image)
+{
+   return false;
+}
+
+static inline bool
+vk_image_is_android_hardware_buffer(struct vk_image *image)
+{
+   return false;
+}
+#endif
 
 #ifdef __cplusplus
 }

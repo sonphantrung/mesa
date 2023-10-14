@@ -13,6 +13,8 @@
 #include <vulkan/vk_icd.h>
 
 #include "util/log.h"
+#include "util/u_gralloc/u_gralloc.h"
+#include "vk_android.h"
 
 static int panvk_hal_open(const struct hw_module_t *mod, const char *id,
                           struct hw_device_t **dev);
@@ -63,6 +65,16 @@ panvk_hal_open(const struct hw_module_t *mod, const char *id,
 
    mesa_logi("panvk: Warning: Android Vulkan implementation is experimental");
 
+   struct u_gralloc *u_gralloc = u_gralloc_create(U_GRALLOC_TYPE_AUTO);
+
+   if (u_gralloc && u_gralloc_get_type(u_gralloc) == U_GRALLOC_TYPE_FALLBACK) {
+      mesa_logw(
+         "panvk: Gralloc is not supported. Android extensions are disabled.");
+      u_gralloc_destroy(&u_gralloc);
+   }
+
+   *vk_android_get_ugralloc_ptr() = u_gralloc;
+
    *dev = &hal_dev->common;
    return 0;
 }
@@ -71,5 +83,6 @@ static int
 panvk_hal_close(struct hw_device_t *dev)
 {
    /* hwvulkan.h claims that hw_device_t::close() is never called. */
+   u_gralloc_destroy(vk_android_get_ugralloc_ptr());
    return -1;
 }

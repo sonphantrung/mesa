@@ -99,7 +99,7 @@ if with_platform_wayland
 endif
 
 if with_platform_android
-  panvk_deps += [dep_android]
+  panvk_deps += [dep_android, idep_u_gralloc]
   panvk_flags += '-DVK_USE_PLATFORM_ANDROID_KHR'
   libpanvk_files += files('panvk_android.c')
 endif

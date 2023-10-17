@@ -657,7 +657,13 @@ fs_reg_alloc::setup_inst_interference(const fs_inst *inst)
 void
 fs_reg_alloc::build_interference_graph(bool allow_spilling)
 {
-   interference_graph_supports_spilling = allow_spilling;
+   /* We don't need to reserve any registers for spilling on Gfx9+
+    * thanks to split sends, so the interference graph remains the
+    * same in either case.  We also don't need to reserve any GRFs
+    * on Gfx4-6, because we have actual MRFs for messages.
+    */
+   interference_graph_supports_spilling =
+      allow_spilling || devinfo->ver <= 6 || devinfo->ver >= 9;
 
    /* Compute the RA node layout */
    node_count = 0;
@@ -1103,9 +1109,9 @@ fs_reg_alloc::set_spill_costs()
 int
 fs_reg_alloc::choose_spill_reg()
 {
-   /* If we're going to spill but we've never spilled before, we need
-    * to re-build the interference graph with MRFs enabled to allow
-    * spilling.
+   /* On Gfx7-8, if we're going to spill but we've never spilled before, we
+    * need to re-build the interference graph with registers reserved (via
+    * the fake MRF hack) for constructing spill messages.
     */
    if (!interference_graph_supports_spilling) {
       discard_interference_graph();

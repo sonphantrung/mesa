@@ -1425,6 +1425,15 @@ enum __DRIChromaSiting {
 /* Available in version 16 */
 #define __DRI_IMAGE_FORMAT_MODIFIER_ATTRIB_PLANE_COUNT   0x0001
 
+/**
+ * Support for manipulating __DRIimages created by the DRI driver, which are
+ * what back EGLimages, and also private winsys buffers these days.
+ *
+ * The X server does not use this extension.  ChromeOS uses this extension for
+ * minigbm support on AMD.  It would be nice, but not strictly necessary to keep
+ * source-level compatibility for them to ease uprevs.  As such, some of the
+ * interfaces used by ChromeOS are noted.
+ */
 typedef struct __DRIimageRec          __DRIimage;
 typedef struct __DRIimageExtensionRec __DRIimageExtension;
 struct __DRIimageExtensionRec {
@@ -1440,13 +1449,19 @@ struct __DRIimageExtensionRec {
 					       int renderbuffer,
 					       void *loaderPrivate);
 
+   /* Used by ChromeOS's minigbm for AMD devices as of 2023. */
     void (*destroyImage)(__DRIimage *image);
 
+   /* Used by ChromeOS's minigbm for AMD devices as of 2023. */
     __DRIimage *(*createImage)(__DRIscreen *screen,
 			       int width, int height, int format,
 			       unsigned int use,
 			       void *loaderPrivate);
 
+   /** Queries a __DRI_IMAGE_ATTRIB.
+    *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
+    */
    unsigned char (*queryImage)(__DRIimage *image, int attrib, int *value);
 
    /**
@@ -1487,6 +1502,8 @@ struct __DRIimageExtensionRec {
     * Sub-images may overlap, but rendering to overlapping sub-images
     * is undefined.
     *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
+    *
     * \since 5
     */
     __DRIimage *(*fromPlanar)(__DRIimage *image, int plane,
@@ -1506,6 +1523,8 @@ struct __DRIimageExtensionRec {
                                          void *loaderPrivate);
    /**
     * Like createImageFromNames, but takes a prime fd instead.
+    *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
     *
     * \since 7
     */
@@ -1569,6 +1588,8 @@ struct __DRIimageExtensionRec {
     * Returns the byte stride in *stride, and an opaque pointer to data
     * tracking the mapping in **data, which must be passed to unmapImage().
     *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
+    *
     * \since 12
     */
    void *(*mapImage)(__DRIcontext *context, __DRIimage *image,
@@ -1577,6 +1598,8 @@ struct __DRIimageExtensionRec {
 
    /**
     * Unmap a previously mapped __DRIimage
+    *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
     *
     * \since 12
     */
@@ -1596,6 +1619,8 @@ struct __DRIimageExtensionRec {
     * Returns the new DRIimage. The chosen modifier can be obtained later on
     * and passed back to things like the kernel's AddFB2 interface.
     *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
+    *
     * \sa __DRIimageRec::createImage
     *
     * \since 14
@@ -1610,6 +1635,8 @@ struct __DRIimageExtensionRec {
     * Like createImageFromDmaBufs, but takes also format modifiers.
     *
     * For EGL_EXT_image_dma_buf_import_modifiers.
+    *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
     *
     * \since 15
     */
@@ -1660,6 +1687,8 @@ struct __DRIimageExtensionRec {
     *
     * Returns true upon success.
     *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
+    *
     * \since 15
     */
    bool (*queryDmaBufModifiers)(__DRIscreen *screen, int fourcc, int max,
@@ -1677,6 +1706,8 @@ struct __DRIimageExtensionRec {
     * \param value     A pointer to where to store the result of the query.
     *
     * Returns true upon success.
+    *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
     *
     * \since 16
     */

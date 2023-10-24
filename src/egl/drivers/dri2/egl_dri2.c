@@ -2856,7 +2856,7 @@ dri2_create_image_dma_buf(_EGLDisplay *disp, _EGLContext *ctx,
    if (attrs.ProtectedContent)
       flags |= __DRI_IMAGE_PROTECTED_CONTENT_FLAG;
 
-   dri_image = dri2_dpy->image->createImageFromDmaBufs3(
+   dri_image = dri2_dpy->image->createImageFromDmaBufs(
       dri2_dpy->dri_screen_render_gpu, attrs.Width, attrs.Height,
       attrs.DMABufFourCC.Value, modifier, fds, num_fds, pitches, offsets,
       attrs.DMABufYuvColorSpaceHint.Value, attrs.DMABufSampleRangeHint.Value,

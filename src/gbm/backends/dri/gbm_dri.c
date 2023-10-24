@@ -902,15 +902,15 @@ gbm_dri_bo_import(struct gbm_device *gbm,
        * the sARGB format. */
       fourcc = gbm_core.v0.format_canonicalize(fd_data->format);
 
-      image = dri->image->createImageFromDmaBufs3(dri->screen, fd_data->width,
-                                                  fd_data->height, fourcc,
-                                                  fd_data->modifier,
-                                                  fd_data->fds,
-                                                  fd_data->num_fds,
-                                                  fd_data->strides,
-                                                  fd_data->offsets,
-                                                  0, 0, 0, 0,
-                                                  0, &error, NULL);
+      image = dri->image->createImageFromDmaBufs(dri->screen, fd_data->width,
+                                                 fd_data->height, fourcc,
+                                                 fd_data->modifier,
+                                                 fd_data->fds,
+                                                 fd_data->num_fds,
+                                                 fd_data->strides,
+                                                 fd_data->offsets,
+                                                 0, 0, 0, 0,
+                                                 0, &error, NULL);
       if (image == NULL) {
          errno = ENOSYS;
          return NULL;

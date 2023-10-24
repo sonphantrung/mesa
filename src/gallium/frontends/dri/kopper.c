@@ -297,7 +297,7 @@ dri3_create_image_from_buffers(xcb_connection_t *c,
       offsets[i] = offsets_in[i];
    }
 
-   ret = image->createImageFromDmaBufs2(opaque_dri_screen(screen),
+   ret = image->createImageFromDmaBufs3(opaque_dri_screen(screen),
                                         bp_reply->width,
                                         bp_reply->height,
                                         image_format_to_fourcc(format),
@@ -305,7 +305,7 @@ dri3_create_image_from_buffers(xcb_connection_t *c,
                                         fds, bp_reply->nfd,
                                         strides, offsets,
                                         0, 0, 0, 0, /* UNDEFINED */
-                                        &error, loaderPrivate);
+                                        0, &error, loaderPrivate);
 
    for (i = 0; i < bp_reply->nfd; i++)
       close(fds[i]);

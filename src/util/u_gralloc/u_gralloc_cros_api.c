@@ -19,7 +19,7 @@
 /* More recent CrOS gralloc has a perform op that fills out the struct below
  * with canonical information about the buffer and its modifier, planes,
  * offsets and strides.  If we have this, we can skip straight to
- * createImageFromDmaBufs2() and avoid all the guessing and recalculations.
+ * createImageFromDmaBufs() and avoid all the guessing and recalculations.
  * This also gives us the modifier and plane offsets/strides for multiplanar
  * compressed buffers (eg Intel CCS buffers) in order to make that work in
  * Android.

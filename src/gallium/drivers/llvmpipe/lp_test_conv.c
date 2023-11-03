@@ -102,7 +102,7 @@ add_conv_test(struct gallivm_state *gallivm,
               struct lp_type dst_type, unsigned num_dsts)
 {
    LLVMModuleRef module = gallivm->module;
-   LLVMContextRef context = gallivm->context;
+   LLVMContextRef context = gallivm->context.ref;
    LLVMBuilderRef builder = gallivm->builder;
    LLVMTypeRef args[2];
    LLVMValueRef func;

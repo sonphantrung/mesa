@@ -1040,7 +1040,7 @@ lp_build_mul_32_lohi_cpu(struct lp_build_context *bld,
       unsigned i;
       for (i = 0; i < bld->type.length; i += 2) {
          shuf[i] = lp_build_const_int32(gallivm, i+1);
-         shuf[i+1] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context));
+         shuf[i+1] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context.ref));
       }
       shuf_vec = LLVMConstVector(shuf, bld->type.length);
       aeven = a;
@@ -1888,7 +1888,7 @@ lp_build_iround_nearest_sse2(struct lp_build_context *bld,
 {
    LLVMBuilderRef builder = bld->gallivm->builder;
    const struct lp_type type = bld->type;
-   LLVMTypeRef i32t = LLVMInt32TypeInContext(bld->gallivm->context);
+   LLVMTypeRef i32t = LLVMInt32TypeInContext(bld->gallivm->context.ref);
    LLVMTypeRef ret_type = lp_build_int_vec_type(bld->gallivm, type);
    const char *intrinsic;
    LLVMValueRef res;
@@ -3720,13 +3720,13 @@ lp_build_fpstate_get(struct gallivm_state *gallivm)
       LLVMBuilderRef builder = gallivm->builder;
       LLVMValueRef mxcsr_ptr = lp_build_alloca(
          gallivm,
-         LLVMInt32TypeInContext(gallivm->context),
+         LLVMInt32TypeInContext(gallivm->context.ref),
          "mxcsr_ptr");
       LLVMValueRef mxcsr_ptr8 = LLVMBuildPointerCast(builder, mxcsr_ptr,
-          LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0), "");
+          LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0), "");
       lp_build_intrinsic(builder,
                          "llvm.x86.sse.stmxcsr",
-                         LLVMVoidTypeInContext(gallivm->context),
+                         LLVMVoidTypeInContext(gallivm->context.ref),
                          &mxcsr_ptr8, 1, 0);
       return mxcsr_ptr;
    }
@@ -3744,7 +3744,7 @@ lp_build_fpstate_set_denorms_zero(struct gallivm_state *gallivm,
       LLVMBuilderRef builder = gallivm->builder;
       LLVMValueRef mxcsr_ptr = lp_build_fpstate_get(gallivm);
       LLVMValueRef mxcsr =
-         LLVMBuildLoad2(builder, LLVMInt32TypeInContext(gallivm->context), mxcsr_ptr, "mxcsr");
+         LLVMBuildLoad2(builder, LLVMInt32TypeInContext(gallivm->context.ref), mxcsr_ptr, "mxcsr");
 
       if (util_get_cpu_caps()->has_daz) {
          /* Enable denormals are zero mode */
@@ -3771,10 +3771,10 @@ lp_build_fpstate_set(struct gallivm_state *gallivm,
    if (util_get_cpu_caps()->has_sse) {
       LLVMBuilderRef builder = gallivm->builder;
       mxcsr_ptr = LLVMBuildPointerCast(builder, mxcsr_ptr,
-                     LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0), "");
+                     LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0), "");
       lp_build_intrinsic(builder,
                          "llvm.x86.sse.ldmxcsr",
-                         LLVMVoidTypeInContext(gallivm->context),
+                         LLVMVoidTypeInContext(gallivm->context.ref),
                          &mxcsr_ptr, 1, 0);
    }
 }

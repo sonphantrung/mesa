@@ -264,7 +264,7 @@ lp_build_pmin(struct lp_build_sample_context *bld,
    struct lp_build_context *int_size_bld = &bld->int_size_in_bld;
    struct lp_build_context *float_size_bld = &bld->float_size_in_bld;
    struct lp_build_context *pmin_bld = &bld->lodf_bld;
-   LLVMTypeRef i32t = LLVMInt32TypeInContext(bld->gallivm->context);
+   LLVMTypeRef i32t = LLVMInt32TypeInContext(bld->gallivm->context.ref);
    LLVMValueRef index0 = LLVMConstInt(i32t, 0, 0);
    LLVMValueRef index1 = LLVMConstInt(i32t, 1, 0);
    LLVMValueRef ddx_ddy = lp_build_packed_ddx_ddy_twocoord(coord_bld, s, t);
@@ -358,7 +358,7 @@ lp_build_rho(struct lp_build_sample_context *bld,
    const unsigned dims = bld->dims;
    LLVMValueRef ddx_ddy[2] = {NULL};
    LLVMBuilderRef builder = bld->gallivm->builder;
-   LLVMTypeRef i32t = LLVMInt32TypeInContext(bld->gallivm->context);
+   LLVMTypeRef i32t = LLVMInt32TypeInContext(bld->gallivm->context.ref);
    LLVMValueRef index0 = LLVMConstInt(i32t, 0, 0);
    LLVMValueRef index1 = LLVMConstInt(i32t, 1, 0);
    LLVMValueRef index2 = LLVMConstInt(i32t, 2, 0);
@@ -368,7 +368,7 @@ lp_build_rho(struct lp_build_sample_context *bld,
    unsigned num_quads = length / 4;
    bool rho_per_quad = rho_bld->type.length != length;
    bool no_rho_opt = bld->no_rho_approx && (dims > 1);
-   LLVMValueRef i32undef = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context));
+   LLVMValueRef i32undef = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context.ref));
    LLVMValueRef rho_xvec, rho_yvec;
 
    /* Note that all simplified calculations will only work for isotropic
@@ -1127,7 +1127,7 @@ load_mip(struct gallivm_state *gallivm,
    LLVMValueRef ptr = LLVMBuildGEP2(gallivm->builder, ptr_type, offsets,
                                     indexes, ARRAY_SIZE(indexes), "");
    return LLVMBuildLoad2(gallivm->builder,
-                         LLVMInt32TypeInContext(gallivm->context), ptr, "");
+                         LLVMInt32TypeInContext(gallivm->context.ref), ptr, "");
 }
 
 
@@ -1144,7 +1144,7 @@ lp_build_get_mipmap_level(struct lp_build_sample_context *bld,
    LLVMBuilderRef builder = bld->gallivm->builder;
    LLVMValueRef data_ptr =
       LLVMBuildGEP2(builder,
-                    LLVMInt8TypeInContext(bld->gallivm->context),
+                    LLVMInt8TypeInContext(bld->gallivm->context.ref),
                     bld->base_ptr, &mip_offset, 1, "");
    return data_ptr;
 }
@@ -1547,7 +1547,7 @@ lp_build_extract_image_sizes(struct lp_build_sample_context *bld,
                              LLVMValueRef *out_depth)
 {
    const unsigned dims = bld->dims;
-   LLVMTypeRef i32t = LLVMInt32TypeInContext(bld->gallivm->context);
+   LLVMTypeRef i32t = LLVMInt32TypeInContext(bld->gallivm->context.ref);
    struct lp_type size_type = size_bld->type;
 
    if (bld->num_mips == 1) {

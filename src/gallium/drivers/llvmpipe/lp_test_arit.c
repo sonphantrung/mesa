@@ -342,7 +342,7 @@ build_unary_test_func(struct gallivm_state *gallivm,
                       const char *test_name)
 {
    struct lp_type type = lp_type_float_vec(32, length * 32);
-   LLVMContextRef context = gallivm->context;
+   LLVMContextRef context = gallivm->context.ref;
    LLVMModuleRef module = gallivm->module;
    LLVMTypeRef vf32t = lp_build_vec_type(gallivm, type);
    LLVMTypeRef args[2] = { LLVMPointerType(vf32t, 0), LLVMPointerType(vf32t, 0) };

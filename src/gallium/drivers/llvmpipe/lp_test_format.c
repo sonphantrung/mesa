@@ -82,7 +82,7 @@ add_fetch_rgba_test(struct gallivm_state *gallivm, unsigned verbose,
                     unsigned use_cache)
 {
    char name[256];
-   LLVMContextRef context = gallivm->context;
+   LLVMContextRef context = gallivm->context.ref;
    LLVMModuleRef module = gallivm->module;
    LLVMBuilderRef builder = gallivm->builder;
    LLVMTypeRef args[5];

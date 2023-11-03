@@ -241,16 +241,16 @@ lp_build_unpack_arith_rgba_aos(struct gallivm_state *gallivm,
 
    /* Do the intermediate integer computations with 32bit integers since it
     * matches floating point size */
-   assert (LLVMTypeOf(packed) == LLVMInt32TypeInContext(gallivm->context));
+   assert (LLVMTypeOf(packed) == LLVMInt32TypeInContext(gallivm->context.ref));
 
-   vec32_type = LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), 4);
+   vec32_type = LLVMVectorType(LLVMInt32TypeInContext(gallivm->context.ref), 4);
 
    /* Broadcast the packed value to all four channels
     * before: packed = BGRA
     * after: packed = {BGRA, BGRA, BGRA, BGRA}
     */
    packed = LLVMBuildInsertElement(builder, LLVMGetUndef(vec32_type), packed,
-                                   LLVMConstNull(LLVMInt32TypeInContext(gallivm->context)),
+                                   LLVMConstNull(LLVMInt32TypeInContext(gallivm->context.ref)),
                                    "");
    packed = LLVMBuildShuffleVector(builder, packed, LLVMGetUndef(vec32_type),
                                    LLVMConstNull(vec32_type),
@@ -266,9 +266,9 @@ lp_build_unpack_arith_rgba_aos(struct gallivm_state *gallivm,
       unsigned shift = desc->channel[i].shift;
 
       if (desc->channel[i].type == UTIL_FORMAT_TYPE_VOID) {
-         shifts[i] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context));
-         masks[i] = LLVMConstNull(LLVMInt32TypeInContext(gallivm->context));
-         scales[i] =  LLVMConstNull(LLVMFloatTypeInContext(gallivm->context));
+         shifts[i] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context.ref));
+         masks[i] = LLVMConstNull(LLVMInt32TypeInContext(gallivm->context.ref));
+         scales[i] =  LLVMConstNull(LLVMFloatTypeInContext(gallivm->context.ref));
       }
       else {
          unsigned long long mask = (1ULL << bits) - 1;
@@ -331,9 +331,9 @@ lp_build_unpack_arith_rgba_aos(struct gallivm_state *gallivm,
 
    if (!needs_uitofp) {
       /* UIToFP can't be expressed in SSE2 */
-      casted = LLVMBuildSIToFP(builder, masked, LLVMVectorType(LLVMFloatTypeInContext(gallivm->context), 4), "");
+      casted = LLVMBuildSIToFP(builder, masked, LLVMVectorType(LLVMFloatTypeInContext(gallivm->context.ref), 4), "");
    } else {
-      casted = LLVMBuildUIToFP(builder, masked, LLVMVectorType(LLVMFloatTypeInContext(gallivm->context), 4), "");
+      casted = LLVMBuildUIToFP(builder, masked, LLVMVectorType(LLVMFloatTypeInContext(gallivm->context.ref), 4), "");
    }
 
    /*
@@ -379,7 +379,7 @@ lp_build_pack_rgba_aos(struct gallivm_state *gallivm,
    assert(desc->block.width == 1);
    assert(desc->block.height == 1);
 
-   type = LLVMIntTypeInContext(gallivm->context, desc->block.bits);
+   type = LLVMIntTypeInContext(gallivm->context.ref, desc->block.bits);
 
    /* Unswizzle the color components into the source vector. */
    for (i = 0; i < 4; ++i) {
@@ -390,11 +390,11 @@ lp_build_pack_rgba_aos(struct gallivm_state *gallivm,
       if (j < 4)
          swizzles[i] = lp_build_const_int32(gallivm, j);
       else
-         swizzles[i] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context));
+         swizzles[i] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context.ref));
    }
 
    unswizzled = LLVMBuildShuffleVector(builder, rgba,
-                                       LLVMGetUndef(LLVMVectorType(LLVMFloatTypeInContext(gallivm->context), 4)),
+                                       LLVMGetUndef(LLVMVectorType(LLVMFloatTypeInContext(gallivm->context.ref), 4)),
                                        LLVMConstVector(swizzles, 4), "");
 
    normalized = false;
@@ -403,8 +403,8 @@ lp_build_pack_rgba_aos(struct gallivm_state *gallivm,
       unsigned shift = desc->channel[i].shift;
 
       if (desc->channel[i].type == UTIL_FORMAT_TYPE_VOID) {
-         shifts[i] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context));
-         scales[i] =  LLVMGetUndef(LLVMFloatTypeInContext(gallivm->context));
+         shifts[i] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context.ref));
+         scales[i] =  LLVMGetUndef(LLVMFloatTypeInContext(gallivm->context.ref));
       }
       else {
          unsigned mask = (1 << bits) - 1;
@@ -428,7 +428,7 @@ lp_build_pack_rgba_aos(struct gallivm_state *gallivm,
    else
       scaled = unswizzled;
 
-   casted = LLVMBuildFPToSI(builder, scaled, LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), 4), "");
+   casted = LLVMBuildFPToSI(builder, scaled, LLVMVectorType(LLVMInt32TypeInContext(gallivm->context.ref), 4), "");
 
    shifted = LLVMBuildShl(builder, casted, LLVMConstVector(shifts, 4), "");
    
@@ -445,7 +445,7 @@ lp_build_pack_rgba_aos(struct gallivm_state *gallivm,
    }
 
    if (!packed)
-      packed = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context));
+      packed = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context.ref));
 
    if (desc->block.bits < 32)
       packed = LLVMBuildTrunc(builder, packed, type, "");
@@ -802,9 +802,9 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
        * or incentive to optimize.
        */
 
-      LLVMTypeRef i8t = LLVMInt8TypeInContext(gallivm->context);
+      LLVMTypeRef i8t = LLVMInt8TypeInContext(gallivm->context.ref);
       LLVMTypeRef pi8t = LLVMPointerType(i8t, 0);
-      LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
+      LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context.ref);
       LLVMValueRef function;
       LLVMValueRef tmp_ptr;
       LLVMValueRef tmp;
@@ -829,7 +829,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
          LLVMTypeRef ret_type;
          LLVMTypeRef arg_types[4];
 
-         ret_type = LLVMVoidTypeInContext(gallivm->context);
+         ret_type = LLVMVoidTypeInContext(gallivm->context.ref);
          arg_types[0] = pi8t;
          arg_types[1] = pi8t;
          arg_types[2] = i32t;
@@ -906,11 +906,11 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
        * or incentive to optimize.
        */
 
-      LLVMTypeRef f32t = LLVMFloatTypeInContext(gallivm->context);
+      LLVMTypeRef f32t = LLVMFloatTypeInContext(gallivm->context.ref);
       LLVMTypeRef f32x4t = LLVMVectorType(f32t, 4);
       LLVMTypeRef pf32t = LLVMPointerType(f32t, 0);
-      LLVMTypeRef pi8t = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0);
-      LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
+      LLVMTypeRef pi8t = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0);
+      LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context.ref);
       LLVMValueRef function;
       LLVMValueRef tmp_ptr;
       LLVMValueRef tmps[LP_MAX_VECTOR_LENGTH/4];
@@ -935,7 +935,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
          LLVMTypeRef ret_type;
          LLVMTypeRef arg_types[4];
 
-         ret_type = LLVMVoidTypeInContext(gallivm->context);
+         ret_type = LLVMVoidTypeInContext(gallivm->context.ref);
          arg_types[0] = pf32t;
          arg_types[1] = pi8t;
          arg_types[2] = i32t;

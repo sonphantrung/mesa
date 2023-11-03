@@ -429,7 +429,7 @@ lp_build_occlusion_count(struct gallivm_state *gallivm,
                          LLVMValueRef counter)
 {
    LLVMBuilderRef builder = gallivm->builder;
-   LLVMContextRef context = gallivm->context;
+   LLVMContextRef context = gallivm->context.ref;
    LLVMValueRef countmask = lp_build_const_int_vec(gallivm, type, 1);
    LLVMValueRef count, newcount;
 
@@ -583,7 +583,7 @@ lp_build_depth_stencil_load_swizzled(struct gallivm_state *gallivm,
 
    /* Load current z/stencil values from z/stencil buffer */
    LLVMTypeRef load_ptr_type = LLVMPointerType(zs_dst_type, 0);
-   LLVMTypeRef int8_type = LLVMInt8TypeInContext(gallivm->context);
+   LLVMTypeRef int8_type = LLVMInt8TypeInContext(gallivm->context.ref);
    LLVMValueRef zs_dst_ptr =
       LLVMBuildGEP2(builder, int8_type, depth_ptr, &depth_offset1, 1, "");
    zs_dst_ptr = LLVMBuildBitCast(builder, zs_dst_ptr, load_ptr_type, "");
@@ -728,7 +728,7 @@ lp_build_depth_stencil_write_swizzled(struct gallivm_state *gallivm,
 
    depth_offset2 = LLVMBuildAdd(builder, depth_offset1, depth_stride, "");
 
-   LLVMTypeRef int8_type = LLVMInt8TypeInContext(gallivm->context);
+   LLVMTypeRef int8_type = LLVMInt8TypeInContext(gallivm->context.ref);
    zs_dst_ptr1 = LLVMBuildGEP2(builder, int8_type, depth_ptr, &depth_offset1, 1, "");
    zs_dst_ptr1 = LLVMBuildBitCast(builder, zs_dst_ptr1, load_ptr_type, "");
    zs_dst_ptr2 = LLVMBuildGEP2(builder, int8_type, depth_ptr, &depth_offset2, 1, "");
@@ -1004,7 +1004,7 @@ lp_build_depth_stencil_test(struct gallivm_state *gallivm,
             /* front_facing = face != 0 ? ~0 : 0 */
             front_facing = LLVMBuildICmp(builder, LLVMIntNE, face, zero, "");
             front_facing = LLVMBuildSExt(builder, front_facing,
-                                         LLVMIntTypeInContext(gallivm->context,
+                                         LLVMIntTypeInContext(gallivm->context.ref,
                                                 s_bld.type.length*s_bld.type.width),
                                          "");
             front_facing = LLVMBuildBitCast(builder, front_facing,

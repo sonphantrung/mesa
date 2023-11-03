@@ -124,7 +124,7 @@ lp_mesh_llvm_iface(const struct lp_build_mesh_iface *iface)
 static LLVMTypeRef
 create_mesh_jit_output_type_deref(struct gallivm_state *gallivm)
 {
-   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context);
+   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context.ref);
    LLVMTypeRef output_array;
 
    output_array = LLVMArrayType(float_type, TGSI_NUM_CHANNELS); /* num channels */
@@ -272,9 +272,9 @@ mesh_convert_to_aos(struct gallivm_state *gallivm,
             lp_build_name(out, "output%u.%c", attrib, "xyzw"[chan]);
 #if DEBUG_STORE
             lp_build_printf(gallivm, "output %d : %d ",
-                            LLVMConstInt(LLVMInt32TypeInContext(gallivm->context),
+                            LLVMConstInt(LLVMInt32TypeInContext(gallivm->context.ref),
                                          attrib, 0),
-                            LLVMConstInt(LLVMInt32TypeInContext(gallivm->context),
+                            LLVMConstInt(LLVMInt32TypeInContext(gallivm->context.ref),
                                          chan, 0));
             lp_build_print_value(gallivm, "val = ", out);
             {
@@ -286,7 +286,7 @@ mesh_convert_to_aos(struct gallivm_state *gallivm,
 #endif
             soa[chan] = out;
          }
-         LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context);
+         LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context.ref);
          aos[0] = LLVMGetUndef(LLVMVectorType(float_type, 4));
          for (unsigned i = 0; i <  4; i++)
             aos[0] = LLVMBuildInsertElement(builder, aos[0], soa[i], lp_build_const_int32(gallivm, i), "");
@@ -321,7 +321,7 @@ generate_compute(struct llvmpipe_context *lp,
    char func_name[64], func_name_coro[64];
    LLVMTypeRef arg_types[CS_ARG_MAX];
    LLVMTypeRef func_type, coro_func_type;
-   LLVMTypeRef int32_type = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef int32_type = LLVMInt32TypeInContext(gallivm->context.ref);
    LLVMValueRef context_ptr, resources_ptr;
    LLVMValueRef block_x_size_arg, block_y_size_arg, block_z_size_arg;
    LLVMValueRef grid_x_arg, grid_y_arg, grid_z_arg;
@@ -372,7 +372,7 @@ generate_compute(struct llvmpipe_context *lp,
    if (variant->jit_vertex_header_ptr_type)
       arg_types[CS_ARG_VERTEX_DATA] = variant->jit_vertex_header_ptr_type; /* mesh shaders only */
    else
-      arg_types[CS_ARG_VERTEX_DATA] = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0); /* mesh shaders only */
+      arg_types[CS_ARG_VERTEX_DATA] = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0); /* mesh shaders only */
    arg_types[CS_ARG_PER_THREAD_DATA] = variant->jit_cs_thread_data_ptr_type;  /* per thread data */
    arg_types[CS_ARG_CORO_X_LOOPS] = int32_type;                        /* coro only - num X loops */
    arg_types[CS_ARG_CORO_PARTIALS] = int32_type;                       /* coro only - partials */
@@ -380,13 +380,13 @@ generate_compute(struct llvmpipe_context *lp,
    arg_types[CS_ARG_CORO_BLOCK_Y_SIZE] = int32_type;                   /* coro block_y_size */
    arg_types[CS_ARG_CORO_BLOCK_Z_SIZE] = int32_type;                   /* coro block_z_size */
    arg_types[CS_ARG_CORO_IDX] = int32_type;                            /* coro idx */
-   arg_types[CS_ARG_CORO_MEM] = LLVMPointerType(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0), 0);
-   arg_types[CS_ARG_CORO_OUTPUTS] = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0); /* mesh shaders only */
+   arg_types[CS_ARG_CORO_MEM] = LLVMPointerType(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0), 0);
+   arg_types[CS_ARG_CORO_OUTPUTS] = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0); /* mesh shaders only */
 
-   func_type = LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context),
+   func_type = LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context.ref),
                                 arg_types, CS_ARG_OUTER_COUNT, 0);
 
-   coro_func_type = LLVMFunctionType(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0),
+   coro_func_type = LLVMFunctionType(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0),
                                      arg_types, CS_ARG_MAX - (!is_mesh), 0);
 
    function = LLVMAddFunction(gallivm->module, func_name, func_type);
@@ -457,15 +457,15 @@ generate_compute(struct llvmpipe_context *lp,
 
          num_args = func->num_params + LP_RESV_FUNC_ARGS;
 
-         args[0] = LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), cs_type.length); /* mask */
+         args[0] = LLVMVectorType(LLVMInt32TypeInContext(gallivm->context.ref), cs_type.length); /* mask */
          args[1] = LLVMPointerType(call_context_type, 0);
          for (int i = 0; i < func->num_params; i++) {
-            args[i + LP_RESV_FUNC_ARGS] = LLVMVectorType(LLVMIntTypeInContext(gallivm->context, func->params[i].bit_size), cs_type.length);
+            args[i + LP_RESV_FUNC_ARGS] = LLVMVectorType(LLVMIntTypeInContext(gallivm->context.ref, func->params[i].bit_size), cs_type.length);
             if (func->params[i].num_components > 1)
                args[i + LP_RESV_FUNC_ARGS] = LLVMArrayType(args[i + LP_RESV_FUNC_ARGS], func->params[i].num_components);
          }
 
-         LLVMTypeRef func_type = LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context),
+         LLVMTypeRef func_type = LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context.ref),
                                                   args, num_args, 0);
          LLVMValueRef lfunc = LLVMAddFunction(gallivm->module, func->name, func_type);
          LLVMSetFunctionCallConv(lfunc, LLVMCCallConv);
@@ -484,7 +484,7 @@ generate_compute(struct llvmpipe_context *lp,
          assert(entry);
          struct lp_build_fn *new_fn = entry->data;
          LLVMValueRef lfunc = new_fn->fn;
-         block = LLVMAppendBasicBlockInContext(gallivm->context, lfunc, "entry");
+         block = LLVMAppendBasicBlockInContext(gallivm->context.ref, lfunc, "entry");
 
          builder = gallivm->builder;
          LLVMPositionBuilderAtEnd(builder, block);
@@ -546,7 +546,7 @@ generate_compute(struct llvmpipe_context *lp,
       }
    }
 
-   block = LLVMAppendBasicBlockInContext(gallivm->context, function, "entry");
+   block = LLVMAppendBasicBlockInContext(gallivm->context.ref, function, "entry");
    builder = gallivm->builder;
    assert(builder);
    LLVMPositionBuilderAtEnd(builder, block);
@@ -572,7 +572,7 @@ generate_compute(struct llvmpipe_context *lp,
    coro_num_hdls = LLVMBuildMul(gallivm->builder, coro_num_hdls, block_z_size_arg, "");
 
    /* build a ptr in memory to store all the frames in later. */
-   LLVMTypeRef hdl_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0);
+   LLVMTypeRef hdl_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0);
    LLVMValueRef coro_mem = LLVMBuildAlloca(gallivm->builder, hdl_ptr_type, "coro_mem");
    LLVMBuildStore(builder, LLVMConstNull(hdl_ptr_type), coro_mem);
 
@@ -673,8 +673,8 @@ generate_compute(struct llvmpipe_context *lp,
                           NULL, LLVMIntEQ);
 
    LLVMValueRef coro_mem_ptr = LLVMBuildLoad2(builder, hdl_ptr_type, coro_mem, "");
-   LLVMTypeRef mem_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0);
-   LLVMTypeRef free_type = LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context), &mem_ptr_type, 1, 0);
+   LLVMTypeRef mem_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0);
+   LLVMTypeRef free_type = LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context.ref), &mem_ptr_type, 1, 0);
    LLVMBuildCall2(gallivm->builder, free_type, gallivm->coro_free_hook, &coro_mem_ptr, 1, "");
 
    LLVMBuildRetVoid(builder);
@@ -705,7 +705,7 @@ generate_compute(struct llvmpipe_context *lp,
    coro_mem = LLVMGetParam(coro, CS_ARG_CORO_MEM);
    if (is_mesh)
       output_array = LLVMGetParam(coro, CS_ARG_CORO_OUTPUTS);
-   block = LLVMAppendBasicBlockInContext(gallivm->context, coro, "entry");
+   block = LLVMAppendBasicBlockInContext(gallivm->context.ref, coro, "entry");
    LLVMPositionBuilderAtEnd(builder, block);
    {
       LLVMValueRef consts_ptr;
@@ -736,7 +736,7 @@ generate_compute(struct llvmpipe_context *lp,
       /* these are coroutine entrypoint necessities */
       LLVMValueRef coro_id = lp_build_coro_id(gallivm);
       LLVMValueRef coro_entry = lp_build_coro_alloc_mem_array(gallivm, coro_mem, coro_idx, coro_num_hdls);
-      LLVMTypeRef mem_ptr_type = LLVMInt8TypeInContext(gallivm->context);
+      LLVMTypeRef mem_ptr_type = LLVMInt8TypeInContext(gallivm->context.ref);
       LLVMValueRef alloced_ptr = LLVMBuildLoad2(gallivm->builder, hdl_ptr_type, coro_mem, "");
       alloced_ptr = LLVMBuildGEP2(gallivm->builder, mem_ptr_type, alloced_ptr, &coro_entry, 1, "");
       LLVMValueRef coro_hdl = lp_build_coro_begin(gallivm, coro_id, alloced_ptr);
@@ -815,15 +815,15 @@ generate_compute(struct llvmpipe_context *lp,
 
       struct lp_build_coro_suspend_info coro_info;
 
-      LLVMBasicBlockRef sus_block = LLVMAppendBasicBlockInContext(gallivm->context, coro, "suspend");
-      LLVMBasicBlockRef clean_block = LLVMAppendBasicBlockInContext(gallivm->context, coro, "cleanup");
+      LLVMBasicBlockRef sus_block = LLVMAppendBasicBlockInContext(gallivm->context.ref, coro, "suspend");
+      LLVMBasicBlockRef clean_block = LLVMAppendBasicBlockInContext(gallivm->context.ref, coro, "cleanup");
 
       coro_info.suspend = sus_block;
       coro_info.cleanup = clean_block;
 
       if (is_mesh) {
-         LLVMValueRef vertex_count = lp_build_alloca(gallivm, LLVMInt32TypeInContext(gallivm->context), "vertex_count");
-         LLVMValueRef primitive_count = lp_build_alloca(gallivm, LLVMInt32TypeInContext(gallivm->context), "prim_count");
+         LLVMValueRef vertex_count = lp_build_alloca(gallivm, LLVMInt32TypeInContext(gallivm->context.ref), "vertex_count");
+         LLVMValueRef primitive_count = lp_build_alloca(gallivm, LLVMInt32TypeInContext(gallivm->context.ref), "prim_count");
          mesh_iface.base.emit_store_output = lp_mesh_llvm_emit_store_output;
          mesh_iface.base.emit_vertex_and_primitive_count = lp_mesh_emit_vertex_and_primitive_count;
          mesh_iface.vertex_count = vertex_count;
@@ -861,7 +861,7 @@ generate_compute(struct llvmpipe_context *lp,
                             &params, NULL);
 
       if (is_mesh) {
-         LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
+         LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context.ref);
          LLVMValueRef clipmask = lp_build_const_int_vec(gallivm,
                                                         lp_int_type(cs_type), 0);
 
@@ -900,9 +900,9 @@ generate_compute(struct llvmpipe_context *lp,
          lp_build_loop_begin(&vertex_loop_state, gallivm,
                              lp_build_const_int32(gallivm, 0));
          LLVMValueRef io;
-         io = LLVMBuildPtrToInt(gallivm->builder, io_ptr, LLVMInt64TypeInContext(gallivm->context),  "");
-         io = LLVMBuildAdd(builder, io, LLVMBuildZExt(builder, LLVMBuildMul(builder, vertex_loop_state.counter, lp_build_const_int32(gallivm, vsize), ""), LLVMInt64TypeInContext(gallivm->context), ""), "");
-         io = LLVMBuildIntToPtr(gallivm->builder, io, LLVMPointerType(LLVMVoidTypeInContext(gallivm->context), 0), "");
+         io = LLVMBuildPtrToInt(gallivm->builder, io_ptr, LLVMInt64TypeInContext(gallivm->context.ref),  "");
+         io = LLVMBuildAdd(builder, io, LLVMBuildZExt(builder, LLVMBuildMul(builder, vertex_loop_state.counter, lp_build_const_int32(gallivm, vsize), ""), LLVMInt64TypeInContext(gallivm->context.ref), ""), "");
+         io = LLVMBuildIntToPtr(gallivm->builder, io, LLVMPointerType(LLVMVoidTypeInContext(gallivm->context.ref), 0), "");
          mesh_convert_to_aos(gallivm, shader->base.ir.nir, true, variant->jit_vertex_header_type,
                              io, output_array, clipmask,
                              vertex_loop_state.counter, lp_elem_type(cs_type), -1, false);
@@ -913,11 +913,11 @@ generate_compute(struct llvmpipe_context *lp,
          struct lp_build_loop_state prim_loop_state;
          lp_build_loop_begin(&prim_loop_state, gallivm,
                              lp_build_const_int32(gallivm, 0));
-         io = LLVMBuildPtrToInt(gallivm->builder, io_ptr, LLVMInt64TypeInContext(gallivm->context),  "");
+         io = LLVMBuildPtrToInt(gallivm->builder, io_ptr, LLVMInt64TypeInContext(gallivm->context.ref),  "");
          LLVMValueRef prim_offset = LLVMBuildMul(builder, prim_loop_state.counter, lp_build_const_int32(gallivm, psize), "");
          prim_offset = LLVMBuildAdd(builder, prim_offset, lp_build_const_int32(gallivm, vsize * (nir->info.mesh.max_vertices_out + 8)), "");
-         io = LLVMBuildAdd(builder, io, LLVMBuildZExt(builder, prim_offset, LLVMInt64TypeInContext(gallivm->context), ""), "");
-         io = LLVMBuildIntToPtr(gallivm->builder, io, LLVMPointerType(LLVMVoidTypeInContext(gallivm->context), 0), "");
+         io = LLVMBuildAdd(builder, io, LLVMBuildZExt(builder, prim_offset, LLVMInt64TypeInContext(gallivm->context.ref), ""), "");
+         io = LLVMBuildIntToPtr(gallivm->builder, io, LLVMPointerType(LLVMVoidTypeInContext(gallivm->context.ref), 0), "");
          mesh_convert_to_aos(gallivm, shader->base.ir.nir, false, variant->jit_prim_type,
                              io, output_array, clipmask,
                              prim_loop_state.counter, lp_elem_type(cs_type), -1, false);
@@ -1300,7 +1300,7 @@ generate_variant(struct llvmpipe_context *lp,
       int per_vert_count = out_count - per_prim_count;
       variant->jit_vertex_header_type = lp_build_create_jit_vertex_header_type(variant->gallivm, per_vert_count);
       variant->jit_vertex_header_ptr_type = LLVMPointerType(variant->jit_vertex_header_type, 0);
-      variant->jit_prim_type = LLVMArrayType(LLVMArrayType(LLVMFloatTypeInContext(variant->gallivm->context), 4), per_prim_count);
+      variant->jit_prim_type = LLVMArrayType(LLVMArrayType(LLVMFloatTypeInContext(variant->gallivm->context.ref), 4), per_prim_count);
    }
 
    generate_compute(lp, shader, variant);

@@ -42,7 +42,7 @@ void lp_init_printf_hook(struct gallivm_state *gallivm)
 {
    if (gallivm->debug_printf_hook)
       return;
-   LLVMTypeRef printf_type = LLVMFunctionType(LLVMInt32TypeInContext(gallivm->context), NULL, 0, 1);
+   LLVMTypeRef printf_type = LLVMFunctionType(LLVMInt32TypeInContext(gallivm->context.ref), NULL, 0, 1);
    gallivm->debug_printf_hook = LLVMAddFunction(gallivm->module, "debug_printf", printf_type);
 }
 
@@ -55,7 +55,7 @@ lp_build_print_args(struct gallivm_state* gallivm,
                     LLVMValueRef* args)
 {
    LLVMBuilderRef builder = gallivm->builder;
-   LLVMContextRef context = gallivm->context;
+   LLVMContextRef context = gallivm->context.ref;
    int i;
 
    assert(args);
@@ -71,7 +71,7 @@ lp_build_print_args(struct gallivm_state* gallivm,
    }
 
    lp_init_printf_hook(gallivm);
-   LLVMTypeRef printf_type = LLVMFunctionType(LLVMInt32TypeInContext(gallivm->context), NULL, 0, 1);
+   LLVMTypeRef printf_type = LLVMFunctionType(LLVMInt32TypeInContext(gallivm->context.ref), NULL, 0, 1);
    return LLVMBuildCall2(builder, printf_type, gallivm->debug_printf_hook, args, argcount, "");
 }
 
@@ -139,7 +139,7 @@ lp_build_print_value(struct gallivm_state *gallivm,
          param = LLVMBuildExtractElement(builder, value, lp_build_const_int32(gallivm, i), "");
          if (type_kind == LLVMIntegerTypeKind &&
              LLVMGetIntTypeWidth(type_ref) < sizeof(int) * 8) {
-            LLVMTypeRef int_type = LLVMIntTypeInContext(gallivm->context, sizeof(int) * 8);
+            LLVMTypeRef int_type = LLVMIntTypeInContext(gallivm->context.ref, sizeof(int) * 8);
             if (LLVMGetIntTypeWidth(type_ref) == 8) {
                param = LLVMBuildZExt(builder, param, int_type, "");
             } else {

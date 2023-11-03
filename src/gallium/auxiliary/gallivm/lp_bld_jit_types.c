@@ -36,7 +36,7 @@
 static LLVMTypeRef
 lp_build_create_jit_buffer_type(struct gallivm_state *gallivm)
 {
-   LLVMContextRef lc = gallivm->context;
+   LLVMContextRef lc = gallivm->context.ref;
    LLVMTypeRef buffer_type;
    LLVMTypeRef elem_types[LP_JIT_BUFFER_NUM_FIELDS];
 
@@ -73,7 +73,7 @@ lp_llvm_descriptor_base(struct gallivm_state *gallivm,
       binding_index = LLVMBuildExtractElement(builder, binding_index, lp_build_const_int32(gallivm, 0), "");
 
    LLVMValueRef binding_offset = LLVMBuildMul(builder, binding_index, lp_build_const_int32(gallivm, sizeof(struct lp_descriptor)), "");
-   LLVMTypeRef int64_type = LLVMInt64TypeInContext(gallivm->context);
+   LLVMTypeRef int64_type = LLVMInt64TypeInContext(gallivm->context.ref);
    binding_offset = LLVMBuildIntCast2(builder, binding_offset, int64_type, false, "");
 
    LLVMValueRef desc_ptr = LLVMBuildPtrToInt(builder, desc_set_base, int64_type, "");
@@ -141,7 +141,7 @@ lp_llvm_buffer_num_elements(struct gallivm_state *gallivm,
 static LLVMTypeRef
 lp_build_create_jit_texture_type(struct gallivm_state *gallivm)
 {
-   LLVMContextRef lc = gallivm->context;
+   LLVMContextRef lc = gallivm->context.ref;
    LLVMTypeRef texture_type;
    LLVMTypeRef elem_types[LP_JIT_TEXTURE_NUM_FIELDS];
 
@@ -203,7 +203,7 @@ lp_build_create_jit_texture_type(struct gallivm_state *gallivm)
 static LLVMTypeRef
 lp_build_create_jit_sampler_type(struct gallivm_state *gallivm)
 {
-   LLVMContextRef lc = gallivm->context;
+   LLVMContextRef lc = gallivm->context.ref;
    LLVMTypeRef sampler_type;
    LLVMTypeRef elem_types[LP_JIT_SAMPLER_NUM_FIELDS];
    elem_types[LP_JIT_SAMPLER_MIN_LOD] =
@@ -239,7 +239,7 @@ lp_build_create_jit_sampler_type(struct gallivm_state *gallivm)
 static LLVMTypeRef
 lp_build_create_jit_image_type(struct gallivm_state *gallivm)
 {
-   LLVMContextRef lc = gallivm->context;
+   LLVMContextRef lc = gallivm->context.ref;
    LLVMTypeRef image_type;
    LLVMTypeRef elem_types[LP_JIT_IMAGE_NUM_FIELDS];
    elem_types[LP_JIT_IMAGE_WIDTH] =
@@ -301,9 +301,9 @@ lp_build_jit_resources_type(struct gallivm_state *gallivm)
                                                    PIPE_MAX_SAMPLERS);
    elem_types[LP_JIT_RES_IMAGES] = LLVMArrayType(image_type,
                                                  PIPE_MAX_SHADER_IMAGES);
-   elem_types[LP_JIT_RES_ANISO_FILTER_TABLE] = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context), 0);
+   elem_types[LP_JIT_RES_ANISO_FILTER_TABLE] = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context.ref), 0);
 
-   resources_type = LLVMStructTypeInContext(gallivm->context, elem_types,
+   resources_type = LLVMStructTypeInContext(gallivm->context.ref, elem_types,
                                             ARRAY_SIZE(elem_types), 0);
 
    LP_CHECK_MEMBER_OFFSET(struct lp_jit_resources, constants,
@@ -711,11 +711,11 @@ lp_build_create_jit_vertex_header_type(struct gallivm_state *gallivm, int data_e
 
    snprintf(struct_name, 23, "vertex_header%d", data_elems);
 
-   elem_types[LP_JIT_VERTEX_HEADER_VERTEX_ID]  = LLVMIntTypeInContext(gallivm->context, 32);
-   elem_types[LP_JIT_VERTEX_HEADER_CLIP_POS]  = LLVMArrayType(LLVMFloatTypeInContext(gallivm->context), 4);
+   elem_types[LP_JIT_VERTEX_HEADER_VERTEX_ID]  = LLVMIntTypeInContext(gallivm->context.ref, 32);
+   elem_types[LP_JIT_VERTEX_HEADER_CLIP_POS]  = LLVMArrayType(LLVMFloatTypeInContext(gallivm->context.ref), 4);
    elem_types[LP_JIT_VERTEX_HEADER_DATA]  = LLVMArrayType(elem_types[1], data_elems);
 
-   vertex_header = LLVMStructTypeInContext(gallivm->context, elem_types,
+   vertex_header = LLVMStructTypeInContext(gallivm->context.ref, elem_types,
                                            ARRAY_SIZE(elem_types), 0);
 
    /* these are bit-fields and we can't take address of them
@@ -771,10 +771,10 @@ lp_build_sample_function_type(struct gallivm_state *gallivm, uint32_t sample_key
    else
       coord_type = lp_build_vec_type(gallivm, type);
 
-   arg_types[num_params++] = LLVMInt64TypeInContext(gallivm->context);
-   arg_types[num_params++] = LLVMInt64TypeInContext(gallivm->context);
+   arg_types[num_params++] = LLVMInt64TypeInContext(gallivm->context.ref);
+   arg_types[num_params++] = LLVMInt64TypeInContext(gallivm->context.ref);
 
-   arg_types[num_params++] = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context), 0);
+   arg_types[num_params++] = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context.ref), 0);
 
    for (unsigned i = 0; i < 4; i++)
       arg_types[num_params++] = coord_type;
@@ -793,7 +793,7 @@ lp_build_sample_function_type(struct gallivm_state *gallivm, uint32_t sample_key
       arg_types[num_params++] = coord_type;
 
    val_type[0] = val_type[1] = val_type[2] = val_type[3] = lp_build_vec_type(gallivm, type);
-   ret_type = LLVMStructTypeInContext(gallivm->context, val_type, 4, 0);
+   ret_type = LLVMStructTypeInContext(gallivm->context.ref, val_type, 4, 0);
    return LLVMFunctionType(ret_type, arg_types, num_params, false);
 }
 
@@ -814,13 +814,13 @@ lp_build_size_function_type(struct gallivm_state *gallivm,
    LLVMTypeRef val_type[4];
    uint32_t num_params = 0;
 
-   arg_types[num_params++] = LLVMInt64TypeInContext(gallivm->context);
+   arg_types[num_params++] = LLVMInt64TypeInContext(gallivm->context.ref);
 
    if (!params->samples_only)
       arg_types[num_params++] = lp_build_int_vec_type(gallivm, type);
 
    val_type[0] = val_type[1] = val_type[2] = val_type[3] = lp_build_int_vec_type(gallivm, type);
-   ret_type = LLVMStructTypeInContext(gallivm->context, val_type, 4, 0);
+   ret_type = LLVMStructTypeInContext(gallivm->context.ref, val_type, 4, 0);
    return LLVMFunctionType(ret_type, arg_types, num_params, false);
 }
 
@@ -840,7 +840,7 @@ lp_build_image_function_type(struct gallivm_state *gallivm,
    LLVMTypeRef ret_type;
    uint32_t num_params = 0;
 
-   arg_types[num_params++] = LLVMInt64TypeInContext(gallivm->context);
+   arg_types[num_params++] = LLVMInt64TypeInContext(gallivm->context.ref);
 
    if (params->img_op != LP_IMG_LOAD)
       arg_types[num_params++] = lp_build_int_vec_type(gallivm, type);
@@ -864,9 +864,9 @@ lp_build_image_function_type(struct gallivm_state *gallivm,
    if (params->img_op != LP_IMG_STORE) {
       LLVMTypeRef val_type[4];
       val_type[0] = val_type[1] = val_type[2] = val_type[3] = component_type;
-      ret_type = LLVMStructTypeInContext(gallivm->context, val_type, 4, 0);
+      ret_type = LLVMStructTypeInContext(gallivm->context.ref, val_type, 4, 0);
    } else  {
-      ret_type = LLVMVoidTypeInContext(gallivm->context);
+      ret_type = LLVMVoidTypeInContext(gallivm->context.ref);
    }
 
    return LLVMFunctionType(ret_type, arg_types, num_params, false);

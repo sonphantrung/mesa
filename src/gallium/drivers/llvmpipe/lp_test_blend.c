@@ -137,7 +137,7 @@ add_blend_test(struct gallivm_state *gallivm,
                struct lp_type type)
 {
    LLVMModuleRef module = gallivm->module;
-   LLVMContextRef context = gallivm->context;
+   LLVMContextRef context = gallivm->context.ref;
    LLVMTypeRef vec_type;
    LLVMTypeRef args[5];
    LLVMValueRef func;

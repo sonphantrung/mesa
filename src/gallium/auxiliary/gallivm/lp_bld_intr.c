@@ -279,7 +279,7 @@ lp_build_intrinsic_binary_anylength(struct gallivm_state *gallivm,
    unsigned i;
    struct lp_type intrin_type = src_type;
    LLVMBuilderRef builder = gallivm->builder;
-   LLVMValueRef i32undef = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context));
+   LLVMValueRef i32undef = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context.ref));
    LLVMValueRef anative, bnative;
    unsigned intrin_length = intr_size / src_type.width;
 

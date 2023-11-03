@@ -227,7 +227,7 @@ emit_store_reg(struct lp_build_nir_context *bld_base,
 
    LLVMValueRef cur = LLVMBuildLoad2(gallivm->builder, reg_bld->vec_type,
                                      reg_storage, "");
-   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context.ref);
    LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH];
    for (unsigned j = 0; j < 16; j++) {
       unsigned comp = j % 4;
@@ -268,7 +268,7 @@ emit_load_ubo(struct lp_build_nir_context *bld_base,
       LLVMValueRef this_offset = lp_build_const_int32(gallivm,
                                                       offset_val + chan);
 
-      LLVMTypeRef scalar_type = LLVMInt8TypeInContext(gallivm->context);
+      LLVMTypeRef scalar_type = LLVMInt8TypeInContext(gallivm->context.ref);
       LLVMValueRef scalar_ptr = LLVMBuildGEP2(builder, scalar_type, bld->consts_ptr, &this_offset, 1, "");
       LLVMValueRef scalar = LLVMBuildLoad2(builder, scalar_type, scalar_ptr, "");
 

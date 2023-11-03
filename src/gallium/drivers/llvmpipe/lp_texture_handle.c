@@ -312,8 +312,8 @@ compile_image_function(struct llvmpipe_context *ctx, struct lp_static_texture_st
          params.indata2[i] = LLVMGetParam(function, arg_index++);
 
    LLVMBuilderRef old_builder = gallivm->builder;
-   LLVMBasicBlockRef block = LLVMAppendBasicBlockInContext(gallivm->context, function, "entry");
-   gallivm->builder = LLVMCreateBuilderInContext(gallivm->context);
+   LLVMBasicBlockRef block = LLVMAppendBasicBlockInContext(gallivm->context.ref, function, "entry");
+   gallivm->builder = LLVMCreateBuilderInContext(gallivm->context.ref);
    LLVMPositionBuilderAtEnd(gallivm->builder, block);
 
    LLVMValueRef outdata[4] = { 0 };
@@ -460,8 +460,8 @@ compile_sample_function(struct llvmpipe_context *ctx, struct lp_static_texture_s
       lod = LLVMGetParam(function, arg_index++);
 
    LLVMBuilderRef old_builder = gallivm->builder;
-   LLVMBasicBlockRef block = LLVMAppendBasicBlockInContext(gallivm->context, function, "entry");
-   gallivm->builder = LLVMCreateBuilderInContext(gallivm->context);
+   LLVMBasicBlockRef block = LLVMAppendBasicBlockInContext(gallivm->context.ref, function, "entry");
+   gallivm->builder = LLVMCreateBuilderInContext(gallivm->context.ref);
    LLVMPositionBuilderAtEnd(gallivm->builder, block);
 
    LLVMValueRef texel_out[4] = { 0 };
@@ -541,8 +541,8 @@ compile_size_function(struct llvmpipe_context *ctx, struct lp_static_texture_sta
       params.explicit_lod = LLVMGetParam(function, arg_index++);
 
    LLVMBuilderRef old_builder = gallivm->builder;
-   LLVMBasicBlockRef block = LLVMAppendBasicBlockInContext(gallivm->context, function, "entry");
-   gallivm->builder = LLVMCreateBuilderInContext(gallivm->context);
+   LLVMBasicBlockRef block = LLVMAppendBasicBlockInContext(gallivm->context.ref, function, "entry");
+   gallivm->builder = LLVMCreateBuilderInContext(gallivm->context.ref);
    LLVMPositionBuilderAtEnd(gallivm->builder, block);
 
    LLVMValueRef out_sizes[4] = { 0 };

@@ -123,7 +123,7 @@ lp_build_const_extend_shuffle(struct gallivm_state *gallivm,
       elems[i] = lp_build_const_int32(gallivm, i);
    }
    for (i = n; i < length; i++) {
-      elems[i] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context));
+      elems[i] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context.ref));
    }
 
    return LLVMConstVector(elems, length);
@@ -185,7 +185,7 @@ lp_build_shuffle1undef(struct gallivm_state *gallivm,
    elems[0] = lp_build_const_int32(gallivm, index);
 
    for (i = 1; i < n; i++) {
-      elems[i] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context));
+      elems[i] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context.ref));
    }
    shuf = LLVMConstVector(elems, n);
 
@@ -230,8 +230,8 @@ lp_build_gather_s3tc(struct gallivm_state *gallivm,
    unsigned block_bits = format_desc->block.bits;
    unsigned i;
    LLVMValueRef elems[8];
-   LLVMTypeRef type32 = LLVMInt32TypeInContext(gallivm->context);
-   LLVMTypeRef type64 = LLVMInt64TypeInContext(gallivm->context);
+   LLVMTypeRef type32 = LLVMInt32TypeInContext(gallivm->context.ref);
+   LLVMTypeRef type64 = LLVMInt64TypeInContext(gallivm->context.ref);
    LLVMTypeRef type32dxt;
    struct lp_type lp_type32dxt;
 
@@ -902,8 +902,8 @@ s3tc_dxt5_alpha_channel(struct gallivm_state *gallivm,
    LLVMValueRef tmp, alpha0, alpha1, alphac, alphac0, bit_pos, shift;
    LLVMValueRef sel_mask, tmp_mask, alpha, alpha64, code_s;
    LLVMValueRef mask6, mask7, ainterp;
-   LLVMTypeRef i64t = LLVMInt64TypeInContext(gallivm->context);
-   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef i64t = LLVMInt64TypeInContext(gallivm->context.ref);
+   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context.ref);
    struct lp_build_context bld32;
 
    memset(&type, 0, sizeof type);
@@ -1095,8 +1095,8 @@ lp_build_gather_s3tc_simple_scalar(struct gallivm_state *gallivm,
    LLVMBuilderRef builder = gallivm->builder;
    unsigned block_bits = format_desc->block.bits;
    LLVMValueRef elem, shuf;
-   LLVMTypeRef type32 = LLVMIntTypeInContext(gallivm->context, 32);
-   LLVMTypeRef src_type = LLVMIntTypeInContext(gallivm->context, block_bits);
+   LLVMTypeRef type32 = LLVMIntTypeInContext(gallivm->context.ref, 32);
+   LLVMTypeRef src_type = LLVMIntTypeInContext(gallivm->context.ref, block_bits);
    LLVMTypeRef type32_4 = LLVMVectorType(type32, 4);
 
    assert(block_bits == 64 || block_bits == 128);
@@ -1130,7 +1130,7 @@ s3tc_store_cached_block(struct gallivm_state *gallivm,
    LLVMTypeRef type_ptr4x32;
    unsigned count;
 
-   type_ptr4x32 = LLVMPointerType(LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), 4), 0);
+   type_ptr4x32 = LLVMPointerType(LLVMVectorType(LLVMInt32TypeInContext(gallivm->context.ref), 4), 0);
    indices[0] = lp_build_const_int32(gallivm, 0);
    indices[1] = lp_build_const_int32(gallivm, LP_BUILD_FORMAT_CACHE_MEMBER_TAGS);
    indices[2] = hash_index;
@@ -1199,9 +1199,9 @@ s3tc_update_cache_access(struct gallivm_state *gallivm,
           index == LP_BUILD_FORMAT_CACHE_MEMBER_ACCESS_MISS);
    LLVMTypeRef cache_type = lp_build_format_cache_type(gallivm);
    member_ptr = lp_build_struct_get_ptr2(gallivm, cache_type, ptr, index, "");
-   cache_access = LLVMBuildLoad2(builder, LLVMInt64TypeInContext(gallivm->context), member_ptr, "cache_access");
+   cache_access = LLVMBuildLoad2(builder, LLVMInt64TypeInContext(gallivm->context.ref), member_ptr, "cache_access");
    cache_access = LLVMBuildAdd(builder, cache_access,
-                               LLVMConstInt(LLVMInt64TypeInContext(gallivm->context), count, 0), "");
+                               LLVMConstInt(LLVMInt64TypeInContext(gallivm->context.ref), count, 0), "");
    LLVMBuildStore(builder, cache_access, member_ptr);
 }
 #endif
@@ -1770,8 +1770,8 @@ s3tc_decode_block_dxt5(struct gallivm_state *gallivm,
    }
    else {
       LLVMValueRef elems[16], intrargs[2], shufa, mulclo, mulchi, mask8hi;
-      LLVMTypeRef type16s = LLVMInt16TypeInContext(gallivm->context);
-      LLVMTypeRef type8s = LLVMInt8TypeInContext(gallivm->context);
+      LLVMTypeRef type16s = LLVMInt16TypeInContext(gallivm->context.ref);
+      LLVMTypeRef type8s = LLVMInt8TypeInContext(gallivm->context.ref);
       unsigned i, j;
       /*
        * Ideally, we'd use 2 variable 16bit shifts here (byte shifts wouldn't
@@ -1937,8 +1937,8 @@ generate_update_cache_one_block(struct gallivm_state *gallivm,
     */
 
    old_builder = gallivm->builder;
-   block = LLVMAppendBasicBlockInContext(gallivm->context, function, "entry");
-   gallivm->builder = LLVMCreateBuilderInContext(gallivm->context);
+   block = LLVMAppendBasicBlockInContext(gallivm->context.ref, function, "entry");
+   gallivm->builder = LLVMCreateBuilderInContext(gallivm->context.ref);
    LLVMPositionBuilderAtEnd(gallivm->builder, block);
 
    lp_build_gather_s3tc_simple_scalar(gallivm, format_desc, &dxt_block,
@@ -1966,7 +1966,7 @@ generate_update_cache_one_block(struct gallivm_state *gallivm,
    }
 
    tag_value = LLVMBuildPtrToInt(gallivm->builder, ptr_addr,
-                                 LLVMInt64TypeInContext(gallivm->context), "");
+                                 LLVMInt64TypeInContext(gallivm->context.ref), "");
    s3tc_store_cached_block(gallivm, col, tag_value, hash_index, cache);
 
    LLVMBuildRetVoid(gallivm->builder);
@@ -1989,7 +1989,7 @@ update_cached_block(struct gallivm_state *gallivm,
    LLVMBuilderRef builder = gallivm->builder;
    LLVMModuleRef module = gallivm->module;
    char name[256];
-   LLVMTypeRef i8t = LLVMInt8TypeInContext(gallivm->context);
+   LLVMTypeRef i8t = LLVMInt8TypeInContext(gallivm->context.ref);
    LLVMTypeRef pi8t = LLVMPointerType(i8t, 0);
    LLVMValueRef function, inst;
    LLVMBasicBlockRef bb;
@@ -1999,10 +1999,10 @@ update_cached_block(struct gallivm_state *gallivm,
             format_desc->short_name);
    function = LLVMGetNamedFunction(module, name);
 
-   LLVMTypeRef ret_type = LLVMVoidTypeInContext(gallivm->context);
+   LLVMTypeRef ret_type = LLVMVoidTypeInContext(gallivm->context.ref);
    LLVMTypeRef arg_types[3];
    arg_types[0] = pi8t;
-   arg_types[1] = LLVMInt32TypeInContext(gallivm->context);
+   arg_types[1] = LLVMInt32TypeInContext(gallivm->context.ref);
    arg_types[2] = LLVMTypeOf(cache); // XXX: put right type here
    LLVMTypeRef function_type = LLVMFunctionType(ret_type, arg_types, ARRAY_SIZE(arg_types), 0);
 
@@ -2046,9 +2046,9 @@ compressed_fetch_cached(struct gallivm_state *gallivm,
    unsigned count, low_bit, log2size;
    LLVMValueRef color, offset_stored, addr, ptr_addrtrunc, tmp;
    LLVMValueRef ij_index, hash_index, hash_mask, block_index;
-   LLVMTypeRef i8t = LLVMInt8TypeInContext(gallivm->context);
-   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
-   LLVMTypeRef i64t = LLVMInt64TypeInContext(gallivm->context);
+   LLVMTypeRef i8t = LLVMInt8TypeInContext(gallivm->context.ref);
+   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context.ref);
+   LLVMTypeRef i64t = LLVMInt64TypeInContext(gallivm->context.ref);
    struct lp_type type;
    struct lp_build_context bld32;
    memset(&type, 0, sizeof type);
@@ -2195,7 +2195,7 @@ lp_build_fetch_s3tc_rgba_aos(struct gallivm_state *gallivm,
                              LLVMValueRef cache)
 {
    LLVMValueRef rgba;
-   LLVMTypeRef i8t = LLVMInt8TypeInContext(gallivm->context);
+   LLVMTypeRef i8t = LLVMInt8TypeInContext(gallivm->context.ref);
    LLVMBuilderRef builder = gallivm->builder;
 
    assert(format_desc->layout == UTIL_FORMAT_LAYOUT_S3TC);
@@ -2217,10 +2217,10 @@ lp_build_fetch_s3tc_rgba_aos(struct gallivm_state *gallivm,
    if (n > 4) {
       unsigned count;
       LLVMTypeRef i8_vectype = LLVMVectorType(i8t, 4 * n);
-      LLVMTypeRef i128_type = LLVMIntTypeInContext(gallivm->context, 128);
+      LLVMTypeRef i128_type = LLVMIntTypeInContext(gallivm->context.ref, 128);
       LLVMTypeRef i128_vectype =  LLVMVectorType(i128_type, n / 4);
       LLVMTypeRef i324_vectype = LLVMVectorType(LLVMInt32TypeInContext(
-                                                gallivm->context), 4);
+                                                gallivm->context.ref), 4);
       LLVMValueRef offset4, i4, j4, rgba4[LP_MAX_VECTOR_LENGTH/16];
       struct lp_type lp_324_vectype = lp_type_uint_vec(32, 128);
 
@@ -2329,8 +2329,8 @@ lp_build_gather_rgtc(struct gallivm_state *gallivm,
    unsigned block_bits = format_desc->block.bits;
    unsigned i;
    LLVMValueRef elems[8];
-   LLVMTypeRef type32 = LLVMInt32TypeInContext(gallivm->context);
-   LLVMTypeRef type64 = LLVMInt64TypeInContext(gallivm->context);
+   LLVMTypeRef type32 = LLVMInt32TypeInContext(gallivm->context.ref);
+   LLVMTypeRef type64 = LLVMInt64TypeInContext(gallivm->context.ref);
    LLVMTypeRef type32dxt;
    struct lp_type lp_type32dxt;
 
@@ -2560,7 +2560,7 @@ lp_build_fetch_rgtc_rgba_aos(struct gallivm_state *gallivm,
                              LLVMValueRef cache)
 {
    LLVMValueRef rgba;
-   LLVMTypeRef i8t = LLVMInt8TypeInContext(gallivm->context);
+   LLVMTypeRef i8t = LLVMInt8TypeInContext(gallivm->context.ref);
    LLVMBuilderRef builder = gallivm->builder;
    LLVMValueRef red_lo, red_hi, green_lo, green_hi;
    assert(format_desc->layout == UTIL_FORMAT_LAYOUT_RGTC);
@@ -2571,11 +2571,11 @@ lp_build_fetch_rgtc_rgba_aos(struct gallivm_state *gallivm,
 
    if (n > 4) {
       unsigned count;
-      LLVMTypeRef i128_type = LLVMIntTypeInContext(gallivm->context, 128);
+      LLVMTypeRef i128_type = LLVMIntTypeInContext(gallivm->context.ref, 128);
       LLVMTypeRef i128_vectype =  LLVMVectorType(i128_type, n / 4);
       LLVMTypeRef i8_vectype = LLVMVectorType(i8t, 4 * n);
       LLVMTypeRef i324_vectype = LLVMVectorType(LLVMInt32TypeInContext(
-                                                   gallivm->context), 4);
+                                                   gallivm->context.ref), 4);
       LLVMValueRef offset4, i4, j4, rgba4[LP_MAX_VECTOR_LENGTH/16];
       struct lp_type lp_324_vectype = lp_type_uint_vec(32, 128);
 

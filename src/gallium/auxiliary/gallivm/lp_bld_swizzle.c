@@ -60,7 +60,7 @@ lp_build_broadcast(struct gallivm_state *gallivm,
       const unsigned length = LLVMGetVectorSize(vec_type);
       LLVMValueRef undef = LLVMGetUndef(vec_type);
       /* The shuffle vector is always made of int32 elements */
-      LLVMTypeRef i32_type = LLVMInt32TypeInContext(gallivm->context);
+      LLVMTypeRef i32_type = LLVMInt32TypeInContext(gallivm->context.ref);
       LLVMTypeRef i32_vec_type = LLVMVectorType(i32_type, length);
 
       assert(LLVM_VERSION_MAJOR >= 15 || LLVMGetElementType(vec_type) == LLVMTypeOf(scalar));
@@ -96,7 +96,7 @@ lp_build_extract_broadcast(struct gallivm_state *gallivm,
                            LLVMValueRef vector,
                            LLVMValueRef index)
 {
-   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context.ref);
    LLVMValueRef res;
 
    assert(src_type.floating == dst_type.floating);
@@ -168,7 +168,7 @@ lp_build_swizzle_scalar_aos(struct lp_build_context *bld,
       /*
        * Shuffle.
        */
-      LLVMTypeRef elem_type = LLVMInt32TypeInContext(bld->gallivm->context);
+      LLVMTypeRef elem_type = LLVMInt32TypeInContext(bld->gallivm->context.ref);
       LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH];
 
       for (unsigned j = 0; j < n; j += num_channels)
@@ -329,7 +329,7 @@ lp_build_swizzle_aos_n(struct gallivm_state* gallivm,
       int swizzle = swizzles[i % num_swizzles];
 
       if (swizzle == LP_BLD_SWIZZLE_DONTCARE) {
-         shuffles[i] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context));
+         shuffles[i] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context.ref));
       } else {
          shuffles[i] = lp_build_const_int32(gallivm, swizzle);
       }
@@ -384,7 +384,7 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
        * Shuffle.
        */
       LLVMValueRef undef = LLVMGetUndef(lp_build_elem_type(bld->gallivm, type));
-      LLVMTypeRef i32t = LLVMInt32TypeInContext(bld->gallivm->context);
+      LLVMTypeRef i32t = LLVMInt32TypeInContext(bld->gallivm->context.ref);
       LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH];
       LLVMValueRef aux[LP_MAX_VECTOR_LENGTH];
 
@@ -742,7 +742,7 @@ lp_build_pack_aos_scalars(struct gallivm_state *gallivm,
                           const LLVMValueRef src,
                           unsigned channel)
 {
-   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context.ref);
    LLVMValueRef undef = LLVMGetUndef(i32t);
    LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH];
    unsigned num_src = src_type.length / 4;
@@ -777,7 +777,7 @@ lp_build_unpack_broadcast_aos_scalars(struct gallivm_state *gallivm,
                                       struct lp_type dst_type,
                                       const LLVMValueRef src)
 {
-   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context.ref);
    LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH];
    unsigned num_dst = dst_type.length;
    unsigned num_src = dst_type.length / 4;

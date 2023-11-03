@@ -306,7 +306,7 @@ lp_build_select(struct lp_build_context *bld,
                 LLVMValueRef b)
 {
    LLVMBuilderRef builder = bld->gallivm->builder;
-   LLVMContextRef lc = bld->gallivm->context;
+   LLVMContextRef lc = bld->gallivm->context.ref;
    struct lp_type type = bld->type;
    LLVMValueRef res;
 
@@ -468,7 +468,7 @@ lp_build_select_aos(struct lp_build_context *bld,
       /*
        * Shuffle.
        */
-      LLVMTypeRef elem_type = LLVMInt32TypeInContext(bld->gallivm->context);
+      LLVMTypeRef elem_type = LLVMInt32TypeInContext(bld->gallivm->context.ref);
       LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH];
 
       for (unsigned j = 0; j < n; j += num_channels)
@@ -502,9 +502,9 @@ lp_build_any_true_range(struct lp_build_context *bld,
 
    assert(real_length <= bld->type.length);
 
-   true_type = LLVMIntTypeInContext(bld->gallivm->context,
+   true_type = LLVMIntTypeInContext(bld->gallivm->context.ref,
                                     bld->type.width * real_length);
-   scalar_type = LLVMIntTypeInContext(bld->gallivm->context,
+   scalar_type = LLVMIntTypeInContext(bld->gallivm->context.ref,
                                       bld->type.width * bld->type.length);
    val = LLVMBuildBitCast(builder, val, scalar_type, "");
    /*

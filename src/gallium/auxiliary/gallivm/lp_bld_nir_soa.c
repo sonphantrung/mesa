@@ -120,13 +120,13 @@ static LLVMValueRef first_active_invocation(struct lp_build_nir_context *bld_bas
     * cttz intrinsic -- I assume the compiler will drop the extend if there are
     * smaller instructions available, since we have is_zero_poison.
     */
-   bitmask = LLVMBuildBitCast(builder, bitmask, LLVMIntTypeInContext(gallivm->context, uint_bld->type.length), "exec_bitmask");
+   bitmask = LLVMBuildBitCast(builder, bitmask, LLVMIntTypeInContext(gallivm->context.ref, uint_bld->type.length), "exec_bitmask");
    bitmask = LLVMBuildZExt(builder, bitmask, bld_base->int_bld.elem_type, "");
 
    LLVMValueRef any_active = LLVMBuildICmp(builder, LLVMIntNE, bitmask, lp_build_const_int32(gallivm, 0), "any_active");
 
    LLVMValueRef first_active = lp_build_intrinsic_binary(builder, "llvm.cttz.i32", bld_base->int_bld.elem_type, bitmask,
-                                                         LLVMConstInt(LLVMInt1TypeInContext(gallivm->context), false, false));
+                                                         LLVMConstInt(LLVMInt1TypeInContext(gallivm->context.ref), false, false));
 
    return LLVMBuildSelect(builder, any_active, first_active, lp_build_const_int32(gallivm, 0), "first_active_or_0");
 }
@@ -135,11 +135,11 @@ static LLVMValueRef
 lp_build_zero_bits(struct gallivm_state *gallivm, int bit_size, bool is_float)
 {
    if (bit_size == 64)
-      return LLVMConstInt(LLVMInt64TypeInContext(gallivm->context), 0, 0);
+      return LLVMConstInt(LLVMInt64TypeInContext(gallivm->context.ref), 0, 0);
    else if (bit_size == 16)
-      return LLVMConstInt(LLVMInt16TypeInContext(gallivm->context), 0, 0);
+      return LLVMConstInt(LLVMInt16TypeInContext(gallivm->context.ref), 0, 0);
    else if (bit_size == 8)
-      return LLVMConstInt(LLVMInt8TypeInContext(gallivm->context), 0, 0);
+      return LLVMConstInt(LLVMInt8TypeInContext(gallivm->context.ref), 0, 0);
    else
       return is_float ? lp_build_const_float(gallivm, 0) : lp_build_const_int32(gallivm, 0);
 }
@@ -184,7 +184,7 @@ emit_store_64bit_split(struct lp_build_nir_context *bld_base,
    LLVMValueRef shuffles2[LP_MAX_VECTOR_WIDTH/32];
    int len = bld_base->base.type.length * 2;
 
-   value = LLVMBuildBitCast(gallivm->builder, value, LLVMVectorType(LLVMFloatTypeInContext(gallivm->context), len), "");
+   value = LLVMBuildBitCast(gallivm->builder, value, LLVMVectorType(LLVMFloatTypeInContext(gallivm->context.ref), len), "");
    for (i = 0; i < bld_base->base.type.length; i++) {
 #if UTIL_ARCH_LITTLE_ENDIAN
       shuffles[i] = lp_build_const_int32(gallivm, i * 2);
@@ -273,7 +273,7 @@ build_gather(struct lp_build_nir_context *bld_base,
    unsigned i;
 
    if (indexes2)
-      res = LLVMGetUndef(LLVMVectorType(LLVMFloatTypeInContext(gallivm->context), bld_base->base.type.length * 2));
+      res = LLVMGetUndef(LLVMVectorType(LLVMFloatTypeInContext(gallivm->context.ref), bld_base->base.type.length * 2));
    else
       res = bld->undef;
    /*
@@ -375,7 +375,7 @@ emit_mask_scatter(struct lp_build_nir_soa_context *bld,
       if (scalar_pred) {
          LLVMValueRef real_val, dst_val;
          dst_val = LLVMBuildLoad2(builder, LLVMTypeOf(val), scalar_ptr, "");
-         scalar_pred = LLVMBuildTrunc(builder, scalar_pred, LLVMInt1TypeInContext(gallivm->context), "");
+         scalar_pred = LLVMBuildTrunc(builder, scalar_pred, LLVMInt1TypeInContext(gallivm->context.ref), "");
          real_val = LLVMBuildSelect(builder, scalar_pred, val, dst_val, "");
          LLVMBuildStore(builder, real_val, scalar_ptr);
       }
@@ -506,7 +506,7 @@ static void emit_load_var(struct lp_build_nir_context *bld_base,
                                                               attrib_index_val, 4, idx,
                                                               true);
                LLVMValueRef index_vec2 = NULL;
-               LLVMTypeRef scalar_type = LLVMFloatTypeInContext(gallivm->context);
+               LLVMTypeRef scalar_type = LLVMFloatTypeInContext(gallivm->context.ref);
                LLVMValueRef inputs_array = LLVMBuildBitCast(gallivm->builder, bld->inputs_array, LLVMPointerType(scalar_type, 0), "");
 
                if (bit_size == 64)
@@ -966,17 +966,17 @@ static LLVMValueRef global_addr_to_ptr(struct gallivm_state *gallivm, LLVMValueR
    LLVMBuilderRef builder = gallivm->builder;
    switch (bit_size) {
    case 8:
-      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0), "");
+      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0), "");
       break;
    case 16:
-      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMPointerType(LLVMInt16TypeInContext(gallivm->context), 0), "");
+      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMPointerType(LLVMInt16TypeInContext(gallivm->context.ref), 0), "");
       break;
    case 32:
    default:
-      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMPointerType(LLVMInt32TypeInContext(gallivm->context), 0), "");
+      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMPointerType(LLVMInt32TypeInContext(gallivm->context.ref), 0), "");
       break;
    case 64:
-      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMPointerType(LLVMInt64TypeInContext(gallivm->context), 0), "");
+      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMPointerType(LLVMInt64TypeInContext(gallivm->context.ref), 0), "");
       break;
    }
    return addr_ptr;
@@ -987,17 +987,17 @@ static LLVMValueRef global_addr_to_ptr_vec(struct gallivm_state *gallivm, LLVMVa
    LLVMBuilderRef builder = gallivm->builder;
    switch (bit_size) {
    case 8:
-      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMVectorType(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0), length), "");
+      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMVectorType(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0), length), "");
       break;
    case 16:
-      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMVectorType(LLVMPointerType(LLVMInt16TypeInContext(gallivm->context), 0), length), "");
+      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMVectorType(LLVMPointerType(LLVMInt16TypeInContext(gallivm->context.ref), 0), length), "");
       break;
    case 32:
    default:
-      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMVectorType(LLVMPointerType(LLVMInt32TypeInContext(gallivm->context), 0), length), "");
+      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMVectorType(LLVMPointerType(LLVMInt32TypeInContext(gallivm->context.ref), 0), length), "");
       break;
    case 64:
-      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMVectorType(LLVMPointerType(LLVMInt64TypeInContext(gallivm->context), 0), length), "");
+      addr_ptr = LLVMBuildIntToPtr(builder, addr_ptr, LLVMVectorType(LLVMPointerType(LLVMInt64TypeInContext(gallivm->context.ref), 0), length), "");
       break;
    }
    return addr_ptr;
@@ -1352,7 +1352,7 @@ mem_access_base_pointer(struct lp_build_nir_context *bld_base,
          ptr = bld->payload_ptr;
          ptr = LLVMBuildPtrToInt(gallivm->builder, ptr, bld_base->int64_bld.elem_type, "");
          ptr = LLVMBuildAdd(gallivm->builder, ptr, lp_build_const_int64(gallivm, 12), "");
-         ptr = LLVMBuildIntToPtr(gallivm->builder, ptr, LLVMPointerType(LLVMInt32TypeInContext(gallivm->context), 0), "");
+         ptr = LLVMBuildIntToPtr(gallivm->builder, ptr, LLVMPointerType(LLVMInt32TypeInContext(gallivm->context.ref), 0), "");
       }
       else
          ptr = bld->shared_ptr;
@@ -2425,30 +2425,30 @@ static void emit_reduce(struct lp_build_nir_context *bld_base, LLVMValueRef src,
     */
    switch (reduction_op) {
    case nir_op_fmin: {
-      LLVMValueRef flt_max = bit_size == 64 ? LLVMConstReal(LLVMDoubleTypeInContext(gallivm->context), INFINITY) :
-         (bit_size == 16 ? LLVMConstReal(LLVMHalfTypeInContext(gallivm->context), INFINITY) : lp_build_const_float(gallivm, INFINITY));
+      LLVMValueRef flt_max = bit_size == 64 ? LLVMConstReal(LLVMDoubleTypeInContext(gallivm->context.ref), INFINITY) :
+         (bit_size == 16 ? LLVMConstReal(LLVMHalfTypeInContext(gallivm->context.ref), INFINITY) : lp_build_const_float(gallivm, INFINITY));
       store_val = LLVMBuildBitCast(builder, flt_max, int_bld->elem_type, "");
       break;
    }
    case nir_op_fmax: {
-      LLVMValueRef flt_min = bit_size == 64 ? LLVMConstReal(LLVMDoubleTypeInContext(gallivm->context), -INFINITY) :
-         (bit_size == 16 ? LLVMConstReal(LLVMHalfTypeInContext(gallivm->context), -INFINITY) : lp_build_const_float(gallivm, -INFINITY));
+      LLVMValueRef flt_min = bit_size == 64 ? LLVMConstReal(LLVMDoubleTypeInContext(gallivm->context.ref), -INFINITY) :
+         (bit_size == 16 ? LLVMConstReal(LLVMHalfTypeInContext(gallivm->context.ref), -INFINITY) : lp_build_const_float(gallivm, -INFINITY));
       store_val = LLVMBuildBitCast(builder, flt_min, int_bld->elem_type, "");
       break;
    }
    case nir_op_fmul: {
-      LLVMValueRef flt_one = bit_size == 64 ? LLVMConstReal(LLVMDoubleTypeInContext(gallivm->context), 1.0) :
-         (bit_size == 16 ? LLVMConstReal(LLVMHalfTypeInContext(gallivm->context), 1.0) : lp_build_const_float(gallivm, 1.0));
+      LLVMValueRef flt_one = bit_size == 64 ? LLVMConstReal(LLVMDoubleTypeInContext(gallivm->context.ref), 1.0) :
+         (bit_size == 16 ? LLVMConstReal(LLVMHalfTypeInContext(gallivm->context.ref), 1.0) : lp_build_const_float(gallivm, 1.0));
       store_val = LLVMBuildBitCast(builder, flt_one, int_bld->elem_type, "");
       break;
    }
    case nir_op_umin:
       switch (bit_size) {
       case 8:
-         store_val = LLVMConstInt(LLVMInt8TypeInContext(gallivm->context), UINT8_MAX, 0);
+         store_val = LLVMConstInt(LLVMInt8TypeInContext(gallivm->context.ref), UINT8_MAX, 0);
          break;
       case 16:
-         store_val = LLVMConstInt(LLVMInt16TypeInContext(gallivm->context), UINT16_MAX, 0);
+         store_val = LLVMConstInt(LLVMInt16TypeInContext(gallivm->context.ref), UINT16_MAX, 0);
          break;
       case 32:
       default:
@@ -2462,10 +2462,10 @@ static void emit_reduce(struct lp_build_nir_context *bld_base, LLVMValueRef src,
    case nir_op_imin:
       switch (bit_size) {
       case 8:
-         store_val = LLVMConstInt(LLVMInt8TypeInContext(gallivm->context), INT8_MAX, 0);
+         store_val = LLVMConstInt(LLVMInt8TypeInContext(gallivm->context.ref), INT8_MAX, 0);
          break;
       case 16:
-         store_val = LLVMConstInt(LLVMInt16TypeInContext(gallivm->context), INT16_MAX, 0);
+         store_val = LLVMConstInt(LLVMInt16TypeInContext(gallivm->context.ref), INT16_MAX, 0);
          break;
       case 32:
       default:
@@ -2479,10 +2479,10 @@ static void emit_reduce(struct lp_build_nir_context *bld_base, LLVMValueRef src,
    case nir_op_imax:
       switch (bit_size) {
       case 8:
-         store_val = LLVMConstInt(LLVMInt8TypeInContext(gallivm->context), INT8_MIN, 0);
+         store_val = LLVMConstInt(LLVMInt8TypeInContext(gallivm->context.ref), INT8_MIN, 0);
          break;
       case 16:
-         store_val = LLVMConstInt(LLVMInt16TypeInContext(gallivm->context), INT16_MIN, 0);
+         store_val = LLVMConstInt(LLVMInt16TypeInContext(gallivm->context.ref), INT16_MIN, 0);
          break;
       case 32:
       default:
@@ -2496,10 +2496,10 @@ static void emit_reduce(struct lp_build_nir_context *bld_base, LLVMValueRef src,
    case nir_op_imul:
       switch (bit_size) {
       case 8:
-         store_val = LLVMConstInt(LLVMInt8TypeInContext(gallivm->context), 1, 0);
+         store_val = LLVMConstInt(LLVMInt8TypeInContext(gallivm->context.ref), 1, 0);
          break;
       case 16:
-         store_val = LLVMConstInt(LLVMInt16TypeInContext(gallivm->context), 1, 0);
+         store_val = LLVMConstInt(LLVMInt16TypeInContext(gallivm->context.ref), 1, 0);
          break;
       case 32:
       default:
@@ -2513,10 +2513,10 @@ static void emit_reduce(struct lp_build_nir_context *bld_base, LLVMValueRef src,
    case nir_op_iand:
       switch (bit_size) {
       case 8:
-         store_val = LLVMConstInt(LLVMInt8TypeInContext(gallivm->context), 0xff, 0);
+         store_val = LLVMConstInt(LLVMInt8TypeInContext(gallivm->context.ref), 0xff, 0);
          break;
       case 16:
-         store_val = LLVMConstInt(LLVMInt16TypeInContext(gallivm->context), 0xffff, 0);
+         store_val = LLVMConstInt(LLVMInt16TypeInContext(gallivm->context.ref), 0xffff, 0);
          break;
       case 32:
       default:
@@ -2672,7 +2672,7 @@ emit_launch_mesh_workgroups(struct lp_build_nir_context *bld_base,
 {
    struct lp_build_nir_soa_context *bld = (struct lp_build_nir_soa_context *)bld_base;
    struct gallivm_state *gallivm = bld_base->base.gallivm;
-   LLVMTypeRef vec_type = LLVMArrayType(LLVMInt32TypeInContext(gallivm->context), 3);
+   LLVMTypeRef vec_type = LLVMArrayType(LLVMInt32TypeInContext(gallivm->context.ref), 3);
 
    LLVMValueRef local_invoc_idx = get_local_invocation_index(bld);
 
@@ -2687,7 +2687,7 @@ emit_launch_mesh_workgroups(struct lp_build_nir_context *bld_base,
    for (unsigned i = 0; i < 3; i++) {
       LLVMValueRef lg = LLVMBuildExtractValue(gallivm->builder, launch_grid, i, "");
       lg = LLVMBuildExtractElement(gallivm->builder, lg, lp_build_const_int32(gallivm, 0), "");
-      LLVMValueRef this_ptr = LLVMBuildIntToPtr(gallivm->builder, ptr, LLVMPointerType(LLVMInt32TypeInContext(gallivm->context), 0), "");
+      LLVMValueRef this_ptr = LLVMBuildIntToPtr(gallivm->builder, ptr, LLVMPointerType(LLVMInt32TypeInContext(gallivm->context.ref), 0), "");
       LLVMBuildStore(gallivm->builder, lg, this_ptr);
       ptr = LLVMBuildAdd(gallivm->builder, ptr, lp_build_const_int64(gallivm, 4), "");
    }
@@ -2738,7 +2738,7 @@ emit_load_scratch(struct lp_build_nir_context *bld_base,
    LLVMValueRef thread_offsets = get_scratch_thread_offsets(gallivm, uint_bld->type, bld->scratch_size);
    LLVMValueRef exec_mask = mask_vec(bld_base);
    LLVMValueRef scratch_ptr_vec = lp_build_broadcast(gallivm,
-                                                     LLVMVectorType(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0), uint_bld->type.length),
+                                                     LLVMVectorType(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0), uint_bld->type.length),
                                                      bld->scratch_ptr);
    load_bld = get_int_bld(bld_base, true, bit_size);
 
@@ -2770,7 +2770,7 @@ emit_store_scratch(struct lp_build_nir_context *bld_base,
    struct lp_build_context *store_bld;
    LLVMValueRef thread_offsets = get_scratch_thread_offsets(gallivm, uint_bld->type, bld->scratch_size);
    LLVMValueRef scratch_ptr_vec = lp_build_broadcast(gallivm,
-                                                     LLVMVectorType(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0), uint_bld->type.length),
+                                                     LLVMVectorType(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0), uint_bld->type.length),
                                                      bld->scratch_ptr);
    store_bld = get_int_bld(bld_base, true, bit_size);
 
@@ -2803,7 +2803,7 @@ emit_clock(struct lp_build_nir_context *bld_base,
 
    lp_init_clock_hook(gallivm);
 
-   LLVMTypeRef get_time_type = LLVMFunctionType(LLVMInt64TypeInContext(gallivm->context), NULL, 0, 1);
+   LLVMTypeRef get_time_type = LLVMFunctionType(LLVMInt64TypeInContext(gallivm->context.ref), NULL, 0, 1);
    LLVMValueRef result = LLVMBuildCall2(builder, get_time_type, gallivm->get_time_hook, NULL, 0, "");
 
    LLVMValueRef hi = LLVMBuildShl(builder, result, lp_build_const_int64(gallivm, 32), "");
@@ -2821,24 +2821,24 @@ lp_build_cs_func_call_context(struct gallivm_state *gallivm, int length,
 
    args[LP_NIR_CALL_CONTEXT_CONTEXT] = LLVMPointerType(context_type, 0);
    args[LP_NIR_CALL_CONTEXT_RESOURCES] = LLVMPointerType(resources_type, 0);
-   args[LP_NIR_CALL_CONTEXT_SHARED] = LLVMPointerType(LLVMInt32TypeInContext(gallivm->context), 0); /* shared_ptr */
-   args[LP_NIR_CALL_CONTEXT_SCRATCH] = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0); /* scratch ptr */
-   args[LP_NIR_CALL_CONTEXT_WORK_DIM] = LLVMInt32TypeInContext(gallivm->context); /* work_dim */
-   args[LP_NIR_CALL_CONTEXT_THREAD_ID_0] = LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), length); /* system_values.thread_id[0] */
-   args[LP_NIR_CALL_CONTEXT_THREAD_ID_1] = LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), length); /* system_values.thread_id[1] */
-   args[LP_NIR_CALL_CONTEXT_THREAD_ID_2] = LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), length); /* system_values.thread_id[2] */
-   args[LP_NIR_CALL_CONTEXT_BLOCK_ID_0] = LLVMInt32TypeInContext(gallivm->context); /* system_values.block_id[0] */
-   args[LP_NIR_CALL_CONTEXT_BLOCK_ID_1] = LLVMInt32TypeInContext(gallivm->context); /* system_values.block_id[1] */
-   args[LP_NIR_CALL_CONTEXT_BLOCK_ID_2] = LLVMInt32TypeInContext(gallivm->context); /* system_values.block_id[2] */
+   args[LP_NIR_CALL_CONTEXT_SHARED] = LLVMPointerType(LLVMInt32TypeInContext(gallivm->context.ref), 0); /* shared_ptr */
+   args[LP_NIR_CALL_CONTEXT_SCRATCH] = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0); /* scratch ptr */
+   args[LP_NIR_CALL_CONTEXT_WORK_DIM] = LLVMInt32TypeInContext(gallivm->context.ref); /* work_dim */
+   args[LP_NIR_CALL_CONTEXT_THREAD_ID_0] = LLVMVectorType(LLVMInt32TypeInContext(gallivm->context.ref), length); /* system_values.thread_id[0] */
+   args[LP_NIR_CALL_CONTEXT_THREAD_ID_1] = LLVMVectorType(LLVMInt32TypeInContext(gallivm->context.ref), length); /* system_values.thread_id[1] */
+   args[LP_NIR_CALL_CONTEXT_THREAD_ID_2] = LLVMVectorType(LLVMInt32TypeInContext(gallivm->context.ref), length); /* system_values.thread_id[2] */
+   args[LP_NIR_CALL_CONTEXT_BLOCK_ID_0] = LLVMInt32TypeInContext(gallivm->context.ref); /* system_values.block_id[0] */
+   args[LP_NIR_CALL_CONTEXT_BLOCK_ID_1] = LLVMInt32TypeInContext(gallivm->context.ref); /* system_values.block_id[1] */
+   args[LP_NIR_CALL_CONTEXT_BLOCK_ID_2] = LLVMInt32TypeInContext(gallivm->context.ref); /* system_values.block_id[2] */
 
-   args[LP_NIR_CALL_CONTEXT_GRID_SIZE_0] = LLVMInt32TypeInContext(gallivm->context); /* system_values.grid_size[0] */
-   args[LP_NIR_CALL_CONTEXT_GRID_SIZE_1] = LLVMInt32TypeInContext(gallivm->context); /* system_values.grid_size[1] */
-   args[LP_NIR_CALL_CONTEXT_GRID_SIZE_2] = LLVMInt32TypeInContext(gallivm->context); /* system_values.grid_size[2] */
-   args[LP_NIR_CALL_CONTEXT_BLOCK_SIZE_0] = LLVMInt32TypeInContext(gallivm->context); /* system_values.block_size[0] */
-   args[LP_NIR_CALL_CONTEXT_BLOCK_SIZE_1] = LLVMInt32TypeInContext(gallivm->context); /* system_values.block_size[1] */
-   args[LP_NIR_CALL_CONTEXT_BLOCK_SIZE_2] = LLVMInt32TypeInContext(gallivm->context); /* system_values.block_size[2] */
+   args[LP_NIR_CALL_CONTEXT_GRID_SIZE_0] = LLVMInt32TypeInContext(gallivm->context.ref); /* system_values.grid_size[0] */
+   args[LP_NIR_CALL_CONTEXT_GRID_SIZE_1] = LLVMInt32TypeInContext(gallivm->context.ref); /* system_values.grid_size[1] */
+   args[LP_NIR_CALL_CONTEXT_GRID_SIZE_2] = LLVMInt32TypeInContext(gallivm->context.ref); /* system_values.grid_size[2] */
+   args[LP_NIR_CALL_CONTEXT_BLOCK_SIZE_0] = LLVMInt32TypeInContext(gallivm->context.ref); /* system_values.block_size[0] */
+   args[LP_NIR_CALL_CONTEXT_BLOCK_SIZE_1] = LLVMInt32TypeInContext(gallivm->context.ref); /* system_values.block_size[1] */
+   args[LP_NIR_CALL_CONTEXT_BLOCK_SIZE_2] = LLVMInt32TypeInContext(gallivm->context.ref); /* system_values.block_size[2] */
 
-   LLVMTypeRef stype = LLVMStructTypeInContext(gallivm->context, args, LP_NIR_CALL_CONTEXT_MAX_ARGS, 0);
+   LLVMTypeRef stype = LLVMStructTypeInContext(gallivm->context.ref, args, LP_NIR_CALL_CONTEXT_MAX_ARGS, 0);
    return stype;
 }
 
@@ -2857,7 +2857,7 @@ build_call_context(struct lp_build_nir_soa_context *bld)
                                           call_context, bld->shared_ptr, LP_NIR_CALL_CONTEXT_SHARED, "");
    } else {
       call_context = LLVMBuildInsertValue(gallivm->builder, call_context,
-                                          LLVMConstNull(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0)),
+                                          LLVMConstNull(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0)),
                                           LP_NIR_CALL_CONTEXT_SHARED, "");
    }
    if (bld->scratch_ptr) {
@@ -2865,7 +2865,7 @@ build_call_context(struct lp_build_nir_soa_context *bld)
                                           call_context, bld->scratch_ptr, LP_NIR_CALL_CONTEXT_SCRATCH, "");
    } else {
       call_context = LLVMBuildInsertValue(gallivm->builder, call_context,
-                                          LLVMConstNull(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0)),
+                                          LLVMConstNull(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0)),
                                           LP_NIR_CALL_CONTEXT_SCRATCH, "");
    }
    call_context = LLVMBuildInsertValue(gallivm->builder,
@@ -3073,7 +3073,7 @@ void lp_build_nir_soa_func(struct gallivm_state *gallivm,
       bld.scratch_ptr = params->scratch_ptr;
    else if (shader->scratch_size) {
       bld.scratch_ptr = lp_build_array_alloca(gallivm,
-                                              LLVMInt8TypeInContext(gallivm->context),
+                                              LLVMInt8TypeInContext(gallivm->context.ref),
                                               lp_build_const_int32(gallivm, bld.scratch_size * type.length),
                                               "scratch");
    }

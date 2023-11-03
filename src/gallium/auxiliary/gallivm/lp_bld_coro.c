@@ -44,12 +44,12 @@ LLVMValueRef lp_build_coro_id(struct gallivm_state *gallivm)
 {
    LLVMValueRef coro_id_args[4];
    coro_id_args[0] = lp_build_const_int32(gallivm, 0);
-   coro_id_args[1] = LLVMConstPointerNull(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0));
+   coro_id_args[1] = LLVMConstPointerNull(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0));
    coro_id_args[2] = coro_id_args[1];
    coro_id_args[3] = coro_id_args[1];
    LLVMValueRef coro_id = lp_build_intrinsic(gallivm->builder,
                                              "llvm.coro.id",
-                                             LLVMTokenTypeInContext(gallivm->context),
+                                             LLVMTokenTypeInContext(gallivm->context.ref),
                                              coro_id_args, 4, 0);
    return coro_id;
 }
@@ -58,7 +58,7 @@ LLVMValueRef lp_build_coro_size(struct gallivm_state *gallivm)
 {
    return lp_build_intrinsic(gallivm->builder,
                              "llvm.coro.size.i32",
-                             LLVMInt32TypeInContext(gallivm->context),
+                             LLVMInt32TypeInContext(gallivm->context.ref),
                              NULL, 0, 0);
 }
 
@@ -70,7 +70,7 @@ LLVMValueRef lp_build_coro_begin(struct gallivm_state *gallivm,
    coro_begin_args[1] = mem_ptr;
    LLVMValueRef coro_hdl = lp_build_intrinsic(gallivm->builder,
                                               "llvm.coro.begin",
-                                              LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0),
+                                              LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0),
                                               coro_begin_args, 2, 0);
    return coro_hdl;
 }
@@ -83,7 +83,7 @@ LLVMValueRef lp_build_coro_free(struct gallivm_state *gallivm,
    coro_free_args[1] = coro_hdl;
    return lp_build_intrinsic(gallivm->builder,
                              "llvm.coro.free",
-                             LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0),
+                             LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0),
                              coro_free_args, 2, 0);
 }
 
@@ -91,10 +91,10 @@ void lp_build_coro_end(struct gallivm_state *gallivm, LLVMValueRef coro_hdl)
 {
    LLVMValueRef coro_end_args[2];
    coro_end_args[0] = coro_hdl;
-   coro_end_args[1] = LLVMConstInt(LLVMInt1TypeInContext(gallivm->context), 0, 0);
+   coro_end_args[1] = LLVMConstInt(LLVMInt1TypeInContext(gallivm->context.ref), 0, 0);
    lp_build_intrinsic(gallivm->builder,
                       "llvm.coro.end",
-                      LLVMInt1TypeInContext(gallivm->context),
+                      LLVMInt1TypeInContext(gallivm->context.ref),
                       coro_end_args, 2, 0);
 }
 
@@ -102,7 +102,7 @@ void lp_build_coro_resume(struct gallivm_state *gallivm, LLVMValueRef coro_hdl)
 {
    lp_build_intrinsic(gallivm->builder,
                       "llvm.coro.resume",
-                      LLVMVoidTypeInContext(gallivm->context),
+                      LLVMVoidTypeInContext(gallivm->context.ref),
                       &coro_hdl, 1, 0);
 }
 
@@ -110,7 +110,7 @@ void lp_build_coro_destroy(struct gallivm_state *gallivm, LLVMValueRef coro_hdl)
 {
    lp_build_intrinsic(gallivm->builder,
                       "llvm.coro.destroy",
-                      LLVMVoidTypeInContext(gallivm->context),
+                      LLVMVoidTypeInContext(gallivm->context.ref),
                       &coro_hdl, 1, 0);
 }
 
@@ -118,18 +118,18 @@ LLVMValueRef lp_build_coro_done(struct gallivm_state *gallivm, LLVMValueRef coro
 {
    return lp_build_intrinsic(gallivm->builder,
                              "llvm.coro.done",
-                             LLVMInt1TypeInContext(gallivm->context),
+                             LLVMInt1TypeInContext(gallivm->context.ref),
                              &coro_hdl, 1, 0);
 }
 
 LLVMValueRef lp_build_coro_suspend(struct gallivm_state *gallivm, bool last)
 {
    LLVMValueRef coro_susp_args[2];
-   coro_susp_args[0] = LLVMConstNull(LLVMTokenTypeInContext(gallivm->context));
-   coro_susp_args[1] = LLVMConstInt(LLVMInt1TypeInContext(gallivm->context), last, 0);
+   coro_susp_args[0] = LLVMConstNull(LLVMTokenTypeInContext(gallivm->context.ref));
+   coro_susp_args[1] = LLVMConstInt(LLVMInt1TypeInContext(gallivm->context.ref), last, 0);
    LLVMValueRef coro_suspend = lp_build_intrinsic(gallivm->builder,
                                                   "llvm.coro.suspend",
-                                                  LLVMInt8TypeInContext(gallivm->context),
+                                                  LLVMInt8TypeInContext(gallivm->context.ref),
                                                   coro_susp_args, 2, 0);
    return coro_suspend;
 }
@@ -138,7 +138,7 @@ LLVMValueRef lp_build_coro_alloc(struct gallivm_state *gallivm, LLVMValueRef id)
 {
    return lp_build_intrinsic(gallivm->builder,
                              "llvm.coro.alloc",
-                             LLVMInt1TypeInContext(gallivm->context),
+                             LLVMInt1TypeInContext(gallivm->context.ref),
                              &id, 1, 0);
 }
 
@@ -166,19 +166,19 @@ void lp_build_coro_add_malloc_hooks(struct gallivm_state *gallivm)
 
 void lp_build_coro_declare_malloc_hooks(struct gallivm_state *gallivm)
 {
-   LLVMTypeRef int32_type = LLVMInt32TypeInContext(gallivm->context);
-   LLVMTypeRef mem_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0);
+   LLVMTypeRef int32_type = LLVMInt32TypeInContext(gallivm->context.ref);
+   LLVMTypeRef mem_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0);
    LLVMTypeRef malloc_type = LLVMFunctionType(mem_ptr_type, &int32_type, 1, 0);
    gallivm->coro_malloc_hook_type = malloc_type;
    gallivm->coro_malloc_hook = LLVMAddFunction(gallivm->module, "coro_malloc", malloc_type);
-   LLVMTypeRef free_type = LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context), &mem_ptr_type, 1, 0);
+   LLVMTypeRef free_type = LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context.ref), &mem_ptr_type, 1, 0);
    gallivm->coro_free_hook_type = free_type;
    gallivm->coro_free_hook = LLVMAddFunction(gallivm->module, "coro_free", free_type);
 }
 
 LLVMValueRef lp_build_coro_begin_alloc_mem(struct gallivm_state *gallivm, LLVMValueRef coro_id)
 {
-   LLVMTypeRef mem_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0);
+   LLVMTypeRef mem_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0);
    LLVMValueRef do_alloc = lp_build_coro_alloc(gallivm, coro_id);
    struct lp_build_if_state if_state_coro;
    lp_build_if(&if_state_coro, gallivm, do_alloc);
@@ -188,7 +188,7 @@ LLVMValueRef lp_build_coro_begin_alloc_mem(struct gallivm_state *gallivm, LLVMVa
    assert(gallivm->coro_malloc_hook);
    LLVMTypeRef malloc_type =
          LLVMFunctionType(mem_ptr_type,
-                          (LLVMTypeRef[]){LLVMInt32TypeInContext(gallivm->context)}, 1, 0);
+                          (LLVMTypeRef[]){LLVMInt32TypeInContext(gallivm->context.ref)}, 1, 0);
    alloc_mem = LLVMBuildCall2(gallivm->builder, malloc_type, gallivm->coro_malloc_hook, &coro_size, 1, "");
    lp_build_endif(&if_state_coro);
 
@@ -205,7 +205,7 @@ LLVMValueRef lp_build_coro_alloc_mem_array(struct gallivm_state *gallivm,
 					   LLVMValueRef coro_hdl_ptr, LLVMValueRef coro_idx,
 					   LLVMValueRef coro_num_hdls)
 {
-   LLVMTypeRef mem_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0);
+   LLVMTypeRef mem_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0);
    LLVMValueRef alloced_ptr = LLVMBuildLoad2(gallivm->builder, mem_ptr_type, coro_hdl_ptr, "");
 
    LLVMValueRef not_alloced = LLVMBuildICmp(gallivm->builder, LLVMIntEQ, alloced_ptr, LLVMConstNull(mem_ptr_type), "");
@@ -240,7 +240,7 @@ void lp_build_coro_suspend_switch(struct gallivm_state *gallivm, const struct lp
    LLVMValueRef coro_suspend = lp_build_coro_suspend(gallivm, final_suspend);
    LLVMValueRef myswitch = LLVMBuildSwitch(gallivm->builder, coro_suspend,
                                            sus_info->suspend, resume_block ? 2 : 1);
-   LLVMAddCase(myswitch, LLVMConstInt(LLVMInt8TypeInContext(gallivm->context), 1, 0), sus_info->cleanup);
+   LLVMAddCase(myswitch, LLVMConstInt(LLVMInt8TypeInContext(gallivm->context.ref), 1, 0), sus_info->cleanup);
    if (resume_block)
-      LLVMAddCase(myswitch, LLVMConstInt(LLVMInt8TypeInContext(gallivm->context), 0, 0), resume_block);
+      LLVMAddCase(myswitch, LLVMConstInt(LLVMInt8TypeInContext(gallivm->context.ref), 0, 0), resume_block);
 }

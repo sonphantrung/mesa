@@ -125,25 +125,25 @@ lp_build_const_mask_aos_swizzled(struct gallivm_state *gallivm,
 static inline LLVMValueRef
 lp_build_const_int32(struct gallivm_state *gallivm, int i)
 {
-   return LLVMConstInt(LLVMInt32TypeInContext(gallivm->context), i, 0);
+   return LLVMConstInt(LLVMInt32TypeInContext(gallivm->context.ref), i, 0);
 }
 
 static inline LLVMValueRef
 lp_build_const_int64(struct gallivm_state *gallivm, int64_t i)
 {
-   return LLVMConstInt(LLVMInt64TypeInContext(gallivm->context), i, 0);
+   return LLVMConstInt(LLVMInt64TypeInContext(gallivm->context.ref), i, 0);
 }
 
 static inline LLVMValueRef
 lp_build_const_float(struct gallivm_state *gallivm, float x)
 {
-   return LLVMConstReal(LLVMFloatTypeInContext(gallivm->context), x);
+   return LLVMConstReal(LLVMFloatTypeInContext(gallivm->context.ref), x);
 }
 
 static inline LLVMValueRef
 lp_build_const_double(struct gallivm_state *gallivm, float x)
 {
-   return LLVMConstReal(LLVMDoubleTypeInContext(gallivm->context), x);
+   return LLVMConstReal(LLVMDoubleTypeInContext(gallivm->context.ref), x);
 }
 
 
@@ -155,7 +155,7 @@ lp_build_const_int_pointer(struct gallivm_state *gallivm, const void *ptr)
    LLVMValueRef v;
 
    /* int type large enough to hold a pointer */
-   int_type = LLVMIntTypeInContext(gallivm->context, 8 * sizeof(void *));
+   int_type = LLVMIntTypeInContext(gallivm->context.ref, 8 * sizeof(void *));
    v = LLVMConstInt(int_type, (uintptr_t) ptr, 0);
    v = LLVMBuildIntToPtr(gallivm->builder, v,
                          LLVMPointerType(int_type, 0),

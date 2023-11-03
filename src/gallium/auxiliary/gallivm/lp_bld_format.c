@@ -32,9 +32,9 @@ LLVMTypeRef lp_build_format_cache_elem_type(struct gallivm_state *gallivm, enum 
    assert(member == LP_BUILD_FORMAT_CACHE_MEMBER_DATA || member == LP_BUILD_FORMAT_CACHE_MEMBER_TAGS);
    switch (member) {
    case LP_BUILD_FORMAT_CACHE_MEMBER_DATA:
-      return LLVMInt32TypeInContext(gallivm->context);
+      return LLVMInt32TypeInContext(gallivm->context.ref);
    case LP_BUILD_FORMAT_CACHE_MEMBER_TAGS:
-      return LLVMInt64TypeInContext(gallivm->context);
+      return LLVMInt64TypeInContext(gallivm->context.ref);
    default:
       unreachable("lp_build_format_cache_elem_type unhandled member type");
    }
@@ -62,12 +62,12 @@ lp_build_format_cache_type(struct gallivm_state *gallivm)
 
 #if LP_BUILD_FORMAT_CACHE_DEBUG
    elem_types[LP_BUILD_FORMAT_CACHE_MEMBER_ACCESS_TOTAL] =
-         LLVMInt64TypeInContext(gallivm->context);
+         LLVMInt64TypeInContext(gallivm->context.ref);
    elem_types[LP_BUILD_FORMAT_CACHE_MEMBER_ACCESS_MISS] =
-         LLVMInt64TypeInContext(gallivm->context);
+         LLVMInt64TypeInContext(gallivm->context.ref);
 #endif
 
-   s = LLVMStructTypeInContext(gallivm->context, elem_types,
+   s = LLVMStructTypeInContext(gallivm->context.ref, elem_types,
                                LP_BUILD_FORMAT_CACHE_MEMBER_COUNT, 0);
 
    return s;

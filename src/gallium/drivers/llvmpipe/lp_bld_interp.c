@@ -251,7 +251,7 @@ coeffs_init_simple(struct lp_build_interp_soa_context *bld,
       LLVMValueRef a0aos = setup_bld->zero;
 
       /* See: lp_state_fs.c / generate_fragment() / fs_elem_type */
-      LLVMTypeRef fs_elem_type = LLVMFloatTypeInContext(gallivm->context);
+      LLVMTypeRef fs_elem_type = LLVMFloatTypeInContext(gallivm->context.ref);
 
       switch (interp) {
       case LP_INTERP_PERSPECTIVE:
@@ -467,7 +467,7 @@ lp_build_interp_soa_indirect(struct lp_build_interp_soa_context *bld,
    LLVMValueRef dady = coeff_bld->zero;
    LLVMValueRef a = coeff_bld->zero;
    LLVMTypeRef u8ptr =
-      LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0);
+      LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0);
 
    indir_index = LLVMBuildAdd(builder, indir_index,
                               lp_build_const_int_vec(gallivm, coeff_bld->type,
@@ -597,7 +597,7 @@ lp_build_interp_soa(struct lp_build_interp_soa_context *bld,
       LLVMValueRef base_ptr =
          LLVMBuildBitCast(gallivm->builder,
                           bld->sample_pos_array,
-                          LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0), "");
+                          LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0), "");
       LLVMValueRef xoffset = lp_build_gather(gallivm,
                                              bld->coeff_bld.type.length,
                                              bld->coeff_bld.type.width,

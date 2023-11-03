@@ -78,7 +78,7 @@ lp_build_fetch_rgba_aos_array(struct gallivm_state *gallivm,
     * (If all callers can guarantee element type alignment, we should
     * relax alignment restrictions elsewhere.)
     */
-   LLVMTypeRef byte_type = LLVMInt8TypeInContext(gallivm->context);
+   LLVMTypeRef byte_type = LLVMInt8TypeInContext(gallivm->context.ref);
    ptr = LLVMBuildGEP2(builder, byte_type, base_ptr, &offset, 1, "");
    ptr = LLVMBuildPointerCast(builder, ptr, LLVMPointerType(src_vec_type, 0), "");
    res = LLVMBuildLoad2(builder, src_vec_type, ptr, "");

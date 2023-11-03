@@ -1070,7 +1070,7 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
                                 flt_size,
                                 &flt_width_vec, &flt_height_vec, &flt_depth_vec);
 
-   LLVMTypeRef int1t = LLVMInt1TypeInContext(bld->gallivm->context);
+   LLVMTypeRef int1t = LLVMInt1TypeInContext(bld->gallivm->context.ref);
 
    /*
     * Compute integer texcoords.
@@ -2081,7 +2081,7 @@ lp_build_sample_aniso(struct lp_build_sample_context *bld,
    struct lp_build_context *float_size_bld = &bld->float_size_in_bld;
    LLVMValueRef ddx_ddy = lp_build_packed_ddx_ddy_twocoord(&bld->coord_bld, coords[0], coords[1]);
    LLVMValueRef float_size;
-   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context.ref);
    LLVMValueRef index0 = LLVMConstInt(i32t, 0, 0);
    LLVMValueRef index1 = LLVMConstInt(i32t, 1, 0);
    const unsigned length = bld->coord_bld.type.length;
@@ -2364,7 +2364,7 @@ lp_build_sample_aniso(struct lp_build_sample_context *bld,
 
          /* update the offsets to deal with float size. */
          q = lp_build_mul_imm(&bld->int_coord_bld, q, 4);
-         filter_table = LLVMBuildBitCast(gallivm->builder, filter_table, LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0), "");
+         filter_table = LLVMBuildBitCast(gallivm->builder, filter_table, LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0), "");
 
          /* Lookup weights in filter table */
          LLVMValueRef weights = lp_build_gather(gallivm, coord_bld->type.length,
@@ -2731,7 +2731,7 @@ lp_build_clamp_border_color(struct lp_build_sample_context *bld,
     * we just cast the pointer to float array to pointer to vec4
     * (int or float).
     */
-   LLVMTypeRef border_color_type = LLVMArrayType(LLVMFloatTypeInContext(gallivm->context), 4);
+   LLVMTypeRef border_color_type = LLVMArrayType(LLVMFloatTypeInContext(gallivm->context.ref), 4);
    border_color_ptr = lp_build_array_get_ptr2(gallivm, border_color_type, border_color_ptr,
                                               lp_build_const_int32(gallivm, 0));
    border_color_ptr = LLVMBuildBitCast(builder, border_color_ptr,
@@ -2995,7 +2995,7 @@ lp_build_sample_general(struct lp_build_sample_context *bld,
          struct lp_build_if_state if_ctx;
 
          lod_positive = LLVMBuildTrunc(builder, lod_positive,
-                                       LLVMInt1TypeInContext(bld->gallivm->context),
+                                       LLVMInt1TypeInContext(bld->gallivm->context.ref),
                                        "lod_pos");
 
          lp_build_if(&if_ctx, bld->gallivm, lod_positive);
@@ -3318,7 +3318,7 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
    const unsigned num_quads = type.length / 4;
    struct lp_build_sample_context bld;
    struct lp_static_sampler_state derived_sampler_state = *static_sampler_state;
-   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context.ref);
    LLVMBuilderRef builder = gallivm->builder;
    const struct util_format_description *res_format_desc;
 
@@ -4084,8 +4084,8 @@ lp_build_sample_gen_func(struct gallivm_state *gallivm,
     */
 
    old_builder = gallivm->builder;
-   block = LLVMAppendBasicBlockInContext(gallivm->context, function, "entry");
-   gallivm->builder = LLVMCreateBuilderInContext(gallivm->context);
+   block = LLVMAppendBasicBlockInContext(gallivm->context.ref, function, "entry");
+   gallivm->builder = LLVMCreateBuilderInContext(gallivm->context.ref);
    LLVMPositionBuilderAtEnd(gallivm->builder, block);
 
    lp_build_sample_soa_code(gallivm,
@@ -4224,7 +4224,7 @@ lp_build_sample_soa_func(struct gallivm_state *gallivm,
 
    val_type[0] = val_type[1] = val_type[2] = val_type[3] =
          lp_build_vec_type(gallivm, params->type);
-   ret_type = LLVMStructTypeInContext(gallivm->context, val_type, 4, 0);
+   ret_type = LLVMStructTypeInContext(gallivm->context.ref, val_type, 4, 0);
    LLVMTypeRef function_type = LLVMFunctionType(ret_type, arg_types, num_param, 0);
 
    if (!function) {
@@ -4699,15 +4699,15 @@ lp_build_do_atomic_soa(struct gallivm_state *gallivm,
    }
 
    LLVMTypeRef ref_type = (format == PIPE_FORMAT_R32_FLOAT) ?
-      LLVMFloatTypeInContext(gallivm->context) :
-      LLVMInt32TypeInContext(gallivm->context);
+      LLVMFloatTypeInContext(gallivm->context.ref) :
+      LLVMInt32TypeInContext(gallivm->context.ref);
 
    LLVMTypeRef atom_res_elem_type =
       LLVMVectorType(ref_type, type.length);
    LLVMValueRef atom_res = lp_build_alloca(gallivm, atom_res_elem_type, "");
 
    offset = LLVMBuildGEP2(gallivm->builder,
-                          LLVMInt8TypeInContext(gallivm->context),
+                          LLVMInt8TypeInContext(gallivm->context.ref),
                           base_ptr, &offset, 1, "");
 
    struct lp_build_loop_state loop_state;
@@ -4972,7 +4972,7 @@ lp_build_sample_array_init_soa(struct lp_build_sample_array_switch *switch_info,
       lp_build_vec_type(gallivm, params->type);
 
    LLVMTypeRef ret_type =
-      LLVMStructTypeInContext(gallivm->context, val_type, 4, 0);
+      LLVMStructTypeInContext(gallivm->context.ref, val_type, 4, 0);
 
    LLVMValueRef undef_val = LLVMGetUndef(ret_type);
 
@@ -5000,7 +5000,7 @@ lp_build_sample_array_case_soa(struct lp_build_sample_array_switch *switch_info,
    LLVMBasicBlockRef this_block = lp_build_insert_new_block(gallivm, "texblock");
 
    LLVMAddCase(switch_info->switch_ref,
-               LLVMConstInt(LLVMInt32TypeInContext(gallivm->context), idx, 0),
+               LLVMConstInt(LLVMInt32TypeInContext(gallivm->context.ref), idx, 0),
                this_block);
    LLVMPositionBuilderAtEnd(gallivm->builder, this_block);
 

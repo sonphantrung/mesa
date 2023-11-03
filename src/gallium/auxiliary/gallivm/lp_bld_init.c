@@ -245,7 +245,7 @@ gallivm_free_ir(struct gallivm_state *gallivm)
 #endif
    gallivm->passmgr = NULL;
 #endif
-   gallivm->context = NULL;
+   gallivm->context.ref = NULL;
    gallivm->builder = NULL;
    gallivm->cache = NULL;
 }
@@ -331,15 +331,15 @@ static bool
 init_gallivm_state(struct gallivm_state *gallivm, const char *name,
                    LLVMContextRef context, struct lp_cached_code *cache)
 {
-   assert(!gallivm->context);
+   assert(!gallivm->context.ref);
    assert(!gallivm->module);
 
    if (!lp_build_init())
       return false;
 
-   gallivm->context = context;
+   gallivm->context.ref = context;
    gallivm->cache = cache;
-   if (!gallivm->context)
+   if (!gallivm->context.ref)
       goto fail;
 
    gallivm->module_name = NULL;
@@ -352,7 +352,7 @@ init_gallivm_state(struct gallivm_state *gallivm, const char *name,
    }
 
    gallivm->module = LLVMModuleCreateWithNameInContext(name,
-                                                       gallivm->context);
+                                                       gallivm->context.ref);
    if (!gallivm->module)
       goto fail;
 
@@ -360,7 +360,7 @@ init_gallivm_state(struct gallivm_state *gallivm, const char *name,
    lp_set_module_stack_alignment_override(gallivm->module, 4);
 #endif
 
-   gallivm->builder = LLVMCreateBuilderInContext(gallivm->context);
+   gallivm->builder = LLVMCreateBuilderInContext(gallivm->context.ref);
    if (!gallivm->builder)
       goto fail;
 
@@ -545,7 +545,7 @@ void lp_init_clock_hook(struct gallivm_state *gallivm)
    if (gallivm->get_time_hook)
       return;
 
-   LLVMTypeRef get_time_type = LLVMFunctionType(LLVMInt64TypeInContext(gallivm->context), NULL, 0, 1);
+   LLVMTypeRef get_time_type = LLVMFunctionType(LLVMInt64TypeInContext(gallivm->context.ref), NULL, 0, 1);
    gallivm->get_time_hook = LLVMAddFunction(gallivm->module, "get_time_hook", get_time_type);
 }
 

@@ -246,8 +246,8 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
 
    struct nir_shader *nir = shader->base.ir.nir;
    struct gallivm_state *gallivm = variant->gallivm;
-   LLVMTypeRef int8t = LLVMInt8TypeInContext(gallivm->context);
-   LLVMTypeRef int32t = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef int8t = LLVMInt8TypeInContext(gallivm->context.ref);
+   LLVMTypeRef int32t = LLVMInt32TypeInContext(gallivm->context.ref);
    LLVMTypeRef pint8t = LLVMPointerType(int8t, 0);
    LLVMTypeRef pixelt = LLVMVectorType(int32t, 4);
 
@@ -317,7 +317,7 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
     */
 
    LLVMBasicBlockRef block =
-      LLVMAppendBasicBlockInContext(gallivm->context, function, "entry");
+      LLVMAppendBasicBlockInContext(gallivm->context.ref, function, "entry");
    LLVMBuilderRef builder = gallivm->builder;
 
    LLVMPositionBuilderAtEnd(builder, block);
@@ -345,7 +345,7 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
       lp_jit_linear_context_color0(gallivm,
                                    variant->jit_linear_context_type,
                                    context_ptr);
-   color0_ptr = LLVMBuildLoad2(builder, LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0),
+   color0_ptr = LLVMBuildLoad2(builder, LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0),
                                color0_ptr, "");
    color0_ptr = LLVMBuildBitCast(builder, color0_ptr,
                                  LLVMPointerType(bld.vec_type, 0), "");
@@ -354,7 +354,7 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
       lp_jit_linear_context_blend_color(gallivm,
                                         variant->jit_linear_context_type,
                                         context_ptr);
-   blend_color = LLVMBuildLoad2(builder, LLVMInt32TypeInContext(gallivm->context),
+   blend_color = LLVMBuildLoad2(builder, LLVMInt32TypeInContext(gallivm->context.ref),
                                 blend_color, "");
    blend_color = lp_build_broadcast(gallivm, LLVMVectorType(int32t, 4),
                                     blend_color);
@@ -365,7 +365,7 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
       lp_jit_linear_context_alpha_ref(gallivm,
                                       variant->jit_linear_context_type,
                                       context_ptr);
-   alpha_ref = LLVMBuildLoad2(builder, LLVMInt8TypeInContext(gallivm->context),
+   alpha_ref = LLVMBuildLoad2(builder, LLVMInt8TypeInContext(gallivm->context.ref),
                               alpha_ref, "");
 
    /*

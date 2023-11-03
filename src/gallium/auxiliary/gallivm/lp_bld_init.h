@@ -52,7 +52,7 @@ struct gallivm_state
    LLVMPassManagerRef cgpassmgr;
 #endif
 #endif
-   LLVMContextRef context;
+   lp_context_ref context;
    LLVMBuilderRef builder;
    LLVMMCJITMemoryManagerRef memorymgr;
    struct lp_generated_code *code;
@@ -79,7 +79,7 @@ lp_build_init(void);
 
 
 struct gallivm_state *
-gallivm_create(const char *name, LLVMContextRef context,
+gallivm_create(const char *name, lp_context_ref context,
                struct lp_cached_code *cache);
 
 void

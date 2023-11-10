@@ -91,6 +91,13 @@ struct PhiInfo {
    uint16_t linear_phi_defs = 0;
 };
 
+struct live_ctx {
+   Program* program;
+   live& lives;
+   std::vector<PhiInfo> phi_info;
+   unsigned worklist;
+};
+
 bool
 instr_needs_vcc(Instruction* instr)
 {
@@ -107,19 +114,18 @@ instr_needs_vcc(Instruction* instr)
 }
 
 void
-process_live_temps_per_block(Program* program, live& lives, Block* block, unsigned& worklist,
-                             std::vector<PhiInfo>& phi_info)
+process_live_temps_per_block(live_ctx& ctx, Block* block)
 {
-   std::vector<RegisterDemand>& register_demand = lives.register_demand[block->index];
+   std::vector<RegisterDemand>& register_demand = ctx.lives.register_demand[block->index];
    RegisterDemand new_demand;
 
    register_demand.resize(block->instructions.size());
-   IDSet live = lives.live_out[block->index];
+   IDSet live = ctx.lives.live_out[block->index];
 
    /* initialize register demand */
    for (unsigned t : live)
-      new_demand += Temp(t, program->temp_rc[t]);
-   new_demand.sgpr -= phi_info[block->index].logical_phi_sgpr_ops;
+      new_demand += Temp(t, ctx.program->temp_rc[t]);
+   new_demand.sgpr -= ctx.phi_info[block->index].logical_phi_sgpr_ops;
 
    /* traverse the instructions backwards */
    int idx;
@@ -128,7 +134,7 @@ process_live_temps_per_block(Program* program, live& lives, Block* block, unsign
       if (is_phi(insn))
          break;
 
-      program->needs_vcc |= instr_needs_vcc(insn);
+      ctx.program->needs_vcc |= instr_needs_vcc(insn);
       register_demand[idx] = RegisterDemand(new_demand.vgpr, new_demand.sgpr);
 
       /* KILL */
@@ -137,7 +143,7 @@ process_live_temps_per_block(Program* program, live& lives, Block* block, unsign
             continue;
          }
          if (definition.isFixed() && definition.physReg() == vcc)
-            program->needs_vcc = true;
+            ctx.program->needs_vcc = true;
 
          const Temp temp = definition.getTemp();
          const size_t n = live.erase(temp.id());
@@ -153,7 +159,7 @@ process_live_temps_per_block(Program* program, live& lives, Block* block, unsign
 
       /* GEN */
       if (insn->opcode == aco_opcode::p_logical_end) {
-         new_demand.sgpr += phi_info[block->index].logical_phi_sgpr_ops;
+         new_demand.sgpr += ctx.phi_info[block->index].logical_phi_sgpr_ops;
       } else {
          /* we need to do this in a separate loop because the next one can
           * setKill() for several operands at once and we don't want to
@@ -166,7 +172,7 @@ process_live_temps_per_block(Program* program, live& lives, Block* block, unsign
             if (!operand.isTemp())
                continue;
             if (operand.isFixed() && operand.physReg() == vcc)
-               program->needs_vcc = true;
+               ctx.program->needs_vcc = true;
             const Temp temp = operand.getTemp();
             const bool inserted = live.insert(temp.id()).second;
             if (inserted) {
@@ -207,7 +213,7 @@ process_live_temps_per_block(Program* program, live& lives, Block* block, unsign
       }
       Definition& definition = insn->definitions[0];
       if (definition.isFixed() && definition.physReg() == vcc)
-         program->needs_vcc = true;
+         ctx.program->needs_vcc = true;
       const Temp temp = definition.getTemp();
       const size_t n = live.erase(temp.id());
 
@@ -225,7 +231,7 @@ process_live_temps_per_block(Program* program, live& lives, Block* block, unsign
    }
 
    for (unsigned pred_idx : block->linear_preds)
-      phi_info[pred_idx].linear_phi_defs = linear_phi_defs;
+      ctx.phi_info[pred_idx].linear_phi_defs = linear_phi_defs;
 
    /* now, we need to merge the live-ins into the live-out sets */
    bool fast_merge =
@@ -239,24 +245,24 @@ process_live_temps_per_block(Program* program, live& lives, Block* block, unsign
 
    if (fast_merge) {
       for (unsigned pred_idx : block->linear_preds) {
-         if (lives.live_out[pred_idx].insert(live))
-            worklist = std::max(worklist, pred_idx + 1);
+         if (ctx.lives.live_out[pred_idx].insert(live))
+            ctx.worklist = std::max(ctx.worklist, pred_idx + 1);
       }
    } else {
       for (unsigned t : live) {
-         RegClass rc = program->temp_rc[t];
+         RegClass rc = ctx.program->temp_rc[t];
          Block::edge_vec& preds = rc.is_linear() ? block->linear_preds : block->logical_preds;
 
 #ifndef NDEBUG
          if (preds.empty())
-            aco_err(program, "Temporary never defined or are defined after use: %%%d in BB%d", t,
-                    block->index);
+            aco_err(ctx.program, "Temporary never defined or are defined after use: %%%d in BB%d",
+                    t, block->index);
 #endif
 
          for (unsigned pred_idx : preds) {
-            auto it = lives.live_out[pred_idx].insert(t);
+            auto it = ctx.lives.live_out[pred_idx].insert(t);
             if (it.second)
-               worklist = std::max(worklist, pred_idx + 1);
+               ctx.worklist = std::max(ctx.worklist, pred_idx + 1);
          }
       }
    }
@@ -274,16 +280,16 @@ process_live_temps_per_block(Program* program, live& lives, Block* block, unsign
          if (!operand.isTemp())
             continue;
          if (operand.isFixed() && operand.physReg() == vcc)
-            program->needs_vcc = true;
+            ctx.program->needs_vcc = true;
          /* check if we changed an already processed block */
-         const bool inserted = lives.live_out[preds[i]].insert(operand.tempId()).second;
+         const bool inserted = ctx.lives.live_out[preds[i]].insert(operand.tempId()).second;
          if (inserted) {
-            worklist = std::max(worklist, preds[i] + 1);
+            ctx.worklist = std::max(ctx.worklist, preds[i] + 1);
             if (insn->opcode == aco_opcode::p_phi && operand.getTemp().type() == RegType::sgpr) {
-               phi_info[preds[i]].logical_phi_sgpr_ops += operand.size();
+               ctx.phi_info[preds[i]].logical_phi_sgpr_ops += operand.size();
             } else if (insn->opcode == aco_opcode::p_linear_phi) {
                assert(operand.getTemp().type() == RegType::sgpr);
-               phi_info[preds[i]].linear_phi_ops += operand.size();
+               ctx.phi_info[preds[i]].linear_phi_ops += operand.size();
             }
          }
 
@@ -462,23 +468,27 @@ live_var_analysis(Program* program, live& live)
    live.memory.release();
    live.live_out.resize(program->blocks.size(), IDSet(live.memory));
    live.register_demand.resize(program->blocks.size());
-   unsigned worklist = program->blocks.size();
-   std::vector<PhiInfo> phi_info(program->blocks.size());
+   live_ctx ctx{
+      program,
+      live,
+      std::vector<PhiInfo>(program->blocks.size()),
+      unsigned(program->blocks.size()),
+   };
    RegisterDemand new_demand;
 
    program->needs_vcc = program->gfx_level >= GFX10;
 
    /* this implementation assumes that the block idx corresponds to the block's position in
     * program->blocks vector */
-   while (worklist) {
-      unsigned block_idx = --worklist;
-      process_live_temps_per_block(program, live, &program->blocks[block_idx], worklist, phi_info);
+   while (ctx.worklist) {
+      unsigned block_idx = --ctx.worklist;
+      process_live_temps_per_block(ctx, &program->blocks[block_idx]);
    }
 
    /* Handle branches: we will insert copies created for linear phis just before the branch. */
    for (Block& block : program->blocks) {
-      live.register_demand[block.index].back().sgpr += phi_info[block.index].linear_phi_defs;
-      live.register_demand[block.index].back().sgpr -= phi_info[block.index].linear_phi_ops;
+      live.register_demand[block.index].back().sgpr += ctx.phi_info[block.index].linear_phi_defs;
+      live.register_demand[block.index].back().sgpr -= ctx.phi_info[block.index].linear_phi_ops;
 
       /* update block's register demand */
       if (program->progress < CompilationProgress::after_ra) {

@@ -95,10 +95,6 @@ uint64_t ac_sqtt_get_info_offset(unsigned se);
 
 uint64_t ac_sqtt_get_data_offset(const struct radeon_info *rad_info, const struct ac_sqtt *sqtt,
                                  unsigned se);
-uint64_t ac_sqtt_get_info_va(uint64_t va, unsigned se);
-
-uint64_t ac_sqtt_get_data_va(const struct radeon_info *rad_info, const struct ac_sqtt *sqtt,
-                             uint64_t va, unsigned se);
 
 void ac_sqtt_init(struct ac_sqtt *data);
 

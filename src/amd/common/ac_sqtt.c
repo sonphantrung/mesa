@@ -32,17 +32,16 @@ ac_sqtt_get_data_offset(const struct radeon_info *rad_info, const struct ac_sqtt
    return data_offset;
 }
 
-uint64_t
-ac_sqtt_get_info_va(uint64_t va, unsigned se)
+static uint64_t
+ac_sqtt_get_info_va(const struct ac_sqtt *data, unsigned se)
 {
-   return va + ac_sqtt_get_info_offset(se);
+   return data->bo_va + ac_sqtt_get_info_offset(se);
 }
 
-uint64_t
-ac_sqtt_get_data_va(const struct radeon_info *rad_info, const struct ac_sqtt *data, uint64_t va,
-                    unsigned se)
+static uint64_t
+ac_sqtt_get_data_va(const struct radeon_info *rad_info, const struct ac_sqtt *data, unsigned se)
 {
-   return va + ac_sqtt_get_data_offset(rad_info, data, se);
+   return data->bo_va + ac_sqtt_get_data_offset(rad_info, data, se);
 }
 
 void
@@ -372,8 +371,7 @@ ac_prepare_sqtt_start(const struct radeon_info *info, const struct ac_sqtt *sqtt
    unsigned max_se = info->max_se;
 
    for (unsigned se = 0; se < max_se; se++) {
-      uint64_t va = sqtt_data->bo_va;
-      uint64_t data_va = ac_sqtt_get_data_va(info, sqtt_data, va, se);
+      uint64_t data_va = ac_sqtt_get_data_va(info, sqtt_data, se);
       uint64_t shifted_va = data_va >> SQTT_BUFFER_ALIGN_SHIFT;
       int active_cu = ac_sqtt_get_active_cu(info, se);
 
@@ -559,8 +557,7 @@ copy_sqtt_info_regs(const struct radeon_info *info, const struct ac_sqtt *sqtt_d
    }
 
    /* Get the VA where the info struct is stored for this SE. */
-   uint64_t va = sqtt_data->bo_va;
-   uint64_t info_va = ac_sqtt_get_info_va(va, se_index);
+   uint64_t info_va = ac_sqtt_get_info_va(sqtt_data, se_index);
 
    /* Copy back the info struct one DWORD at a time. */
    for (unsigned i = 0; i < 3; i++) {
@@ -582,7 +579,7 @@ copy_sqtt_info_regs(const struct radeon_info *info, const struct ac_sqtt *sqtt_d
        * 2) shift right by 5 bits because SQ_THREAD_TRACE_WPTR is 32-byte aligned
        * 3) mask off the higher 3 bits because WPTR.OFFSET is 29 bits
        */
-      uint64_t data_va = ac_sqtt_get_data_va(info, sqtt_data, va, se_index);
+      uint64_t data_va = ac_sqtt_get_data_va(info, sqtt_data, se_index);
       uint64_t shifted_data_va = (data_va >> 5);
       uint32_t init_wptr_value = shifted_data_va & 0x1fffffff;
 

@@ -75,8 +75,12 @@ radv_write_sqtt_commands_to_cs(const struct radv_device *device, struct radeon_c
       uint32_t reg = reg_val[i];
       uint32_t value = reg_val[i + 1];
 
-      if (reg < SI_CONFIG_REG_OFFSET) {
+      if (reg == 0) {
+         /* Special case to deal with has_sqtt_rb_harvest_bug */
+         radv_emit_wait_for_idle(device, cs, qf);
+      } else if (reg < SI_CONFIG_REG_OFFSET) {
          radeon_check_space(device->ws, cs, reg);
+
          /* Interpret reg as the number of values. */
          radeon_emit_array(cs, &reg_val[i + 1], reg);
          if (reg > 1)

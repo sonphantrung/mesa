@@ -621,8 +621,10 @@ ac_prepare_sqtt_stop(const struct radeon_info *info, const struct ac_sqtt *sqtt_
               EVENT_TYPE(V_028A90_THREAD_TRACE_FINISH) | EVENT_INDEX(0));
 
    if (info->has_sqtt_rb_harvest_bug) {
-      /* Some chips with disabled RBs should wait for idle because FINISH_DONE doesn't work. */
-      /* TODO radv_emit_wait_for_idle(device, cs, qf); */
+      /* Some chips with disabled RBs should wait for idle because FINISH_DONE doesn't work.
+       * Since radv/radeonsi function for this aren't compatible, add a special case for this.
+       */
+      SQTT_ADD(0, 0);
    }
 
    for (unsigned se = 0; se < max_se; se++) {

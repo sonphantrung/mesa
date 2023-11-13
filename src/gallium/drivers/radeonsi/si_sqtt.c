@@ -62,7 +62,12 @@ si_write_sqtt_commands_to_cs(struct si_context *sctx, struct radeon_cmdbuf *cs, 
       uint32_t reg = reg_val[i];
       uint32_t value = reg_val[i + 1];
 
-      if (reg < SI_CONFIG_REG_OFFSET) {
+      if (reg == 0) {
+         /* Special case to deal with has_sqtt_rb_harvest_bug */
+         sctx->flags |= SI_CONTEXT_FLUSH_AND_INV_CB | SI_CONTEXT_FLUSH_AND_INV_DB |
+                        SI_CONTEXT_CS_PARTIAL_FLUSH;
+         sctx->emit_cache_flush(sctx, cs);
+      } else if (reg < SI_CONFIG_REG_OFFSET) {
          /* Interpret reg as the number of values. */
          radeon_emit_array(&reg_val[i + 1], reg);
          if (reg > 1)

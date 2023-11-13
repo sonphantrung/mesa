@@ -95,7 +95,8 @@ struct live_ctx {
    Program* program;
    live& lives;
    std::vector<PhiInfo> phi_info;
-   unsigned worklist;
+   std::vector<bool> live_out_complete;
+   std::vector<bool> reg_demand_complete;
 };
 
 bool
@@ -141,10 +142,6 @@ handle_phi_operands(live_ctx& ctx)
 void
 procsss_phi_reg_changes(live_ctx& ctx, Block* block, IDSet& live)
 {
-   for (unsigned pred_idx : block->linear_preds)
-      ctx.phi_info[pred_idx].linear_phi_ops = 0;
-   for (unsigned pred_idx : block->logical_preds)
-      ctx.phi_info[pred_idx].logical_phi_sgpr_ops = 0;
    uint16_t linear_phi_defs = 0;
 
    for (unsigned j = 0; j < block->instructions.size(); j++) {
@@ -181,6 +178,78 @@ procsss_phi_reg_changes(live_ctx& ctx, Block* block, IDSet& live)
       ctx.phi_info[pred_idx].linear_phi_defs = linear_phi_defs;
 }
 
+/* For reducible CFGs it holds that
+ * - If a variable is live-in at the header of a loop then
+ *   it is live at all nodes inside the loop.
+ *
+ * We use this property to directly insert the live-out variables into all
+ * blocks of the loop.
+ */
+void
+insert_loop_lives(live_ctx& ctx, Block* loop_header, IDSet& live)
+{
+   unsigned loop_header_idx = loop_header->index;
+
+   /* Insert into preheader */
+   ctx.lives.live_out[loop_header_idx - 1].insert(live);
+   ctx.live_out_complete[loop_header_idx - 1] = true;
+
+   std::vector<uint32_t> logical_blocks = {loop_header_idx};
+   std::vector<uint32_t> linear_blocks;
+
+   while (!logical_blocks.empty()) {
+      unsigned block_idx = logical_blocks.back();
+      logical_blocks.pop_back();
+      if (ctx.live_out_complete[block_idx])
+         continue;
+
+      ctx.lives.live_out[block_idx].insert(live);
+      ctx.live_out_complete[block_idx] = true;
+
+      const Block& block = ctx.program->blocks[block_idx];
+      for (const unsigned pred : block.logical_preds) {
+         if (!ctx.live_out_complete[pred])
+            logical_blocks.emplace_back(pred);
+      }
+      for (const unsigned pred : block.linear_preds)
+         if (!ctx.live_out_complete[pred])
+            linear_blocks.emplace_back(pred);
+   }
+
+   while (!linear_blocks.empty() && ctx.live_out_complete[linear_blocks.back()])
+      linear_blocks.pop_back();
+
+   if (!linear_blocks.empty()) {
+      IDSet linear_set = IDSet(ctx.lives.memory);
+      for (unsigned id : live) {
+         if (ctx.program->temp_rc[id].is_linear())
+            linear_set.insert(id);
+      }
+
+      while (!linear_blocks.empty()) {
+         unsigned block_idx = linear_blocks.back();
+         linear_blocks.pop_back();
+         if (ctx.live_out_complete[block_idx])
+            continue;
+
+         ctx.lives.live_out[block_idx].insert(linear_set);
+         ctx.live_out_complete[block_idx] = true;
+
+         const Block& block = ctx.program->blocks[block_idx];
+         for (unsigned pred : block.linear_preds)
+            if (!ctx.live_out_complete[pred])
+               linear_blocks.emplace_back(pred);
+      }
+   }
+
+   unsigned loop_exit_idx = loop_header->linear_preds.back() + 1;
+   assert(ctx.program->blocks[loop_exit_idx].kind & block_kind_loop_exit);
+   const bool live_out_complete = ctx.reg_demand_complete[loop_exit_idx];
+   std::fill(std::next(ctx.live_out_complete.begin(), loop_header_idx),
+             std::next(ctx.live_out_complete.begin(), loop_exit_idx), live_out_complete);
+   ctx.live_out_complete[loop_header_idx - 1] = false;
+}
+
 void
 process_live_temps_per_block(live_ctx& ctx, Block* block)
 {
@@ -191,8 +260,17 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
    IDSet live = ctx.lives.live_out[block->index];
 
    /* initialize register demand */
-   for (unsigned t : live)
-      new_demand += Temp(t, ctx.program->temp_rc[t]);
+   const bool live_out_complete = ctx.live_out_complete[block->index];
+   const bool update_reg_demand =
+      live_out_complete || std::all_of(block->linear_succs.begin(), block->linear_succs.end(),
+                                       [&](unsigned succ) { return ctx.live_out_complete[succ]; });
+   if (update_reg_demand) {
+      for (unsigned t : live)
+         new_demand += Temp(t, ctx.program->temp_rc[t]);
+
+      ctx.live_out_complete[block->index] = true;
+      ctx.reg_demand_complete[block->index] = true;
+   }
 
    /* traverse the instructions backwards */
    int idx;
@@ -261,8 +339,10 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
       }
    }
 
-   /* Handle phis: fixup final register demand calculations */
-   procsss_phi_reg_changes(ctx, block, live);
+   if (update_reg_demand) {
+      /* Handle phis: fixup final register demand calculations */
+      procsss_phi_reg_changes(ctx, block, live);
+   }
 
    /* now, we need to merge the live-ins into the live-out sets */
    bool fast_merge =
@@ -274,11 +354,13 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
       fast_merge = false; /* we might have errors */
 #endif
 
-   if (fast_merge) {
-      for (unsigned pred_idx : block->linear_preds) {
-         if (ctx.lives.live_out[pred_idx].insert(live))
-            ctx.worklist = std::max(ctx.worklist, pred_idx + 1);
-      }
+   if (live_out_complete) {
+      /* Live-out have been inserted in a previous iteration. */
+   } else if (block->kind & block_kind_loop_header && block->linear_preds.size() > 1) {
+      insert_loop_lives(ctx, block, live);
+   } else if (fast_merge) {
+      for (unsigned pred_idx : block->linear_preds)
+         ctx.lives.live_out[pred_idx].insert(live);
    } else {
       for (unsigned t : live) {
          RegClass rc = ctx.program->temp_rc[t];
@@ -290,11 +372,8 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
                     t, block->index);
 #endif
 
-         for (unsigned pred_idx : preds) {
-            auto it = ctx.lives.live_out[pred_idx].insert(t);
-            if (it.second)
-               ctx.worklist = std::max(ctx.worklist, pred_idx + 1);
-         }
+         for (unsigned pred_idx : preds)
+            ctx.lives.live_out[pred_idx].insert(t);
       }
    }
 
@@ -463,6 +542,12 @@ update_vgpr_sgpr_demand(Program* program, const RegisterDemand new_demand)
 void
 live_var_analysis(Program* program, live& live)
 {
+   /* This algorithm implements 'Liveness Sets On Reducible Graphs' from
+    * "Computing Liveness Sets for SSA-Form Programs" by F. Brandner et al.
+    *
+    * Note, that this implementation assumes that the block idx corresponds to the
+    * block's position in program->blocks vector.
+    */
    live.live_out.clear();
    live.memory.release();
    live.live_out.resize(program->blocks.size(), IDSet(live.memory));
@@ -471,26 +556,38 @@ live_var_analysis(Program* program, live& live)
       program,
       live,
       std::vector<PhiInfo>(program->blocks.size()),
-      unsigned(program->blocks.size()),
+      std::vector<bool>(program->blocks.size()),
+      std::vector<bool>(program->blocks.size()),
    };
-   RegisterDemand new_demand;
 
    program->needs_vcc = program->gfx_level >= GFX10;
 
    /* First, insert all phi operands into live-out sets of the predecessors. */
    handle_phi_operands(ctx);
 
-   /* this implementation assumes that the block idx corresponds to the block's position in
-    * program->blocks vector */
-   while (ctx.worklist) {
-      unsigned block_idx = --ctx.worklist;
-      process_live_temps_per_block(ctx, &program->blocks[block_idx]);
+   /* Second, calculate complete live-out sets of all blocks by
+    * - computing partial liveness sets using postorder traversal.
+    * - propagating live variables withing loop bodies.
+    */
+   for (int i = program->blocks.size() - 1; i >= 0; i--)
+      process_live_temps_per_block(ctx, &program->blocks[i]);
+
+   /* Third, calculate register demand within loop bodies. */
+   for (int i = program->blocks.size() - 1; i >= 0; i--) {
+      assert(ctx.live_out_complete[i]);
+      if (!ctx.reg_demand_complete[i])
+         process_live_temps_per_block(ctx, &program->blocks[i]);
    }
 
-   /* Handle branches: We will insert copies created for linear phis just before the branch.
-    * SGPR->VGPR copies for logical phis happen just before p_logical_end.
-    */
+   /* Final register demand calculation. */
+   RegisterDemand new_demand;
    for (Block& block : program->blocks) {
+
+      /* Handle branches: Fixup the register demand changes caused by phis.
+       *
+       * We will insert copies created for linear phis just before the branch.
+       * SGPR->VGPR copies for logical phis happen just before p_logical_end.
+       */
       std::vector<RegisterDemand>& reg_demand = live.register_demand[block.index];
       reg_demand.back().sgpr += ctx.phi_info[block.index].linear_phi_defs;
       reg_demand.back().sgpr -= ctx.phi_info[block.index].linear_phi_ops;
@@ -502,7 +599,7 @@ live_var_analysis(Program* program, live& live)
          }
       }
 
-      /* update block's register demand */
+      /* Update block's register demand */
       if (program->progress < CompilationProgress::after_ra) {
          block.register_demand = RegisterDemand();
          for (RegisterDemand& demand : live.register_demand[block.index])

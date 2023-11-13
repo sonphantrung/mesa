@@ -552,14 +552,10 @@ bool ac_check_profile_state(const struct radeon_info *info);
 union rgp_sqtt_marker_cb_id ac_sqtt_get_next_cmdbuf_id(struct ac_sqtt *sqtt,
                                                        enum amd_ip_type ip_type);
 
-bool ac_sqtt_se_is_disabled(const struct radeon_info *info, unsigned se);
-
 bool ac_sqtt_get_trace(struct ac_sqtt *sqtt, const struct radeon_info *info,
                        struct ac_sqtt_trace *sqtt_trace);
 
 uint32_t ac_sqtt_get_shader_mask(const struct radeon_info *info);
-
-uint32_t ac_sqtt_get_active_cu(const struct radeon_info *info, unsigned se);
 
 bool
 ac_prepare_sqtt_start(const struct radeon_info *info, const struct ac_sqtt *sqtt_data,

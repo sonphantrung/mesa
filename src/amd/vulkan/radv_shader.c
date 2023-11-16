@@ -2551,6 +2551,8 @@ radv_shader_generate_debug_info(struct radv_device *device, bool dump_shader, bo
       radv_capture_shader_executable_info(device, shader, shaders, shader_count, binary);
 
    if (dump_shader) {
+      for (int i = 0; i < shader_count; ++i)
+         nir_print_shader(shaders[i], stderr);
       fprintf(stderr, "%s", radv_get_shader_name(info, shaders[0]->info.stage));
       for (int i = 1; i < shader_count; ++i)
          fprintf(stderr, " + %s", radv_get_shader_name(info, shaders[i]->info.stage));

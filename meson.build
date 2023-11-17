@@ -111,8 +111,8 @@ with_shared_glapi = get_option('shared-glapi') \
   .allowed()
 
 with_opengl = get_option('opengl')
-with_gles1 = get_option('gles1').allowed()
-with_gles2 = get_option('gles2').allowed()
+with_gles1 = get_option('gles1')
+with_gles2 = get_option('gles2')
 
 pre_args += '-DHAVE_OPENGL=@0@'.format(with_opengl ? '1' : '0')
 pre_args += '-DHAVE_OPENGL_ES_1=@0@'.format(with_gles1 ? '1' : '0')

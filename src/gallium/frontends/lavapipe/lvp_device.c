@@ -211,6 +211,7 @@ static const struct vk_device_extension_table lvp_device_extensions_supported = 
    .EXT_shader_viewport_index_layer       = true,
    .EXT_subgroup_size_control             = true,
    .EXT_texel_buffer_alignment            = true,
+   .EXT_tooling_info                      = true,
    .EXT_transform_feedback                = true,
    .EXT_vertex_attribute_divisor          = true,
    .EXT_vertex_input_dynamic_state        = true,

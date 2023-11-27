@@ -1010,7 +1010,7 @@ ra_set_node_reg(struct ra_graph *g, unsigned int n, unsigned int reg)
    g->nodes[n].forced_reg = reg;
 }
 
-static float
+float
 ra_get_spill_benefit(struct ra_graph *g, unsigned int n)
 {
    float benefit = 0;
@@ -1076,4 +1076,10 @@ void
 ra_set_node_spill_cost(struct ra_graph *g, unsigned int n, float cost)
 {
    g->nodes[n].spill_cost = cost;
+}
+
+float
+ra_get_node_spill_cost(struct ra_graph *g, unsigned int n)
+{
+   return g->nodes[n].spill_cost;
 }

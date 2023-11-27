@@ -333,7 +333,6 @@ public:
       node_count = 0;
       first_payload_node = 0;
       first_mrf_hack_node = 0;
-      scratch_header_node = 0;
       grf127_send_hack_node = 0;
       first_vgrf_node = 0;
       last_vgrf_node = 0;
@@ -363,6 +362,8 @@ private:
                              uint32_t spill_offset, int ip);
    fs_reg build_single_offset(const fs_builder &bld,
                               uint32_t spill_offset, int ip);
+   fs_reg build_scratch_header(const fs_builder &bld,
+                               uint32_t spill_offset, int ip);
 
    void emit_unspill(const fs_builder &bld, struct shader_stats *stats,
                      fs_reg dst, uint32_t spill_offset, unsigned count, int ip);
@@ -371,7 +372,6 @@ private:
 
    void set_spill_costs();
    int choose_spill_reg();
-   fs_reg alloc_scratch_header();
    fs_reg alloc_spill_reg(unsigned size, int ip);
    void spill_reg(unsigned spill_reg);
 
@@ -388,6 +388,7 @@ private:
    int rsi;
 
    ra_graph *g;
+   bool interference_graph_supports_spilling;
    bool have_spill_costs;
 
    int payload_node_count;
@@ -396,7 +397,6 @@ private:
    int node_count;
    int first_payload_node;
    int first_mrf_hack_node;
-   int scratch_header_node;
    int grf127_send_hack_node;
    int first_vgrf_node;
    int last_vgrf_node;
@@ -405,8 +405,6 @@ private:
    int *spill_vgrf_ip;
    int spill_vgrf_ip_alloc;
    int spill_node_count;
-
-   fs_reg scratch_header;
 };
 
 /**
@@ -518,10 +516,6 @@ fs_reg_alloc::setup_live_interference(unsigned node,
       for (int i = spill_base_mrf(fs); i < BRW_MAX_MRF(devinfo->ver); i++)
          ra_add_node_interference(g, node, first_mrf_hack_node + i);
    }
-
-   /* Everything interferes with the scratch header */
-   if (scratch_header_node >= 0)
-      ra_add_node_interference(g, node, scratch_header_node);
 
    /* Add interference with every vgrf whose live range intersects this
     * node's.  We only need to look at nodes below this one as the reflexivity
@@ -663,6 +657,14 @@ fs_reg_alloc::setup_inst_interference(const fs_inst *inst)
 void
 fs_reg_alloc::build_interference_graph(bool allow_spilling)
 {
+   /* We don't need to reserve any registers for spilling on Gfx9+
+    * thanks to split sends, so the interference graph remains the
+    * same in either case.  We also don't need to reserve any GRFs
+    * on Gfx4-6, because we have actual MRFs for messages.
+    */
+   interference_graph_supports_spilling =
+      allow_spilling || devinfo->ver <= 6 || devinfo->ver >= 9;
+
    /* Compute the RA node layout */
    node_count = 0;
    first_payload_node = node_count;
@@ -682,11 +684,6 @@ fs_reg_alloc::build_interference_graph(bool allow_spilling)
    first_vgrf_node = node_count;
    node_count += fs->alloc.count;
    last_vgrf_node = node_count - 1;
-   if ((devinfo->ver >= 9 && devinfo->verx10 < 125) && allow_spilling) {
-      scratch_header_node = node_count++;
-   } else {
-      scratch_header_node = -1;
-   }
    first_spill_node = node_count;
 
    fs->calculate_payload_ranges(payload_node_count,
@@ -811,6 +808,32 @@ fs_reg_alloc::build_lane_offsets(const fs_builder &bld, uint32_t spill_offset, i
    return offset;
 }
 
+/**
+ * Generate a scratch header for Gfx9-12.
+ */
+fs_reg
+fs_reg_alloc::build_scratch_header(const fs_builder &bld,
+                                   uint32_t spill_offset, int ip)
+{
+   const fs_builder ubld8 = bld.exec_all().group(8, 0);
+   const fs_builder ubld1 = bld.exec_all().group(1, 0);
+
+   /* Allocate a spill header and make it interfere with g0 */
+   fs_reg header = retype(alloc_spill_reg(1, ip), BRW_REGISTER_TYPE_UD);
+   ra_add_node_interference(g, first_vgrf_node + header.nr, first_payload_node);
+
+   fs_inst *inst = ubld8.emit(SHADER_OPCODE_SCRATCH_HEADER, header);
+   _mesa_set_add(spill_insts, inst);
+
+   /* Write the scratch offset */
+   assert(spill_offset % 16 == 0);
+   inst = ubld1.MOV(component(header, 2), brw_imm_ud(spill_offset / 16));
+   inst->no_dd_check = true;
+   _mesa_set_add(spill_insts, inst);
+
+   return header;
+}
+
 void
 fs_reg_alloc::emit_unspill(const fs_builder &bld,
                            struct shader_stats *stats,
@@ -873,12 +896,7 @@ fs_reg_alloc::emit_unspill(const fs_builder &bld,
          unspill_inst->send_is_volatile = true;
          unspill_inst->send_ex_desc_scratch = true;
       } else if (devinfo->ver >= 9) {
-         fs_reg header = this->scratch_header;
-         fs_builder ubld = bld.exec_all().group(1, 0);
-         assert(spill_offset % 16 == 0);
-         unspill_inst = ubld.MOV(component(header, 2),
-                                 brw_imm_ud(spill_offset / 16));
-         _mesa_set_add(spill_insts, unspill_inst);
+         fs_reg header = build_scratch_header(bld, spill_offset, ip);
 
          const unsigned bti = GFX8_BTI_STATELESS_NON_COHERENT;
          const fs_reg ex_desc = brw_imm_ud(0);
@@ -968,12 +986,7 @@ fs_reg_alloc::emit_spill(const fs_builder &bld,
          spill_inst->send_is_volatile = false;
          spill_inst->send_ex_desc_scratch = true;
       } else if (devinfo->ver >= 9) {
-         fs_reg header = this->scratch_header;
-         fs_builder ubld = bld.exec_all().group(1, 0);
-         assert(spill_offset % 16 == 0);
-         spill_inst = ubld.MOV(component(header, 2),
-                               brw_imm_ud(spill_offset / 16));
-         _mesa_set_add(spill_insts, spill_inst);
+         fs_reg header = build_scratch_header(bld, spill_offset, ip);
 
          const unsigned bti = GFX8_BTI_STATELESS_NON_COHERENT;
          const fs_reg ex_desc = brw_imm_ud(0);
@@ -1096,6 +1109,28 @@ fs_reg_alloc::set_spill_costs()
 int
 fs_reg_alloc::choose_spill_reg()
 {
+   /* On Gfx7-8, if we're going to spill but we've never spilled before, we
+    * need to re-build the interference graph with registers reserved (via
+    * the fake MRF hack) for constructing spill messages.
+    */
+   if (!interference_graph_supports_spilling) {
+      discard_interference_graph();
+      build_interference_graph(true);
+
+      /* ra_get_best_spill_node() relies on ra_allocate() having been called
+       * once to set up the stack of trivially colorable and optimistically
+       * colored nodes.  By torching and rebuilding our interference graph,
+       * we also discarded the information needed to pick spill candidates.
+       *
+       * The simplest (if expensive) solution is to call ra_allocate() again
+       * on the new graph.  This can't succeed - allocation already failed on
+       * our old graph which had fewer constraints - but it creates the list
+       * of spill candidates for our new more constrained graph.
+       */
+      ASSERTED bool allocated = ra_allocate(g);
+      assert(!allocated);
+   }
+
    if (!have_spill_costs)
       set_spill_costs();
 
@@ -1105,19 +1140,6 @@ fs_reg_alloc::choose_spill_reg()
 
    assert(node >= first_vgrf_node);
    return node - first_vgrf_node;
-}
-
-fs_reg
-fs_reg_alloc::alloc_scratch_header()
-{
-   int vgrf = fs->alloc.allocate(1);
-   assert(first_vgrf_node + vgrf == scratch_header_node);
-   ra_set_node_class(g, scratch_header_node,
-                        compiler->fs_reg_sets[rsi].classes[0]);
-
-   setup_live_interference(scratch_header_node, 0, INT_MAX);
-
-   return fs_reg(VGRF, vgrf, BRW_REGISTER_TYPE_UD);
 }
 
 fs_reg
@@ -1168,16 +1190,8 @@ fs_reg_alloc::spill_reg(unsigned spill_reg)
     * SIMD16 mode, because we'd stomp the FB writes.
     */
    if (!fs->spilled_any_registers) {
-      if (devinfo->verx10 >= 125) {
+      if (devinfo->ver >= 9) {
          /* We will allocate a register on the fly */
-      } else if (devinfo->ver >= 9) {
-         this->scratch_header = alloc_scratch_header();
-         fs_builder ubld = fs->bld.exec_all().group(8, 0).at(
-            fs->cfg->first_block(), fs->cfg->first_block()->start());
-
-         fs_inst *inst = ubld.emit(SHADER_OPCODE_SCRATCH_HEADER,
-                                   this->scratch_header);
-         _mesa_set_add(spill_insts, inst);
       } else {
          bool mrf_used[BRW_MAX_MRF(devinfo->ver)];
          get_used_mrfs(fs, mrf_used);
@@ -1352,15 +1366,6 @@ fs_reg_alloc::assign_regs(bool allow_spilling, bool spill_all)
             if (j == 0)
                return false; /* Nothing to spill */
             break;
-         }
-
-         /* If we're going to spill but we've never spilled before, we need
-          * to re-build the interference graph with MRFs enabled to allow
-          * spilling.
-          */
-         if (!fs->spilled_any_registers) {
-            discard_interference_graph();
-            build_interference_graph(true);
          }
 
          spill_reg(reg);

@@ -97,7 +97,21 @@ lower_vtg_io_intrin(nir_builder *b,
       nir_def *lo = nir_extract_u8_imm(b, info, 0);
       nir_def *hi = nir_extract_u8_imm(b, info, 2);
       nir_def *idx = nir_iadd(b, nir_imul(b, lo, hi), vtx);
-      vtx = nir_isberd_nv(b, idx);
+
+      const struct nak_nir_isbe_flags flags = {
+         .mode = NAK_ISBE_MODE_MAP,
+         .output = false,
+         .skew = false,
+         .per_primitive = false,
+      };
+
+      uint32_t flags_u32;
+      STATIC_ASSERT(sizeof(flags_u32) == sizeof(flags));
+      memcpy(&flags_u32, &flags, sizeof(flags_u32));
+
+      vtx = nir_isberd_nv(b, 8, idx,
+                          .flags = flags_u32,
+                          .access = ACCESS_CAN_REORDER);
    }
 
    if (vtx == NULL)

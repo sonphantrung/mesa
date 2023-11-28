@@ -172,6 +172,8 @@ nvk_get_device_extensions(const struct nvk_instance *instance,
       .EXT_inline_uniform_block = true,
       .EXT_line_rasterization = true,
       .EXT_load_store_op_none = true,
+      .EXT_mesh_shader = info->cls_eng3d >= TURING_A &&
+         (nvk_nak_stages(info) & VK_SHADER_STAGE_MESH_BIT_EXT) != 0,
       .EXT_multi_draw = true,
       .EXT_mutable_descriptor_type = true,
       .EXT_non_seamless_cube_map = true,
@@ -468,6 +470,19 @@ nvk_get_device_features(const struct nv_device_info *info,
 
       /* VK_EXT_multi_draw */
       .multiDraw = true,
+
+      /* VK_EXT_mesh_shader */
+      /* TODO: Implement this */
+      //.taskShader = info->cls_eng3d >= TURING_A &&
+      //   (nvk_nak_stages(info) & VK_SHADER_STAGE_TASK_BIT_EXT) != 0,
+      .taskShader = false,
+      .meshShader = info->cls_eng3d >= TURING_A &&
+         (nvk_nak_stages(info) & VK_SHADER_STAGE_MESH_BIT_EXT) != 0,
+      .multiviewMeshShader = true,
+      /* TODO: Requires VK_KHR_fragment_shading_rate support */
+      .primitiveFragmentShadingRateMeshShader = false,
+      /* TODO: TASK_SHADER_INVOCATIONS_BIT_EXT & MESH_SHADER_INVOCATIONS_BIT_EXT */
+      .meshShaderQueries = false,
 
       /* VK_EXT_non_seamless_cube_map */
       .nonSeamlessCubeMap = true,
@@ -779,6 +794,37 @@ nvk_get_device_properties(const struct nvk_instance *instance,
 
       /* VK_EXT_multi_draw */
       .maxMultiDrawCount = UINT32_MAX,
+
+      /* VK_EXT_mesh_shader */
+      .maxTaskWorkGroupTotalCount = 4194304,
+      .maxTaskWorkGroupCount = {4194304, 65535, 65535},
+      .maxTaskWorkGroupInvocations = 128,
+      .maxTaskWorkGroupSize = {128, 128, 128},
+      .maxTaskPayloadSize = 16384,
+      .maxTaskSharedMemorySize = 32768,
+      .maxTaskPayloadAndSharedMemorySize = 32768,
+      .maxMeshWorkGroupTotalCount = 32768,
+      .maxMeshWorkGroupTotalCount = 4194304,
+      .maxMeshWorkGroupCount = {4194304, 65535, 65535},
+      .maxMeshWorkGroupInvocations = 128,
+      .maxMeshWorkGroupSize = {128, 128, 128},
+      .maxMeshSharedMemorySize = 28672,
+      .maxMeshPayloadAndSharedMemorySize = 28672,
+      .maxMeshOutputMemorySize = 32768,
+      .maxMeshPayloadAndOutputMemorySize = 48128,
+      .maxMeshOutputComponents = 128,
+      .maxMeshOutputVertices = 256,
+      .maxMeshOutputPrimitives = 256,
+      .maxMeshOutputLayers = 2048,
+      .maxMeshMultiviewViewCount = 4,
+      .meshOutputPerVertexGranularity = 32,
+      .meshOutputPerPrimitiveGranularity = 32,
+      .maxPreferredTaskWorkGroupInvocations = 32,
+      .maxPreferredMeshWorkGroupInvocations = 32,
+      .prefersLocalInvocationVertexOutput = false,
+      .prefersLocalInvocationPrimitiveOutput = false,
+      .prefersCompactVertexOutput = false,
+      .prefersCompactPrimitiveOutput = true,
 
       /* VK_EXT_pci_bus_info */
       .pciDomain   = info->pci.domain,

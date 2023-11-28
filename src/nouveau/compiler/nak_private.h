@@ -72,6 +72,8 @@ enum ENUM_PACKED nak_attr {
    NAK_ATTR_INSTANCE_ID       = 0x2f8,
    NAK_ATTR_VERTEX_ID         = 0x2fc,
 
+   /* System values D */
+   NAK_ATTR_VIEWPORT_MASK         = 0x3a0,
    NAK_ATTR_BARY_COORD_NO_PERSP_X = 0x3a8,
    NAK_ATTR_BARY_COORD_NO_PERSP_Y = 0x3ac,
    NAK_ATTR_BARY_COORD_NO_PERSP_Z = 0x3b0,
@@ -81,6 +83,7 @@ enum ENUM_PACKED nak_attr {
    NAK_ATTR_BARY_COORD_Y = 0x3b8,
    NAK_ATTR_BARY_COORD_Z = 0x3bc,
    NAK_ATTR_BARY_COORD = NAK_ATTR_BARY_COORD_X,
+   NAK_ATTR_SPH_END    = NAK_ATTR_BARY_COORD_Z + 4,
 
    /* Not in SPH */
    NAK_ATTR_FRONT_FACE        = 0x3fc,
@@ -151,6 +154,7 @@ bool nak_nir_lower_tex(nir_shader *nir, const struct nak_compiler *nak);
 bool nak_nir_lower_gs_intrinsics(nir_shader *shader);
 bool nak_nir_lower_algebraic_late(nir_shader *nir, const struct nak_compiler *nak);
 
+
 struct nak_nir_attr_io_flags {
    bool output : 1;
    bool patch : 1;
@@ -174,6 +178,20 @@ struct nak_nir_isbe_flags {
    bool per_primitive : 1;
    uint32_t pad : 27;
 };
+
+#define NAK_MESH_SKEW_GROUP_COUNT 32
+
+struct lower_mesh_intrinsics_ctx {
+   const struct nak_compiler *nak;
+
+   uint32_t max_vertices_out;
+   uint32_t max_primitives_out;
+
+   BITSET_DECLARE(skew_vert_attr_used, NAK_ATTR_SPH_END);
+   BITSET_DECLARE(skew_prim_attr_used, NAK_ATTR_SPH_END);
+};
+
+bool nak_nir_lower_mesh_intrinsics(nir_shader *nir, struct lower_mesh_intrinsics_ctx *ctx);
 
 enum nak_interp_mode {
    NAK_INTERP_MODE_PERSPECTIVE,
@@ -217,6 +235,65 @@ enum nak_fs_out {
 bool nak_nir_add_barriers(nir_shader *nir, const struct nak_compiler *nak);
 
 #define NAK_FS_OUT_COLOR(n) (NAK_FS_OUT_COLOR0 + (n) * 16)
+
+static unsigned
+nak_mesh_skew_attr_used_index(unsigned driver_location)
+{
+   assert(driver_location < NAK_ATTR_SPH_END);
+
+   return driver_location / 4;
+}
+
+
+static unsigned
+nak_mesh_skew_vert_group_size(const struct lower_mesh_intrinsics_ctx *ctx)
+{
+   return BITSET_COUNT(ctx->skew_vert_attr_used) * 4 * NAK_MESH_SKEW_GROUP_COUNT;
+}
+
+static unsigned
+nak_mesh_skew_vert_total_size(const struct lower_mesh_intrinsics_ctx *ctx)
+{
+   return nak_mesh_skew_vert_group_size(ctx) * DIV_ROUND_UP(ctx->max_vertices_out, NAK_MESH_SKEW_GROUP_COUNT);
+}
+
+static unsigned
+nak_mesh_skew_prim_group_size(const struct lower_mesh_intrinsics_ctx *ctx)
+{
+   return BITSET_COUNT(ctx->skew_prim_attr_used) * 4 * NAK_MESH_SKEW_GROUP_COUNT;
+}
+
+static unsigned
+nak_mesh_skew_prim_total_size(const struct lower_mesh_intrinsics_ctx *ctx)
+{
+   return nak_mesh_skew_prim_group_size(ctx) * DIV_ROUND_UP(ctx->max_primitives_out, NAK_MESH_SKEW_GROUP_COUNT);
+}
+
+static unsigned
+nak_mesh_skew_total_size(const struct lower_mesh_intrinsics_ctx *ctx)
+{
+   return nak_mesh_skew_vert_total_size(ctx) + nak_mesh_skew_prim_total_size(ctx);
+}
+
+static unsigned
+nak_mesh_skew_offset(const struct lower_mesh_intrinsics_ctx *ctx,
+                     gl_varying_slot slot,
+                     unsigned driver_location,
+                     bool per_primitive)
+{
+   const unsigned bit_idx = nak_mesh_skew_attr_used_index(driver_location);
+
+   unsigned bit_count;
+
+   if (per_primitive)
+      bit_count = BITSET_PREFIX_SUM(ctx->skew_prim_attr_used, bit_idx);
+   else
+      bit_count = BITSET_PREFIX_SUM(ctx->skew_vert_attr_used, bit_idx);
+
+   unsigned size = bit_count * 4 * NAK_MESH_SKEW_GROUP_COUNT;
+
+   return size;
+}
 
 #ifdef __cplusplus
 }

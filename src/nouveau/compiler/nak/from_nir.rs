@@ -66,6 +66,22 @@ fn init_info_from_nir(nir: &nir_shader, sm: u8) -> ShaderInfo {
                 })
             }
             MESA_SHADER_TESS_EVAL => ShaderStageInfo::Tessellation,
+            MESA_SHADER_TASK => ShaderStageInfo::Task,
+            MESA_SHADER_MESH => ShaderStageInfo::Mesh(MeshShaderInfo {
+                // TODO: Implement this
+                has_task_shader: false,
+                has_gs_sph: false,
+                primitive_io: VtgIoInfo {
+                    sysvals_in: SysValInfo::default(),
+                    sysvals_in_d: 0,
+                    sysvals_out: SysValInfo::default(),
+                    sysvals_out_d: 0,
+                    attr_in: [0; 4],
+                    attr_out: [0; 4],
+                    store_req_start: 0,
+                    store_req_end: u8::MAX,
+                }
+            }),
             _ => panic!("Unknown shader stage"),
         },
         io: match nir.info.stage() {
@@ -101,6 +117,21 @@ fn init_info_from_nir(nir: &nir_shader, sm: u8) -> ShaderInfo {
                 // TODO: figure out how to fill this.
                 store_req_start: u8::MAX,
                 store_req_end: 0,
+            }),
+            MESA_SHADER_TASK
+            | MESA_SHADER_MESH => ShaderIoInfo::Vtg(VtgIoInfo {
+                sysvals_in: SysValInfo {
+                    ab: 0,
+                    c: 1 << 15,
+                },
+                sysvals_in_d: 0,
+                sysvals_out: SysValInfo::default(),
+                sysvals_out_d: 0,
+                attr_in: [0; 4],
+                attr_out: [0; 4],
+
+                store_req_start: 0,
+                store_req_end: u8::MAX,
             }),
             _ => panic!("Unknown shader stage"),
         },
@@ -2141,19 +2172,103 @@ impl<'a> ShaderFromNir<'a> {
                 let flags: nak_nir_isbe_flags =
                     unsafe { std::mem::transmute_copy(&flags) };
 
-                // TODO: Implement 16 and 32 bits in ISBERD
-                assert!(intrin.def.bit_size() == 8 && intrin.def.num_components == 1);
+                let base: u16 = u16::try_from(intrin.range_base()).unwrap();
+                let range = u16::try_from(intrin.range()).unwrap();
+                let range = base..(base + range);
+                assert!(intrin.def.num_components() == 1);
 
-                // TODO: Implement mode in ISBERD
-                assert!(flags.mode() == NAK_ISBE_MODE_MAP);
+                let size_B = intrin.def.bit_size() / 8;
+
+                let access_type = match flags.mode() {
+                    NAK_ISBE_MODE_MAP => IsbeAccessType::Map,
+                    NAK_ISBE_MODE_PATCH => IsbeAccessType::Patch,
+                    NAK_ISBE_MODE_PRIM => IsbeAccessType::Primitive,
+                    NAK_ISBE_MODE_ATTR => IsbeAccessType::Attribute,
+                    _ => panic!("Invalid ISBE mode {}", flags.mode()),
+                };
+
+                if base != 0 {
+                    match &mut self.info.stage {
+                        ShaderStageInfo::Mesh(mesh) => {
+                            // In case the write is per primitive, we require a GS SPH to be present.
+                            if flags.per_primitive() {
+                                mesh.has_gs_sph = true;
+                                mesh.primitive_io.mark_attrs_written(range);
+                            } else {
+                                match &mut self.info.io {
+                                    ShaderIoInfo::Vtg(io) => {
+                                        io.mark_attrs_written(range);
+                                    }
+                                    _ => panic!("Mesh must have ShaderIoInfo::Vtg"),
+                                }
+                            }
+                        },
+                        ShaderStageInfo::Task => (),
+                        _ => panic!("ISBEWR is only expected on Mesh and Task stages"),
+                    }
+                }
 
                 let dst = b.alloc_ssa(RegFile::GPR, 1);
                 b.push_op(OpIsberd {
                     dst: dst.into(),
-                    idx: self.get_src(&srcs[0]),
+                    offset: self.get_src(&srcs[0]),
+                    output: flags.output(),
+                    skew: flags.skew(),
+                    mem_type: MemType::from_size(size_B, false),
+                    access_type,
                 });
                 self.set_dst(&intrin.def, dst);
-            }
+            },
+            nir_intrinsic_isbewr_nv => {
+                let flags = intrin.flags();
+                let flags: nak_nir_isbe_flags =
+                    unsafe { std::mem::transmute_copy(&flags) };
+
+                let base: u16 = u16::try_from(intrin.range_base()).unwrap();
+                let range = u16::try_from(intrin.range()).unwrap();
+                let range = base..(base + range);
+                assert!(srcs[0].num_components() == 1);
+
+                let size_B = srcs[0].bit_size() / 8;
+
+                let access_type = match flags.mode() {
+                    NAK_ISBE_MODE_MAP => IsbeAccessType::Map,
+                    NAK_ISBE_MODE_PATCH => panic!("PATCH mode is invalid in ISBEWR"),
+                    NAK_ISBE_MODE_PRIM => panic!("PRIM mode is invalid in ISBEWR"),
+                    NAK_ISBE_MODE_ATTR => IsbeAccessType::Attribute,
+                    _ => panic!("Invalid ISBE mode {}", flags.mode()),
+                };
+
+                if base != 0 {
+                    match &mut self.info.stage {
+                        ShaderStageInfo::Mesh(mesh) => {
+                            // In case the write is per primitive, we require a GS SPH to be present.
+                            if flags.per_primitive() {
+                                mesh.has_gs_sph = true;
+                                mesh.primitive_io.mark_attrs_written(range);
+                            } else {
+                                match &mut self.info.io {
+                                    ShaderIoInfo::Vtg(io) => {
+                                        io.mark_attrs_written(range);
+                                    }
+                                    _ => panic!("Mesh must have ShaderIoInfo::Vtg"),
+                                }
+                            }
+                        },
+                        ShaderStageInfo::Task => (),
+                        _ => panic!("ISBEWR is only expected on Mesh and Task stages"),
+                    }
+                }
+
+                b.push_op(OpIsbewr {
+                    offset: self.get_src(&srcs[1]),
+                    data: self.get_src(&srcs[0]),
+                    output: flags.output(),
+                    skew: flags.skew(),
+                    mem_type: MemType::from_size(size_B, false),
+                    access_type,
+                });
+            },
             nir_intrinsic_load_barycentric_at_offset_nv => (),
             nir_intrinsic_load_barycentric_centroid => (),
             nir_intrinsic_load_barycentric_pixel => (),

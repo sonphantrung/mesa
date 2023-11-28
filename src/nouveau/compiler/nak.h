@@ -72,6 +72,12 @@ enum ENUM_PACKED nak_ts_prims {
    NAK_TS_PRIMS_TRIANGLES_CCW = 3,
 };
 
+enum PACKED nak_mesh_topology {
+   NAK_MESH_TOPOLOGY_POINTS = 0,
+   NAK_MESH_TOPOLOGY_LINES = 1,
+   NAK_MESH_TOPOLOGY_TRIANGLES = 4,
+};
+
 struct nak_xfb_info {
    uint32_t stride[4];
    uint8_t stream[4];
@@ -114,7 +120,7 @@ struct nak_shader_info {
          /* Shared memory size */
          uint16_t smem_size;
 
-         uint8_t _pad[4];
+         uint8_t _pad[128];
       } cs;
 
       struct {
@@ -124,7 +130,7 @@ struct nak_shader_info {
          bool uses_sample_shading;
          bool early_fragment_tests;
 
-         uint8_t _pad[7];
+         uint8_t _pad[131];
       } fs;
 
       struct {
@@ -132,11 +138,22 @@ struct nak_shader_info {
          enum nak_ts_spacing spacing;
          enum nak_ts_prims prims;
 
-         uint8_t _pad[9];
+         uint8_t _pad[133];
       } ts;
 
+      struct {
+         uint16_t max_primitives;
+         uint16_t max_vertices;
+         uint16_t local_size;
+         enum nak_mesh_topology topology;
+
+         /** Shader header for GS stage when per primitive outputs are used */
+         bool has_gs_sph;
+         uint32_t gs_hdr[32];
+      } mesh;
+
       /* Used to initialize the union for other stages */
-      uint8_t _pad[12];
+      uint8_t _pad[136];
    };
 
    struct {

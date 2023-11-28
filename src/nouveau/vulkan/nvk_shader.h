@@ -27,10 +27,16 @@ struct vk_shader_module;
 #define GF100_SHADER_HEADER_SIZE (20 * 4)
 #define TU102_SHADER_HEADER_SIZE (32 * 4)
 #define NVC0_MAX_SHADER_HEADER_SIZE TU102_SHADER_HEADER_SIZE
+#define WARP_SIZE (32)
 
 static inline uint32_t
 nvk_cbuf_binding_for_stage(gl_shader_stage stage)
 {
+   if (stage == MESA_SHADER_MESH)
+      return 0;
+   else if (stage == MESA_SHADER_TASK)
+      return 1;
+
    return stage;
 }
 
@@ -71,6 +77,7 @@ struct nvk_shader {
    uint32_t upload_size;
    uint64_t upload_addr;
    uint32_t hdr_offset;
+   uint32_t gs_hdr_offset;
    uint32_t data_offset;
 };
 
@@ -84,6 +91,12 @@ static inline uint64_t
 nvk_shader_data_address(const struct nvk_shader *shader)
 {
    return shader->upload_addr + shader->data_offset;
+}
+
+static inline uint64_t
+nvk_shader_gs_hdr_address(const struct nvk_shader *shader)
+{
+   return shader->upload_addr + shader->gs_hdr_offset;
 }
 
 static inline bool
@@ -125,6 +138,8 @@ nvk_nir_lower_descriptors(nir_shader *nir,
                           uint32_t set_layout_count,
                           struct vk_descriptor_set_layout * const *set_layouts,
                           struct nvk_cbuf_map *cbuf_map_out);
+
+bool nvk_nir_lower_mesh(nir_shader *nir);
 
 VkResult
 nvk_shader_stage_to_nir(struct nvk_device *dev,

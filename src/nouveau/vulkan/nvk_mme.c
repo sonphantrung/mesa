@@ -23,6 +23,9 @@ static const nvk_mme_builder_func mme_builders[NVK_MME_COUNT] = {
    [NVK_MME_XFB_DRAW_INDIRECT]           = nvk_mme_xfb_draw_indirect,
    [NVK_MME_SET_PRIV_REG]                = nvk_mme_set_priv_reg,
    [NVK_MME_SET_WRITE_MASK]              = nvk_mme_set_write_mask,
+   [NVK_MME_DRAW_MESH]                   = nvk_mme_draw_mesh,
+   [NVK_MME_DRAW_MESH_INDIRECT]          = nvk_mme_draw_mesh_indirect,
+   [NVK_MME_DRAW_MESH_INDIRECT_COUNT]    = nvk_mme_draw_mesh_indirect_count,
 };
 
 uint32_t *

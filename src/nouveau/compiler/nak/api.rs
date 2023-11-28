@@ -101,7 +101,6 @@ fn nir_options(dev: &nv_device_info) -> nir_shader_compiler_options {
     op.lower_unpack_snorm_4x8 = true;
     op.lower_insert_byte = true;
     op.lower_insert_word = true;
-    op.lower_cs_local_index_to_id = true;
     op.lower_device_index_to_zero = true;
     op.lower_isign = true;
     op.lower_uadd_sat = dev.sm < 70;
@@ -323,7 +322,7 @@ pub extern "C" fn nak_compile_shader(
                             cs_info.local_size[2],
                         ],
                         smem_size: cs_info.smem_size,
-                        _pad: Default::default(),
+                        _pad: [0; 128],
                     },
                 }
             }
@@ -342,7 +341,7 @@ pub extern "C" fn nak_compile_shader(
                         uses_sample_shading: nir_fs_info.uses_sample_shading(),
                         early_fragment_tests: nir_fs_info
                             .early_fragment_tests(),
-                        _pad: Default::default(),
+                        _pad: [0; 131],
                     },
                 }
             }
@@ -380,18 +379,45 @@ pub extern "C" fn nak_compile_shader(
                             NAK_TS_PRIMS_TRIANGLES_CW
                         },
 
-                        _pad: Default::default(),
+                        _pad: [0; 133],
+                    },
+                }
+            }
+            ShaderStageInfo::Mesh(mesh_info) => {
+                let nir_mesh_info = unsafe { &nir.info.__bindgen_anon_1.mesh };
+                let local_size = nir.info.workgroup_size[0] *
+                                      nir.info.workgroup_size[1] *
+                                      nir.info.workgroup_size[2];
+
+                nak_shader_info__bindgen_ty_1 {
+                    mesh: nak_shader_info__bindgen_ty_1__bindgen_ty_4 {
+                        max_vertices: nir_mesh_info.max_vertices_out,
+                        max_primitives: nir_mesh_info.max_primitives_out,
+                        // The max local size supported by hardware is the size of a WARP (32)
+                        local_size: local_size.min(32),
+                        topology: match nir_mesh_info.primitive_type {
+                            MESA_PRIM_POINTS => NAK_MESH_TOPOLOGY_POINTS,
+                            MESA_PRIM_LINES => NAK_MESH_TOPOLOGY_LINES,
+                            MESA_PRIM_TRIANGLES => NAK_MESH_TOPOLOGY_TRIANGLES,
+                            _ => panic!(
+                                "Invalid MESH primitive type {}",
+                                nir_mesh_info.primitive_type
+                            ),
+                        },
+                        has_gs_sph: mesh_info.has_gs_sph,
+                        gs_hdr: sph::encode_gs_mesh_header(s.info.sm, mesh_info),
                     },
                 }
             }
             _ => nak_shader_info__bindgen_ty_1 {
-                _pad: Default::default(),
+                _pad: [0; 136],
             },
         },
         vtg: match &s.info.stage {
             ShaderStageInfo::Geometry(_)
             | ShaderStageInfo::Tessellation
-            | ShaderStageInfo::Vertex => {
+            | ShaderStageInfo::Vertex
+            | ShaderStageInfo::Mesh(_) => {
                 let writes_layer =
                     nir.info.outputs_written & (1 << VARYING_SLOT_LAYER) != 0;
                 let num_clip = nir.info.clip_distance_array_size();
@@ -444,6 +470,14 @@ pub extern "C" fn nak_compile_shader(
 
         if info.stage != MESA_SHADER_COMPUTE {
             eprint_hex("Header", &info.hdr);
+        }
+
+        if info.stage == MESA_SHADER_MESH {
+            let mesh_info = unsafe { &info.__bindgen_anon_1.mesh };
+
+            if mesh_info.has_gs_sph {
+                eprint_hex("Header (Mesh GS)", &mesh_info.gs_hdr);
+            }
         }
 
         eprint_hex("Encoded shader", &code);

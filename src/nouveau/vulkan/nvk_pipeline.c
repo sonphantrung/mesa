@@ -132,7 +132,7 @@ nvk_GetPipelineExecutablePropertiesKHR(
    VK_OUTARRAY_MAKE_TYPED(VkPipelineExecutablePropertiesKHR, out,
                           pProperties, pExecutableCount);
 
-   for (gl_shader_stage stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+   for (gl_shader_stage stage = 0; stage < MESA_VULKAN_SHADER_STAGES; stage++) {
       const struct nvk_shader *shader = pipeline->shaders[stage];
       if (!shader || shader->code_size == 0)
          continue;
@@ -152,7 +152,7 @@ nvk_GetPipelineExecutablePropertiesKHR(
 static struct nvk_shader *
 shader_for_exe_idx(struct nvk_pipeline *pipeline, uint32_t idx)
 {
-   for (gl_shader_stage stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+   for (gl_shader_stage stage = 0; stage < MESA_VULKAN_SHADER_STAGES; stage++) {
       const struct nvk_shader *shader = pipeline->shaders[stage];
       if (!shader || shader->code_size == 0)
          continue;

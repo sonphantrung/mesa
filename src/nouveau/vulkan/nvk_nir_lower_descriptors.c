@@ -869,6 +869,8 @@ static bool
 try_lower_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
                  const struct lower_descriptors_ctx *ctx)
 {
+   const gl_shader_stage stage = b->shader->info.stage;
+
    switch (intrin->intrinsic) {
    case nir_intrinsic_load_constant:
       return lower_load_constant(b, intrin, ctx);
@@ -880,20 +882,25 @@ try_lower_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
       unreachable("Should have been lowered by nir_lower_cs_intrinsics()");
 
    case nir_intrinsic_load_num_workgroups:
+      // TODO: do not lower here if a task shader is present (use ISBE)
+      if (stage == MESA_SHADER_MESH)
+         return lower_sysval_to_root_table(b, intrin, mesh.group_count, ctx);
       return lower_sysval_to_root_table(b, intrin, cs.group_count, ctx);
-
    case nir_intrinsic_load_base_workgroup_id:
-      return lower_sysval_to_root_table(b, intrin, cs.base_group, ctx);
+      if (stage == MESA_SHADER_COMPUTE)
+         return lower_sysval_to_root_table(b, intrin, cs.base_group, ctx);
+
+      return false;
 
    case nir_intrinsic_load_push_constant:
       return lower_load_push_constant(b, intrin, ctx);
 
    case nir_intrinsic_load_base_vertex:
    case nir_intrinsic_load_first_vertex:
-      return lower_sysval_to_root_table(b, intrin, draw.base_vertex, ctx);
+      return lower_sysval_to_root_table(b, intrin, draw.vs.base_vertex, ctx);
 
    case nir_intrinsic_load_base_instance:
-      return lower_sysval_to_root_table(b, intrin, draw.base_instance, ctx);
+      return lower_sysval_to_root_table(b, intrin, draw.vs.base_instance, ctx);
 
    case nir_intrinsic_load_draw_id:
       return lower_sysval_to_root_table(b, intrin, draw.draw_id, ctx);

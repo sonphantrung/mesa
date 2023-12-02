@@ -1414,7 +1414,7 @@ enum __DRIChromaSiting {
 #define __BLIT_FLAG_FINISH		0x0002
 
 /**
- * Flags for createImageFromDmaBufs3 and createImageFromFds2
+ * Flags for createImageFromDmaBufs
  */
 #define __DRI_IMAGE_PROTECTED_CONTENT_FLAG 0x00000001
 #define __DRI_IMAGE_PRIME_LINEAR_BUFFER    0x00000002
@@ -1426,6 +1426,15 @@ enum __DRIChromaSiting {
 /* Available in version 16 */
 #define __DRI_IMAGE_FORMAT_MODIFIER_ATTRIB_PLANE_COUNT   0x0001
 
+/**
+ * Support for manipulating __DRIimages created by the DRI driver, which are
+ * what back EGLimages, and also private winsys buffers these days.
+ *
+ * The X server does not use this extension.  ChromeOS uses this extension for
+ * minigbm support on AMD.  It would be nice, but not strictly necessary to keep
+ * source-level compatibility for them to ease uprevs.  As such, some of the
+ * interfaces used by ChromeOS are noted.
+ */
 typedef struct __DRIimageRec          __DRIimage;
 typedef struct __DRIimageExtensionRec __DRIimageExtension;
 struct __DRIimageExtensionRec {
@@ -1436,18 +1445,19 @@ struct __DRIimageExtensionRec {
 				       int name, int pitch,
 				       void *loaderPrivate);
 
-    /* Deprecated since version 17; see createImageFromRenderbuffer2 */
-    __DRIimage *(*createImageFromRenderbuffer)(__DRIcontext *context,
-					       int renderbuffer,
-					       void *loaderPrivate);
-
+   /* Used by ChromeOS's minigbm for AMD devices as of 2023. */
     void (*destroyImage)(__DRIimage *image);
 
+   /* Used by ChromeOS's minigbm for AMD devices as of 2023. */
     __DRIimage *(*createImage)(__DRIscreen *screen,
 			       int width, int height, int format,
 			       unsigned int use,
 			       void *loaderPrivate);
 
+   /** Queries a __DRI_IMAGE_ATTRIB.
+    *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
+    */
    unsigned char (*queryImage)(__DRIimage *image, int attrib, int *value);
 
    /**
@@ -1488,6 +1498,8 @@ struct __DRIimageExtensionRec {
     * Sub-images may overlap, but rendering to overlapping sub-images
     * is undefined.
     *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
+    *
     * \since 5
     */
     __DRIimage *(*fromPlanar)(__DRIimage *image, int plane,
@@ -1508,6 +1520,8 @@ struct __DRIimageExtensionRec {
    /**
     * Like createImageFromNames, but takes a prime fd instead.
     *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
+    *
     * \since 7
     */
    __DRIimage *(*createImageFromFds)(__DRIscreen *screen,
@@ -1515,24 +1529,6 @@ struct __DRIimageExtensionRec {
                                      int *fds, int num_fds,
                                      int *strides, int *offsets,
                                      void *loaderPrivate);
-
-   /**
-    * Like createImageFromFds, but takes additional attributes.
-    *
-    * For EGL_EXT_image_dma_buf_import.
-    *
-    * \since 8
-    */
-   __DRIimage *(*createImageFromDmaBufs)(__DRIscreen *screen,
-                                         int width, int height, int fourcc,
-                                         int *fds, int num_fds,
-                                         int *strides, int *offsets,
-                                         enum __DRIYUVColorSpace color_space,
-                                         enum __DRISampleRange sample_range,
-                                         enum __DRIChromaSiting horiz_siting,
-                                         enum __DRIChromaSiting vert_siting,
-                                         unsigned *error,
-                                         void *loaderPrivate);
 
    /**
     * Blit a part of a __DRIimage to another and flushes
@@ -1570,6 +1566,8 @@ struct __DRIimageExtensionRec {
     * Returns the byte stride in *stride, and an opaque pointer to data
     * tracking the mapping in **data, which must be passed to unmapImage().
     *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
+    *
     * \since 12
     */
    void *(*mapImage)(__DRIcontext *context, __DRIimage *image,
@@ -1578,6 +1576,8 @@ struct __DRIimageExtensionRec {
 
    /**
     * Unmap a previously mapped __DRIimage
+    *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
     *
     * \since 12
     */
@@ -1597,6 +1597,8 @@ struct __DRIimageExtensionRec {
     * Returns the new DRIimage. The chosen modifier can be obtained later on
     * and passed back to things like the kernel's AddFB2 interface.
     *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
+    *
     * \sa __DRIimageRec::createImage
     *
     * \since 14
@@ -1608,9 +1610,10 @@ struct __DRIimageExtensionRec {
                                            void *loaderPrivate);
 
    /*
-    * Like createImageFromDmaBufs, but takes also format modifiers.
+    * Like createImageFromDmaBufs, with fewer options.
     *
-    * For EGL_EXT_image_dma_buf_import_modifiers.
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.  This is
+    * deprecated, use the current createImageFromDmaBufs() instead.
     *
     * \since 15
     */
@@ -1661,6 +1664,8 @@ struct __DRIimageExtensionRec {
     *
     * Returns true upon success.
     *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
+    *
     * \since 15
     */
    bool (*queryDmaBufModifiers)(__DRIscreen *screen, int fourcc, int max,
@@ -1679,6 +1684,8 @@ struct __DRIimageExtensionRec {
     *
     * Returns true upon success.
     *
+    * Used by ChromeOS's minigbm for AMD devices as of 2023.
+    *
     * \since 16
     */
    bool (*queryDmaBufFormatModifierAttribs)(__DRIscreen *screen,
@@ -1693,33 +1700,29 @@ struct __DRIimageExtensionRec {
     * \param loaderPrivate for callbacks into the loader related to the image
     * \param error         will be set to one of __DRI_IMAGE_ERROR_xxx
     * \return the newly created image on success, or NULL otherwise
-    *
-    * \since 17
     */
-    __DRIimage *(*createImageFromRenderbuffer2)(__DRIcontext *context,
-                                                int renderbuffer,
-                                                void *loaderPrivate,
-                                                unsigned *error);
+    __DRIimage *(*createImageFromRenderbuffer)(__DRIcontext *context,
+                                               int renderbuffer,
+                                               void *loaderPrivate,
+                                               unsigned *error);
 
-   /*
-    * Like createImageFromDmaBufs2, but with an added flags parameter.
+   /**
+    * Creates a DRI image from an array of dmabuf fds and their modifier.
     *
     * See __DRI_IMAGE_*_FLAG for valid definitions of flags.
-    *
-    * \since 18
     */
-   __DRIimage *(*createImageFromDmaBufs3)(__DRIscreen *screen,
-                                          int width, int height, int fourcc,
-                                          uint64_t modifier,
-                                          int *fds, int num_fds,
-                                          int *strides, int *offsets,
-                                          enum __DRIYUVColorSpace color_space,
-                                          enum __DRISampleRange sample_range,
-                                          enum __DRIChromaSiting horiz_siting,
-                                          enum __DRIChromaSiting vert_siting,
-                                          uint32_t flags,
-                                          unsigned *error,
-                                          void *loaderPrivate);
+   __DRIimage *(*createImageFromDmaBufs)(__DRIscreen *screen,
+                                         int width, int height, int fourcc,
+                                         uint64_t modifier,
+                                         int *fds, int num_fds,
+                                         int *strides, int *offsets,
+                                         enum __DRIYUVColorSpace color_space,
+                                         enum __DRISampleRange sample_range,
+                                         enum __DRIChromaSiting horiz_siting,
+                                         enum __DRIChromaSiting vert_siting,
+                                         uint32_t flags,
+                                         unsigned *error,
+                                         void *loaderPrivate);
 
    /**
     * Creates an image with implementation's favorite modifiers and the
@@ -1742,20 +1745,6 @@ struct __DRIimageExtensionRec {
                                             const unsigned int modifier_count,
                                             unsigned int use,
                                             void *loaderPrivate);
-
-   /**
-    * Like createImageFromFds, but with an added flag parameter.
-    *
-    * See __DRI_IMAGE_*_FLAG for valid definitions of flags.
-    *
-    * \since 20
-    */
-   __DRIimage *(*createImageFromFds2)(__DRIscreen *screen,
-                                      int width, int height, int fourcc,
-                                      int *fds, int num_fds,
-                                      uint32_t flags,
-                                      int *strides, int *offsets,
-                                      void *loaderPrivate);
 
    /**
     * Set an in-fence-fd on the image.  If a fence-fd is already set
@@ -1787,27 +1776,14 @@ struct __DRIimageLookupExtensionRec {
     __DRIextension base;
 
     /**
-     * Lookup EGLImage without validated. Equivalent to call
-     * validateEGLImage() then lookupEGLImageValidated().
-     *
-     * \since 1
-     */
-    __DRIimage *(*lookupEGLImage)(__DRIscreen *screen, void *image,
-				  void *loaderPrivate);
-
-    /**
      * Check if EGLImage is associated with the EGL display before lookup with
      * lookupEGLImageValidated(). It will hold EGLDisplay.Mutex, so is separated
-     * out from lookupEGLImage() to avoid deadlock.
-     *
-     * \since 2
+     * out from lookupEGLImageValidated() to avoid deadlock.
      */
     unsigned char (*validateEGLImage)(void *image, void *loaderPrivate);
 
     /**
      * Lookup EGLImage after validateEGLImage(). No lock in this function.
-     *
-     * \since 2
      */
     __DRIimage *(*lookupEGLImageValidated)(void *image, void *loaderPrivate);
 };

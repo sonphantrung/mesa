@@ -32,6 +32,11 @@ struct dri2_format_mapping {
    int dri_format; /* image format */
    int dri_components;
    enum pipe_format pipe_format;
+   /* The corresponding sized GLformat to set on a renderbuffer imported with
+    * this format.  GL_NONE if we don't have an appropriate one (such as for YUV
+    * image formats).
+    */
+   uint32_t gl_format;
    int nplanes;
    struct {
       int buffer_index;
@@ -47,7 +52,7 @@ const struct dri2_format_mapping *
 dri2_get_mapping_by_fourcc(int fourcc);
 
 const struct dri2_format_mapping *
-dri2_get_mapping_by_format(int format);
+dri2_get_mapping_by_format(enum pipe_format format);
 
 enum pipe_format
 dri2_get_pipe_format_for_dri_format(int format);
@@ -59,21 +64,11 @@ bool
 dri2_yuv_dma_buf_supported(struct dri_screen *screen,
                            const struct dri2_format_mapping *map);
 
-__DRIimage *
-dri2_lookup_egl_image(struct dri_screen *screen, void *handle);
-
 bool
 dri2_validate_egl_image(struct dri_screen *screen, void *handle);
 
 __DRIimage *
-dri2_lookup_egl_image_validated(struct dri_screen *screen, void *handle);
-
-__DRIimage *
 dri2_create_image_from_renderbuffer(__DRIcontext *context,
-				    int renderbuffer, void *loaderPrivate);
-
-__DRIimage *
-dri2_create_image_from_renderbuffer2(__DRIcontext *context,
 				     int renderbuffer, void *loaderPrivate,
                                      unsigned *error);
 

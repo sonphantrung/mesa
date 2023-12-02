@@ -144,8 +144,7 @@ dri3_get_red_mask_for_depth(struct loader_dri3_drawable *draw, int depth)
  */
 static bool loader_dri3_have_image_blit(const struct loader_dri3_drawable *draw)
 {
-   return draw->ext->image->base.version >= 9 &&
-      draw->ext->image->blitImage != NULL;
+   return draw->ext->image->blitImage != NULL;
 }
 
 /**
@@ -1462,7 +1461,6 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int format,
    if (draw->dri_screen_render_gpu == draw->dri_screen_display_gpu) {
 #ifdef HAVE_DRI3_MODIFIERS
       if (draw->multiplanes_available &&
-          draw->ext->image->base.version >= 15 &&
           draw->ext->image->queryDmaBufModifiers &&
           draw->ext->image->createImageWithModifiers) {
          xcb_dri3_get_supported_modifiers_cookie_t mod_cookie;
@@ -1618,27 +1616,17 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int format,
       /* The linear buffer was created in the display GPU's vram, so we
        * need to make it visible to render GPU
        */
-      if (draw->ext->image->base.version >= 20)
-         buffer->linear_buffer =
-            draw->ext->image->createImageFromFds2(draw->dri_screen_render_gpu,
+      buffer->linear_buffer =
+         draw->ext->image->createImageFromDmaBufs(draw->dri_screen_render_gpu,
                                                   width,
                                                   height,
                                                   loader_image_format_to_fourcc(format),
+                                                  DRM_FORMAT_MOD_INVALID,
                                                   &buffer_fds[0], num_planes,
-                                                  __DRI_IMAGE_PRIME_LINEAR_BUFFER,
                                                   &buffer->strides[0],
                                                   &buffer->offsets[0],
-                                                  buffer);
-      else
-         buffer->linear_buffer =
-            draw->ext->image->createImageFromFds(draw->dri_screen_render_gpu,
-                                                 width,
-                                                 height,
-                                                 loader_image_format_to_fourcc(format),
-                                                 &buffer_fds[0], num_planes,
-                                                 &buffer->strides[0],
-                                                 &buffer->offsets[0],
-                                                 buffer);
+                                                  0, 0, 0, 0, __DRI_IMAGE_PRIME_LINEAR_BUFFER,
+                                                  NULL, buffer);
       if (!buffer->linear_buffer)
          goto no_buffer_attrib;
 
@@ -1851,17 +1839,20 @@ loader_dri3_create_image(xcb_connection_t *c,
    stride = bp_reply->stride;
    offset = 0;
 
-   /* createImageFromFds creates a wrapper __DRIimage structure which
+   /* createImageFromDmaBufs creates a wrapper __DRIimage structure which
     * can deal with multiple planes for things like Yuv images. So, once
     * we've gotten the planar wrapper, pull the single plane out of it and
     * discard the wrapper.
     */
-   image_planar = image->createImageFromFds(dri_screen,
-                                            bp_reply->width,
-                                            bp_reply->height,
-                                            loader_image_format_to_fourcc(format),
-                                            fds, 1,
-                                            &stride, &offset, loaderPrivate);
+   image_planar = image->createImageFromDmaBufs(dri_screen,
+                                                bp_reply->width,
+                                                bp_reply->height,
+                                                loader_image_format_to_fourcc(format),
+                                                DRM_FORMAT_MOD_INVALID,
+                                                fds, 1,
+                                                &stride, &offset,
+                                                0, 0, 0, 0, 0,
+                                                NULL, loaderPrivate);
    close(fds[0]);
    if (!image_planar)
       return NULL;
@@ -1903,15 +1894,15 @@ loader_dri3_create_image_from_buffers(xcb_connection_t *c,
       offsets[i] = offsets_in[i];
    }
 
-   ret = image->createImageFromDmaBufs2(dri_screen,
-                                        bp_reply->width,
-                                        bp_reply->height,
-                                        loader_image_format_to_fourcc(format),
-                                        bp_reply->modifier,
-                                        fds, bp_reply->nfd,
-                                        strides, offsets,
-                                        0, 0, 0, 0, /* UNDEFINED */
-                                        &error, loaderPrivate);
+   ret = image->createImageFromDmaBufs(dri_screen,
+                                       bp_reply->width,
+                                       bp_reply->height,
+                                       loader_image_format_to_fourcc(format),
+                                       bp_reply->modifier,
+                                       fds, bp_reply->nfd,
+                                       strides, offsets,
+                                       0, 0, 0, 0, /* UNDEFINED */
+                                       0, &error, loaderPrivate);
 
    for (i = 0; i < bp_reply->nfd; i++)
       close(fds[i]);
@@ -1923,7 +1914,7 @@ loader_dri3_create_image_from_buffers(xcb_connection_t *c,
 /** dri3_get_pixmap_buffer
  *
  * Get the DRM object for a pixmap from the X server and
- * wrap that with a __DRIimage structure using createImageFromFds
+ * wrap that with a __DRIimage structure using createImageFromDmaBufs
  */
 static struct loader_dri3_buffer *
 dri3_get_pixmap_buffer(__DRIdrawable *driDrawable, unsigned int format,
@@ -1973,9 +1964,7 @@ dri3_get_pixmap_buffer(__DRIdrawable *driDrawable, unsigned int format,
                           false,
                           fence_fd);
 #ifdef HAVE_DRI3_MODIFIERS
-   if (draw->multiplanes_available &&
-       draw->ext->image->base.version >= 15 &&
-       draw->ext->image->createImageFromDmaBufs2) {
+   if (draw->multiplanes_available) {
       xcb_dri3_buffers_from_pixmap_cookie_t bps_cookie;
       xcb_dri3_buffers_from_pixmap_reply_t *bps_reply;
 

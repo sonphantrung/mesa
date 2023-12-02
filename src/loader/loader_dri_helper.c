@@ -38,8 +38,7 @@ __DRIimage *loader_dri_create_image(__DRIscreen *screen,
                                     unsigned int modifiers_count,
                                     void *loaderPrivate)
 {
-   if (modifiers && modifiers_count > 0 &&
-       image->base.version > 14 && image->createImageWithModifiers) {
+   if (modifiers && modifiers_count > 0 && image->createImageWithModifiers) {
       bool has_valid_modifier = false;
       int i;
 
@@ -58,15 +57,10 @@ __DRIimage *loader_dri_create_image(__DRIscreen *screen,
       if (!has_valid_modifier)
          return NULL;
 
-      if (image->base.version >= 19 && image->createImageWithModifiers2)
-         return image->createImageWithModifiers2(screen, width, height,
-                                                 dri_format, modifiers,
-                                                 modifiers_count, dri_usage,
-                                                 loaderPrivate);
-      else
-         return image->createImageWithModifiers(screen, width, height,
-                                                dri_format, modifiers,
-                                                modifiers_count, loaderPrivate);
+      return image->createImageWithModifiers2(screen, width, height,
+                                              dri_format, modifiers,
+                                              modifiers_count, dri_usage,
+                                              loaderPrivate);
    }
 
    /* No modifier given or fallback to the legacy createImage allowed */
@@ -122,9 +116,9 @@ bool dri_valid_swap_interval(__DRIscreen *driScreen,
 }
 
 /* the DRIimage createImage function takes __DRI_IMAGE_FORMAT codes, while
- * the createImageFromFds call takes DRM_FORMAT codes. To avoid
+ * the createImageFromDmaBufs call takes DRM_FORMAT codes. To avoid
  * complete confusion, just deal in __DRI_IMAGE_FORMAT codes for now and
- * translate to DRM_FORMAT codes in the call to createImageFromFds
+ * translate to DRM_FORMAT codes in the call to createImageFromDmaBufs
  */
 int
 loader_image_format_to_fourcc(int format)

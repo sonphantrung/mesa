@@ -136,7 +136,7 @@ get_format_bpp(int native)
    return bpp;
 }
 
-/* createImageFromFds requires fourcc format */
+/* createImageFromDmaBufs requires fourcc format */
 static int
 get_fourcc(int native)
 {
@@ -353,7 +353,7 @@ native_window_buffer_get_buffer_info(struct dri2_egl_display *dri2_dpy,
 /* More recent CrOS gralloc has a perform op that fills out the struct below
  * with canonical information about the buffer and its modifier, planes,
  * offsets and strides.  If we have this, we can skip straight to
- * createImageFromDmaBufs2() and avoid all the guessing and recalculations.
+ * createImageFromDmaBufs3() and avoid all the guessing and recalculations.
  * This also gives us the modifier and plane offsets/strides for multiplanar
  * compressed buffers (eg Intel CCS buffers) in order to make that work in
  * Android.
@@ -416,22 +416,12 @@ droid_create_image_from_buffer_info(struct dri2_egl_display *dri2_dpy,
 {
    unsigned error;
 
-   if (dri2_dpy->image->base.version >= 15 &&
-       dri2_dpy->image->createImageFromDmaBufs2 != NULL) {
-      return dri2_dpy->image->createImageFromDmaBufs2(
-         dri2_dpy->dri_screen_render_gpu, buf_info->width, buf_info->height,
-         buf_info->drm_fourcc, buf_info->modifier, buf_info->fds,
-         buf_info->num_planes, buf_info->pitches, buf_info->offsets,
-         buf_info->yuv_color_space, buf_info->sample_range,
-         buf_info->horizontal_siting, buf_info->vertical_siting, &error, priv);
-   }
-
-   return dri2_dpy->image->createImageFromDmaBufs(
+   return dri2_dpy->image->createImageFromDmaBufs3(
       dri2_dpy->dri_screen_render_gpu, buf_info->width, buf_info->height,
-      buf_info->drm_fourcc, buf_info->fds, buf_info->num_planes,
-      buf_info->pitches, buf_info->offsets, buf_info->yuv_color_space,
-      buf_info->sample_range, buf_info->horizontal_siting,
-      buf_info->vertical_siting, &error, priv);
+      buf_info->drm_fourcc, buf_info->modifier, buf_info->fds,
+      buf_info->num_planes, buf_info->pitches, buf_info->offsets,
+      buf_info->yuv_color_space, buf_info->sample_range,
+      buf_info->horizontal_siting, buf_info->vertical_siting, 0, &error, priv);
 }
 
 static __DRIimage *
@@ -472,8 +462,7 @@ handle_in_fence_fd(struct dri2_egl_surface *dri2_surf, __DRIimage *img)
 
    validate_fence_fd(dri2_surf->in_fence_fd);
 
-   if (dri2_dpy->image->base.version >= 21 &&
-       dri2_dpy->image->setInFenceFd != NULL) {
+   if (dri2_dpy->image->setInFenceFd != NULL) {
       dri2_dpy->image->setInFenceFd(img, dri2_surf->in_fence_fd);
    } else {
       sync_wait(dri2_surf->in_fence_fd, -1);

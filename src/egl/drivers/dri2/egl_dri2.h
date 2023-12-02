@@ -495,9 +495,6 @@ dri2_validate_egl_image(void *image, void *data);
 __DRIimage *
 dri2_lookup_egl_image_validated(void *image, void *data);
 
-__DRIimage *
-dri2_lookup_egl_image(__DRIscreen *screen, void *image, void *data);
-
 void
 dri2_get_shifts_and_sizes(const __DRIcoreExtension *core,
                           const __DRIconfig *config, int *shifts,
@@ -629,8 +626,7 @@ dri2_set_WL_bind_wayland_display(_EGLDisplay *disp)
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
 
    if (dri2_dpy->device_name && dri2_dpy->image) {
-      if (dri2_dpy->image->base.version >= 10 &&
-          dri2_dpy->image->getCapabilities != NULL) {
+      if (dri2_dpy->image->getCapabilities != NULL) {
          int capabilities;
 
          capabilities =

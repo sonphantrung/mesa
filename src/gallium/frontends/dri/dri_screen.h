@@ -113,11 +113,6 @@ struct dri_screen
 
    bool swrast_no_present;
 
-   /* hooks filled in by dri2 & drisw */
-   __DRIimage * (*lookup_egl_image)(struct dri_screen *ctx, void *handle);
-   bool (*validate_egl_image)(struct dri_screen *ctx, void *handle);
-   __DRIimage * (*lookup_egl_image_validated)(struct dri_screen *ctx, void *handle);
-
    /* DRI exts that vary based on gallium pipe_screen caps. */
    __DRIimageExtension image_extension;
    __DRI2bufferDamageExtension buffer_damage_extension;
@@ -174,6 +169,7 @@ struct __DRIimageRec {
    struct pipe_resource *texture;
    unsigned level;
    unsigned layer;
+   enum pipe_format format;
    uint32_t dri_format;
    uint32_t dri_fourcc;
    uint32_t dri_components;

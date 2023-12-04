@@ -43,6 +43,7 @@
 #include "wsi_common_entrypoints.h"
 #include "wsi_common_private.h"
 #include "fifo-v1-client-protocol.h"
+#include "commit-timing-v1-client-protocol.h"
 #include "linux-dmabuf-unstable-v1-client-protocol.h"
 #include "presentation-time-client-protocol.h"
 #include "linux-drm-syncobj-v1-client-protocol.h"
@@ -115,6 +116,8 @@ struct wsi_wl_display {
    struct wp_presentation *wp_presentation_notwrapped;
 
    struct wp_fifo_manager_v1 *fifo_manager;
+   struct wp_commit_timing_manager_v1 *commit_timing_manager;
+   bool no_timestamps;
 
    struct wsi_wayland *wsi_wl;
 
@@ -162,6 +165,11 @@ struct wsi_wl_surface {
    struct wl_surface *surface;
    struct wsi_wl_display *display;
 
+   uint64_t last_target_time;
+   uint64_t displayed_time;
+   unsigned int refresh_nsec;
+   uint64_t display_time_error;
+   uint64_t display_time_correction;
    struct zwp_linux_dmabuf_feedback_v1 *wl_dmabuf_feedback;
    struct dmabuf_feedback dmabuf_feedback, pending_dmabuf_feedback;
 
@@ -174,6 +182,7 @@ struct wsi_wl_swapchain {
    struct wsi_wl_surface *wsi_wl_surface;
    struct wp_tearing_control_v1 *tearing_control;
    struct wp_fifo_v1 *fifo;
+   struct wp_commit_timer_v1 *commit_timer;
 
    struct wl_callback *frame;
 
@@ -231,6 +240,39 @@ find_format(struct u_vector *formats, VkFormat format)
          return f;
 
    return NULL;
+}
+
+/* Given a time base and a refresh period, find the next
+ * time past 'from' that is an even multiple of the period
+ * past the base.
+ */
+static uint64_t
+next_phase_locked_time(uint64_t base, uint64_t period, uint64_t from)
+{
+   uint64_t target, cycles;
+
+   assert(from != 0);
+
+   if (base == 0)
+      return from;
+
+   if (period == 0)
+      period = 16666666;
+
+   /* If our time base is in the future (which can happen when using
+    * presentation feedback events), target the next possible
+    * presentation time.
+    */
+   if (base >= from)
+      return base + period;
+
+   /* Round up our cycle count so imprecision in feedback times doesn't
+    * lead to a time just after a refresh and a time just before the
+    * following refresh producing the same cycle count.
+    */
+   cycles = (from - base + period / 2) / period;
+   target = base + (cycles + 1) * period;
+   return target;
 }
 
 static struct wsi_wl_format *
@@ -832,6 +874,10 @@ registry_handle_global(void *data, struct wl_registry *registry,
    } else if (strcmp(interface, wp_fifo_manager_v1_interface.name) == 0) {
       display->fifo_manager =
          wl_registry_bind(registry, name, &wp_fifo_manager_v1_interface, 1);
+   } else if (!display->no_timestamps &&
+              strcmp(interface, wp_commit_timing_manager_v1_interface.name) == 0) {
+      display->commit_timing_manager =
+         wl_registry_bind(registry, name, &wp_commit_timing_manager_v1_interface, 1);
    }
 }
 
@@ -862,6 +908,8 @@ wsi_wl_display_finish(struct wsi_wl_display *display)
       wp_presentation_destroy(display->wp_presentation_notwrapped);
    if (display->fifo_manager)
       wp_fifo_manager_v1_destroy(display->fifo_manager);
+   if (display->commit_timing_manager)
+      wp_commit_timing_manager_v1_destroy(display->commit_timing_manager);
    if (display->tearing_control_manager)
       wp_tearing_control_manager_v1_destroy(display->tearing_control_manager);
    if (display->wl_display_wrapper)
@@ -898,6 +946,8 @@ wsi_wl_display_init(struct wsi_wayland *wsi_wl,
       result = VK_ERROR_OUT_OF_HOST_MEMORY;
       goto fail;
    }
+
+   display->no_timestamps = wsi_wl->wsi->wayland.disable_timestamps;
 
    wl_proxy_set_queue((struct wl_proxy *) display->wl_display_wrapper,
                       display->queue);
@@ -1649,6 +1699,14 @@ static VkResult wsi_wl_surface_init(struct wsi_wl_surface *wsi_wl_surface,
          goto fail;
    }
 
+   /* Ensure we have something to pace from, even if we start occluded,
+    * and may not be presented any time soon.
+    */
+   wsi_wl_surface->displayed_time = os_time_get_nano();
+   wsi_wl_surface->last_target_time = wsi_wl_surface->displayed_time;
+
+   /* Seed the refresh rate with 60hz until we know what it is. */
+   wsi_wl_surface->refresh_nsec = 16666666;
    return VK_SUCCESS;
 
 fail:
@@ -1697,8 +1755,10 @@ struct wsi_wl_present_id {
     * which uses frame callback to signal DRI3 COMPLETE. */
    struct wl_callback *frame;
    uint64_t present_id;
+   uint64_t target_time;
    const VkAllocationCallbacks *alloc;
    struct wsi_wl_swapchain *chain;
+   uint64_t correction;
    struct wl_list link;
 };
 
@@ -1862,6 +1922,37 @@ wsi_wl_swapchain_wait_for_present(struct wsi_swapchain *wsi_chain,
    return ret;
 }
 
+static int
+wsi_wl_swapchain_ensure_dispatch(struct wsi_wl_swapchain *chain)
+{
+   struct wsi_wl_surface *wsi_wl_surface = chain->wsi_wl_surface;
+   struct wl_display *display = wsi_wl_surface->display->wl_display;
+   struct timespec timeout = {0, 0};
+   int ret = 0;
+
+   pthread_mutex_lock(&chain->present_ids.lock);
+   if (chain->present_ids.dispatch_in_progress)
+      goto already_dispatching;
+
+   chain->present_ids.dispatch_in_progress = true;
+   pthread_mutex_unlock(&chain->present_ids.lock);
+
+   /* Use a dispatch with an instant timeout because dispatch_pending
+    * won't read any events in the pipe.
+    */
+   ret = wl_display_dispatch_queue_timeout(display,
+                                           chain->present_ids.queue,
+                                           &timeout);
+
+   pthread_mutex_lock(&chain->present_ids.lock);
+   pthread_cond_broadcast(&chain->present_ids.list_advanced);
+   chain->present_ids.dispatch_in_progress = false;
+
+already_dispatching:
+   pthread_mutex_unlock(&chain->present_ids.lock);
+   return ret;
+}
+
 static VkResult
 wsi_wl_swapchain_acquire_next_image_explicit(struct wsi_swapchain *wsi_chain,
                                              const VkAcquireNextImageInfoKHR *info,
@@ -1907,6 +1998,15 @@ wsi_wl_swapchain_acquire_next_image_implicit(struct wsi_swapchain *wsi_chain,
    timespec_add(&end_time, &rel_timeout, &start_time);
 
    while (1) {
+      /* If we can use timestamps, we want to make sure the queue feedback
+       * events are in is dispatched so we eventually get a refresh rate
+       * and a vsync time to phase lock to. We don't need to wait for it
+       * now.
+        */
+      if (chain->commit_timer) {
+         if (wsi_wl_swapchain_ensure_dispatch(chain) == -1)
+            return VK_ERROR_OUT_OF_DATE_KHR;
+      }
       /* Try to find a free image. */
       for (uint32_t i = 0; i < chain->base.image_count; i++) {
          if (!chain->images[i].busy) {
@@ -1944,10 +2044,14 @@ presentation_handle_sync_output(void *data,
 static void
 wsi_wl_presentation_update_present_id(struct wsi_wl_present_id *id)
 {
-   pthread_mutex_lock(&id->chain->present_ids.lock);
-   if (id->present_id > id->chain->present_ids.max_completed)
-      id->chain->present_ids.max_completed = id->present_id;
+   struct wsi_wl_swapchain *chain = id->chain;
+   struct wsi_wl_surface *surface = id->chain->wsi_wl_surface;
 
+   pthread_mutex_lock(&chain->present_ids.lock);
+   if (id->present_id > chain->present_ids.max_completed)
+      chain->present_ids.max_completed = id->present_id;
+
+   surface->display_time_correction -= id->correction;
    wl_list_remove(&id->link);
    pthread_mutex_unlock(&id->chain->present_ids.lock);
    vk_free(id->alloc, id);
@@ -1962,6 +2066,26 @@ presentation_handle_presented(void *data,
                               uint32_t flags)
 {
    struct wsi_wl_present_id *id = data;
+   struct wsi_wl_swapchain *chain = id->chain;
+   struct wsi_wl_surface *surface = chain->wsi_wl_surface;
+   struct timespec presentation_ts;
+   uint64_t presentation_time;
+   uint64_t target_time = id->target_time;
+
+   surface->refresh_nsec = refresh;
+
+   presentation_ts.tv_sec = ((uint64_t)tv_sec_hi << 32) + tv_sec_lo;
+   presentation_ts.tv_nsec = tv_nsec;
+   presentation_time = timespec_to_nsec(&presentation_ts);
+
+   if (presentation_time > surface->displayed_time)
+      surface->displayed_time = presentation_time;
+
+   if (target_time && presentation_time > target_time)
+      surface->display_time_error = presentation_time - target_time;
+   else
+      surface->display_time_error = 0;
+
    wsi_wl_presentation_update_present_id(id);
    wp_presentation_feedback_destroy(feedback);
 }
@@ -2009,6 +2133,67 @@ static const struct wl_callback_listener frame_listener = {
    frame_handle_done,
 };
 
+static bool
+set_timestamp(struct wsi_wl_swapchain *chain,
+              uint64_t *timestamp,
+              uint64_t *correction)
+{
+   struct wsi_wl_surface *surface = chain->wsi_wl_surface;
+   uint64_t target;
+   struct timespec target_ts;
+   uint64_t refresh;
+   uint64_t displayed_time;
+   int32_t error = 0;
+
+   displayed_time = surface->displayed_time;
+   refresh = surface->refresh_nsec;
+
+   /* If refresh is 0, presentation feedback has informed us we have no
+    * fixed refresh cycle. In that case we can't generate sensible
+    * timestamps at all, so bail out.
+    */
+   if (!refresh)
+      return false;
+
+   /* We assume we're being fed at the display's refresh rate, but
+    * if that doesn't happen our timestamps fall into the past.
+    *
+    * This would result in an offscreen surface being unthrottled until
+    * it "catches up" on missed frames. Instead, correct for missed
+    * frame opportunities by jumping forward if our display time
+    * didn't match our target time.
+    *
+    * Since we might have a few frames in flight, we need to keep a
+    * running tally of how much correction we're applying and remove
+    * it as corrected frames are retired.
+    */
+   if (surface->display_time_error > surface->display_time_correction)
+      error = surface->display_time_error - surface->display_time_correction;
+
+   target = surface->last_target_time;
+   if (error > 0)  {
+      target += (error / refresh) * refresh;
+      *correction = (error / refresh) * refresh;
+   } else {
+      *correction = 0;
+   }
+
+   surface->display_time_correction += *correction;
+   target = next_phase_locked_time(displayed_time,
+                                   refresh,
+                                   target);
+   timespec_from_nsec(&target_ts, target);
+   wp_commit_timer_v1_set_timestamp(chain->commit_timer,
+                                    target_ts.tv_sec >> 32, target_ts.tv_sec,
+                                    target_ts.tv_nsec,
+                                    WP_COMMIT_TIMER_V1_STAGE_PRESENTATION,
+                                    WP_COMMIT_TIMER_V1_ROUNDING_MODE_NEAREST);
+
+   surface->last_target_time = target;
+   *timestamp = target;
+   return true;
+}
+
 static VkResult
 wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
                                uint32_t image_index,
@@ -2016,6 +2201,7 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
                                const VkPresentRegionKHR *damage)
 {
    struct wsi_wl_swapchain *chain = (struct wsi_wl_swapchain *)wsi_chain;
+   bool timestamped = false;
 
    /* While the specification suggests we can keep presenting already acquired
     * images on a retired swapchain, there is no requirement to support that.
@@ -2088,13 +2274,15 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
       chain->legacy_fifo_ready = true;
    }
 
-   if (present_id > 0) {
+   if (present_id > 0 || (mode_fifo && chain->commit_timer)) {
       struct wsi_wl_present_id *id =
          vk_zalloc(chain->wsi_wl_surface->display->wsi_wl->alloc, sizeof(*id), sizeof(uintptr_t),
                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
       id->chain = chain;
       id->present_id = present_id;
       id->alloc = chain->wsi_wl_surface->display->wsi_wl->alloc;
+      if (mode_fifo && chain->fifo && chain->commit_timer)
+         timestamped = set_timestamp(chain, &id->target_time, &id->correction);
 
       pthread_mutex_lock(&chain->present_ids.lock);
 
@@ -2117,6 +2305,23 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
 
    if (mode_fifo && chain->fifo) {
       wp_fifo_v1_fifo_barrier(chain->fifo);
+
+      /* If our surface is occluded and we're using vkWaitForPresentKHR,
+       * we can end up waiting forever. The FIFO condition and the time
+       * constraint are met, but the image hasn't been presented because
+       * we're occluded - but the image isn't discarded because there
+       * are no further content updates for the compositor to process.
+       *
+       * This extra commit gives us the second content update to move
+       * things along. If we're occluded the FIFO constraint is
+       * satisfied immediately after the time constraint is, pushing
+       * out a discard. If we're visible, the timed content update
+       * receives presented feedback and the FIFO one blocks further
+       * updates until the next refresh.
+       */
+      if (timestamped)
+         wl_surface_commit(wsi_wl_surface->surface);
+
       wp_fifo_v1_fifo(chain->fifo);
    }
    wl_surface_commit(wsi_wl_surface->surface);
@@ -2332,6 +2537,9 @@ wsi_wl_swapchain_chain_free(struct wsi_wl_swapchain *chain,
    if (chain->fifo)
       wp_fifo_v1_destroy(chain->fifo);
 
+   if (chain->commit_timer)
+      wp_commit_timer_v1_destroy(chain->commit_timer);
+
    wsi_swapchain_finish(&chain->base);
 }
 
@@ -2402,6 +2610,10 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       if (old_chain->fifo) {
          wp_fifo_v1_destroy(old_chain->fifo);
          old_chain->fifo = NULL;
+      }
+      if (old_chain->commit_timer) {
+         wp_commit_timer_v1_destroy(old_chain->commit_timer);
+         old_chain->commit_timer = NULL;
       }
    }
 
@@ -2556,6 +2768,10 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    if (dpy->fifo_manager) {
       chain->fifo = wp_fifo_manager_v1_get_fifo(dpy->fifo_manager,
                                                 chain->wsi_wl_surface->surface);
+   }
+   if (dpy->commit_timing_manager) {
+      chain->commit_timer = wp_commit_timing_manager_v1_get_timer(dpy->commit_timing_manager,
+                                                                  chain->wsi_wl_surface->surface);
    }
 
    for (uint32_t i = 0; i < chain->base.image_count; i++) {

@@ -272,20 +272,6 @@ panvk_DestroyImageView(VkDevice _device, VkImageView _view,
    vk_image_view_destroy(&device->vk, pAllocator, &view->vk);
 }
 
-VKAPI_ATTR void VKAPI_CALL
-panvk_DestroyBufferView(VkDevice _device, VkBufferView bufferView,
-                        const VkAllocationCallbacks *pAllocator)
-{
-   VK_FROM_HANDLE(panvk_device, device, _device);
-   VK_FROM_HANDLE(panvk_buffer_view, view, bufferView);
-
-   if (!view)
-      return;
-
-   panvk_priv_bo_destroy(view->bo, pAllocator);
-   vk_object_free(&device->vk, pAllocator, view);
-}
-
 VKAPI_ATTR VkResult VKAPI_CALL
 panvk_GetImageDrmFormatModifierPropertiesEXT(
    VkDevice device, VkImage _image,

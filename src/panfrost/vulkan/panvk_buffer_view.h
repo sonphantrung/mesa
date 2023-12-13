@@ -10,7 +10,7 @@
 
 #include "util/format/u_formats.h"
 
-#include "vulkan/runtime/vk_object.h"
+#include "vulkan/runtime/vk_buffer_view.h"
 
 struct panvk_priv_bo;
 
@@ -18,17 +18,15 @@ struct panvk_priv_bo;
 #define ATTRIB_BUF_DESC_WORDS 4
 
 struct panvk_buffer_view {
-   struct vk_object_base base;
+   struct vk_buffer_view vk;
    struct panvk_priv_bo *bo;
    struct {
       uint32_t tex[TEXTURE_DESC_WORDS];
       uint32_t img_attrib_buf[ATTRIB_BUF_DESC_WORDS * 2];
    } descs;
-   enum pipe_format fmt;
-   uint32_t elems;
 };
 
-VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_buffer_view, base, VkBufferView,
+VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_buffer_view, vk.base, VkBufferView,
                                VK_OBJECT_TYPE_BUFFER_VIEW)
 
 #endif

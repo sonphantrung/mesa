@@ -11,7 +11,7 @@
 #include "vulkan/runtime/vk_sampler.h"
 
 struct panvk_sampler {
-   struct vk_object_base base;
+   struct vk_sampler vk;
 
    /* The PAN_ARCH section must stay at the end of the struct. */
 #ifdef PAN_ARCH
@@ -19,7 +19,7 @@ struct panvk_sampler {
 #endif
 };
 
-VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_sampler, base, VkSampler,
+VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_sampler, vk.base, VkSampler,
                                VK_OBJECT_TYPE_SAMPLER)
 
 #endif

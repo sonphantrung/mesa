@@ -44,6 +44,7 @@
 
 #include "panvk_buffer.h"
 #include "panvk_cs.h"
+#include "panvk_sampler.h"
 
 #define PANVK_DESCRIPTOR_ALIGN 8
 

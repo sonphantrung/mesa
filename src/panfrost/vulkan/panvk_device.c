@@ -1419,19 +1419,6 @@ panvk_DestroyFramebuffer(VkDevice _device, VkFramebuffer _fb,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-panvk_DestroySampler(VkDevice _device, VkSampler _sampler,
-                     const VkAllocationCallbacks *pAllocator)
-{
-   VK_FROM_HANDLE(panvk_device, device, _device);
-   VK_FROM_HANDLE(panvk_sampler, sampler, _sampler);
-
-   if (!sampler)
-      return;
-
-   vk_object_free(&device->vk, pAllocator, sampler);
-}
-
-VKAPI_ATTR void VKAPI_CALL
 panvk_GetPhysicalDeviceExternalSemaphoreProperties(
    VkPhysicalDevice physicalDevice,
    const VkPhysicalDeviceExternalSemaphoreInfo *pExternalSemaphoreInfo,

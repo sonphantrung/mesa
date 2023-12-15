@@ -8,12 +8,12 @@
 
 #include <stdint.h>
 
-#include "vulkan/runtime/vk_object.h"
+#include "vulkan/runtime/vk_device_memory.h"
 
 struct panvk_priv_bo;
 
 struct panvk_device_memory {
-   struct vk_object_base base;
+   struct vk_device_memory vk;
    struct pan_kmod_bo *bo;
    struct {
       uint64_t dev;
@@ -21,7 +21,7 @@ struct panvk_device_memory {
    } addr;
 };
 
-VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_device_memory, base, VkDeviceMemory,
+VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_device_memory, vk.base, VkDeviceMemory,
                                VK_OBJECT_TYPE_DEVICE_MEMORY)
 
 #endif

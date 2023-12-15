@@ -10,11 +10,13 @@
 
 #include "vulkan/runtime/vk_sampler.h"
 
-#define SAMPLER_DESC_WORDS 8
-
 struct panvk_sampler {
    struct vk_object_base base;
-   uint32_t desc[SAMPLER_DESC_WORDS];
+
+   /* The PAN_ARCH section must stay at the end of the struct. */
+#ifdef PAN_ARCH
+   struct mali_sampler_packed desc;
+#endif
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_sampler, base, VkSampler,

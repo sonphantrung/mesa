@@ -326,15 +326,6 @@ struct panvk_event_op {
    struct panvk_event *event;
 };
 
-struct panvk_device_memory {
-   struct vk_object_base base;
-   struct pan_kmod_bo *bo;
-   struct {
-      mali_ptr dev;
-      void *host;
-   } addr;
-};
-
 struct panvk_buffer_desc {
    struct panvk_buffer *buffer;
    VkDeviceSize offset;
@@ -1027,8 +1018,6 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_descriptor_set, base, VkDescriptorSet,
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_descriptor_set_layout, vk.base,
                                VkDescriptorSetLayout,
                                VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT)
-VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_device_memory, base, VkDeviceMemory,
-                               VK_OBJECT_TYPE_DEVICE_MEMORY)
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_event, base, VkEvent, VK_OBJECT_TYPE_EVENT)
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_framebuffer, base, VkFramebuffer,
                                VK_OBJECT_TYPE_FRAMEBUFFER)

@@ -157,32 +157,6 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
    cmdbuf->state.batch = NULL;
 }
 
-VKAPI_ATTR void VKAPI_CALL
-panvk_per_arch(CmdNextSubpass2)(VkCommandBuffer commandBuffer,
-                                const VkSubpassBeginInfo *pSubpassBeginInfo,
-                                const VkSubpassEndInfo *pSubpassEndInfo)
-{
-   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
-
-   panvk_per_arch(cmd_close_batch)(cmdbuf);
-
-   cmdbuf->state.subpass++;
-   panvk_cmd_fb_info_set_subpass(cmdbuf);
-   panvk_cmd_open_batch(cmdbuf);
-}
-
-VKAPI_ATTR void VKAPI_CALL
-panvk_per_arch(CmdNextSubpass)(VkCommandBuffer cmd, VkSubpassContents contents)
-{
-   VkSubpassBeginInfo binfo = {.sType = VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO,
-                               .contents = contents};
-   VkSubpassEndInfo einfo = {
-      .sType = VK_STRUCTURE_TYPE_SUBPASS_END_INFO,
-   };
-
-   panvk_per_arch(CmdNextSubpass2)(cmd, &binfo, &einfo);
-}
-
 void
 panvk_per_arch(cmd_alloc_fb_desc)(struct panvk_cmd_buffer *cmdbuf)
 {
@@ -194,7 +168,9 @@ panvk_per_arch(cmd_alloc_fb_desc)(struct panvk_cmd_buffer *cmdbuf)
    const struct pan_fb_info *fbinfo = &cmdbuf->state.fb.info;
    bool has_zs_ext = fbinfo->zs.view.zs || fbinfo->zs.view.s;
 
-   batch->fb.info = cmdbuf->state.framebuffer;
+   batch->fb.bo_count = cmdbuf->state.fb.bo_count;
+   memcpy(batch->fb.bos, cmdbuf->state.fb.bos,
+          batch->fb.bo_count * sizeof(batch->fb.bos[0]));
    batch->fb.desc = pan_pool_alloc_desc_aggregate(
       &cmdbuf->desc_pool.base, PAN_DESC(FRAMEBUFFER),
       PAN_DESC_ARRAY(has_zs_ext ? 1 : 0, ZS_CRC_EXTENSION),
@@ -905,31 +881,6 @@ panvk_per_arch(EndCommandBuffer)(VkCommandBuffer commandBuffer)
 }
 
 VKAPI_ATTR void VKAPI_CALL
-panvk_per_arch(CmdEndRenderPass2)(VkCommandBuffer commandBuffer,
-                                  const VkSubpassEndInfo *pSubpassEndInfo)
-{
-   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
-
-   panvk_per_arch(cmd_close_batch)(cmdbuf);
-   vk_free(&cmdbuf->vk.pool->alloc, cmdbuf->state.clear);
-   cmdbuf->state.batch = NULL;
-   cmdbuf->state.pass = NULL;
-   cmdbuf->state.subpass = NULL;
-   cmdbuf->state.framebuffer = NULL;
-   cmdbuf->state.clear = NULL;
-}
-
-VKAPI_ATTR void VKAPI_CALL
-panvk_per_arch(CmdEndRenderPass)(VkCommandBuffer cmd)
-{
-   VkSubpassEndInfo einfo = {
-      .sType = VK_STRUCTURE_TYPE_SUBPASS_END_INFO,
-   };
-
-   panvk_per_arch(CmdEndRenderPass2)(cmd, &einfo);
-}
-
-VKAPI_ATTR void VKAPI_CALL
 panvk_per_arch(CmdPipelineBarrier2)(VkCommandBuffer commandBuffer,
                                     const VkDependencyInfo *pDependencyInfo)
 {
@@ -1015,7 +966,7 @@ panvk_per_arch(CmdSetEvent2)(VkCommandBuffer commandBuffer, VkEvent _event,
    VK_FROM_HANDLE(panvk_event, event, _event);
 
    /* vkCmdSetEvent cannot be called inside a render pass */
-   assert(cmdbuf->state.pass == NULL);
+   assert(cmdbuf->vk.render_pass == NULL);
 
    panvk_add_set_event_operation(cmdbuf, event, PANVK_EVENT_OP_SET);
 }
@@ -1028,7 +979,7 @@ panvk_per_arch(CmdResetEvent2)(VkCommandBuffer commandBuffer, VkEvent _event,
    VK_FROM_HANDLE(panvk_event, event, _event);
 
    /* vkCmdResetEvent cannot be called inside a render pass */
-   assert(cmdbuf->state.pass == NULL);
+   assert(cmdbuf->vk.render_pass == NULL);
 
    panvk_add_set_event_operation(cmdbuf, event, PANVK_EVENT_OP_RESET);
 }
@@ -1233,4 +1184,120 @@ panvk_per_arch(CmdDispatch)(VkCommandBuffer commandBuffer, uint32_t x,
 
    panvk_per_arch(cmd_close_batch)(cmdbuf);
    desc_state->dirty = 0;
+}
+
+static void
+panvk_cmd_begin_rendering_init_fbinfo(struct panvk_cmd_buffer *cmdbuf,
+                                      const VkRenderingInfo *pRenderingInfo)
+{
+   struct pan_fb_info *fbinfo = &cmdbuf->state.fb.info;
+
+   cmdbuf->state.fb.bo_count = 0;
+   memset(cmdbuf->state.fb.bos, 0, sizeof(cmdbuf->state.fb.bos));
+   memset(cmdbuf->state.fb.crc_valid, 0, sizeof(cmdbuf->state.fb.crc_valid));
+
+   *fbinfo = (struct pan_fb_info){
+      .tile_buf_budget = panfrost_query_optimal_tib_size(
+         cmdbuf->device->physical_device->model),
+      .width = pRenderingInfo->renderArea.offset.x +
+               pRenderingInfo->renderArea.extent.width,
+      .height = pRenderingInfo->renderArea.offset.y +
+                pRenderingInfo->renderArea.extent.height,
+      .extent.maxx = pRenderingInfo->renderArea.offset.x +
+                     pRenderingInfo->renderArea.extent.width - 1,
+      .extent.maxy = pRenderingInfo->renderArea.offset.y +
+                     pRenderingInfo->renderArea.extent.height - 1,
+      .nr_samples = 1,
+      .rt_count = pRenderingInfo->colorAttachmentCount,
+   };
+
+   assert(pRenderingInfo->colorAttachmentCount < ARRAY_SIZE(fbinfo->rts));
+
+   for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; i++) {
+      const VkRenderingAttachmentInfo *att =
+         &pRenderingInfo->pColorAttachments[i];
+      VK_FROM_HANDLE(panvk_image_view, iview, att->imageView);
+
+      if (!iview)
+         continue;
+
+      struct panvk_image *img =
+         container_of(iview->vk.image, struct panvk_image, vk);
+
+      cmdbuf->state.fb.bos[cmdbuf->state.fb.bo_count++] = img->bo;
+      fbinfo->rts[i].view = &iview->pview;
+      fbinfo->rts[i].crc_valid = &cmdbuf->state.fb.crc_valid[i];
+      fbinfo->nr_samples =
+         MAX2(fbinfo->nr_samples, pan_image_view_get_nr_samples(&iview->pview));
+
+      if (att->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR) {
+         enum pipe_format fmt = vk_format_to_pipe_format(iview->vk.format);
+         union pipe_color_union *col =
+            (union pipe_color_union *)&att->clearValue.color;
+
+         fbinfo->rts[i].clear = true;
+         pan_pack_color(cmdbuf->device->physical_device->formats.blendable,
+                        fbinfo->rts[i].clear_value, col, fmt, false);
+      } else if (att->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD) {
+         fbinfo->rts[i].preload = true;
+      }
+   }
+
+   if (pRenderingInfo->pDepthAttachment &&
+       pRenderingInfo->pDepthAttachment->imageView != VK_NULL_HANDLE) {
+      const VkRenderingAttachmentInfo *att = pRenderingInfo->pDepthAttachment;
+      VK_FROM_HANDLE(panvk_image_view, iview, att->imageView);
+      struct panvk_image *img =
+         container_of(iview->vk.image, struct panvk_image, vk);
+
+      cmdbuf->state.fb.bos[cmdbuf->state.fb.bo_count++] = img->bo;
+      fbinfo->zs.view.zs = &iview->pview;
+
+      if (att->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR) {
+         fbinfo->zs.clear.z = true;
+         fbinfo->zs.clear_value.depth =
+            att->clearValue.depthStencil.depth;
+      } else if (att->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD) {
+         fbinfo->zs.preload.z = true;
+      }
+   }
+
+   if (pRenderingInfo->pStencilAttachment &&
+       pRenderingInfo->pStencilAttachment->imageView != VK_NULL_HANDLE) {
+      const VkRenderingAttachmentInfo *att = pRenderingInfo->pStencilAttachment;
+      VK_FROM_HANDLE(panvk_image_view, iview, att->imageView);
+      struct panvk_image *img =
+         container_of(iview->vk.image, struct panvk_image, vk);
+
+      cmdbuf->state.fb.bos[cmdbuf->state.fb.bo_count++] = img->bo;
+      fbinfo->zs.view.s =
+         iview && &iview->pview != fbinfo->zs.view.zs ? &iview->pview : NULL;
+
+      if (iview && att->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR) {
+         fbinfo->zs.clear.s = true;
+         fbinfo->zs.clear_value.stencil =
+            att->clearValue.depthStencil.stencil;
+      } else if (att->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD) {
+         fbinfo->zs.preload.s = true;
+      }
+   }
+}
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(CmdBeginRendering)(VkCommandBuffer commandBuffer,
+                                  const VkRenderingInfo *pRenderingInfo)
+{
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+
+   panvk_cmd_begin_rendering_init_fbinfo(cmdbuf, pRenderingInfo);
+   panvk_cmd_open_batch(cmdbuf);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(CmdEndRendering)(VkCommandBuffer commandBuffer)
+{
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+
+   panvk_per_arch(cmd_close_batch)(cmdbuf);
+   cmdbuf->state.batch = NULL;
 }

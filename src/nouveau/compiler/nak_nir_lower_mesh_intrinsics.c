@@ -261,7 +261,8 @@ lower_set_vertex_and_primitive_count(nir_builder *b,
 
 static bool
 lower_load_workgroup_index(nir_builder *b,
-                           nir_intrinsic_instr *intrin)
+                           nir_intrinsic_instr *intrin,
+                           bool from_skew)
 {
    /* As any write to ATTR.SKEW will cause this to be overwrriten, we pull this at the very start */
    b->cursor = nir_before_impl(nir_shader_get_entrypoint(b->shader));
@@ -269,8 +270,7 @@ lower_load_workgroup_index(nir_builder *b,
    const struct nak_nir_isbe_flags flags = {
       .mode = NAK_ISBE_MODE_ATTR,
       .output = false,
-      // TODO: only use skew when a task shader is not present
-      .skew = true,
+      .skew = from_skew,
       .per_primitive = false,
    };
    nir_def *dst =  nir_isberd_nv(b, 32, nir_imm_int(b, 0),
@@ -435,6 +435,83 @@ lower_shared_atomic(nir_builder *b,
    return true;
 }
 
+
+static bool
+lower_load_task_payload(nir_builder *b,
+                  nir_intrinsic_instr *intrin,
+                  bool from_task_shader)
+{
+   nir_def *offset = intrin->src[0].ssa;
+
+   const uint8_t bit_size = intrin->def.bit_size;
+
+   assert(bit_size == 32);
+
+   const unsigned base = nir_intrinsic_base(intrin);
+
+   const struct nak_nir_isbe_flags flags = {
+      .mode = NAK_ISBE_MODE_ATTR,
+      .output = from_task_shader,
+      .skew = false,
+      .per_primitive = false,
+   };
+
+   /* Task payload starts after all internal shared properties */
+   offset = nir_iadd_imm(b, offset, 0x20);
+   offset = nir_iadd_imm(b, offset, base);
+
+   struct isbe_info info = {
+      .stride = bit_size / 8,
+      .component_mask = nir_component_mask(intrin->def.num_components),
+      .num_components = intrin->num_components,
+   };
+
+   nir_def *dst = load_isbe(b, offset,
+                            flags, &info,
+                            bit_size);
+
+   nir_def_replace(&intrin->def, dst);
+
+   return true;
+}
+
+static bool
+lower_store_task_payload(nir_builder *b,
+                   nir_intrinsic_instr *intrin)
+{
+   nir_def *value = intrin->src[0].ssa;
+   nir_def *offset = intrin->src[1].ssa;
+
+   const uint8_t bit_size = value->bit_size;
+
+   assert(bit_size == 32);
+
+   const unsigned base = nir_intrinsic_base(intrin);
+
+   const struct nak_nir_isbe_flags flags = {
+      .mode = NAK_ISBE_MODE_ATTR,
+      .output = true,
+      .skew = false,
+      .per_primitive = false,
+   };
+
+   /* Task payload starts after all internal shared properties */
+   offset = nir_iadd_imm(b, offset, 0x20);
+   offset = nir_iadd_imm(b, offset, base);
+
+   struct isbe_info info = {
+      .stride = bit_size / 8,
+      .component_mask = nir_intrinsic_write_mask(intrin),
+      .num_components = intrin->num_components,
+   };
+
+   store_isbe(b, offset, value, flags, &info);
+
+   nir_instr_remove(&intrin->instr);
+
+   return true;
+}
+
 static bool
 lower_mesh_intrin(nir_builder *b,
                   nir_intrinsic_instr *intrin,
@@ -443,9 +520,6 @@ lower_mesh_intrin(nir_builder *b,
    b->cursor = nir_before_instr(&intrin->instr);
 
    const struct lower_mesh_intrinsics_ctx *ctx = cb_data;
-
-   // TODO: lower task payload accesses
-   // TODO: lower launch_mesh_workgroups (Task only)
 
    switch (intrin->intrinsic) {
    case nir_intrinsic_load_per_vertex_output:
@@ -456,7 +530,7 @@ lower_mesh_intrin(nir_builder *b,
    case nir_intrinsic_set_vertex_and_primitive_count:
       return lower_set_vertex_and_primitive_count(b, intrin);
    case nir_intrinsic_load_workgroup_index:
-      return lower_load_workgroup_index(b, intrin);
+      return lower_load_workgroup_index(b, intrin, !ctx->has_task_shader);
    case nir_intrinsic_load_num_workgroups:
       return lower_load_num_workgroups(b, intrin);
    case nir_intrinsic_load_shared:
@@ -465,6 +539,71 @@ lower_mesh_intrin(nir_builder *b,
       return lower_store_shared(b, intrin, nak_mesh_skew_total_size(ctx));
    case nir_intrinsic_shared_atomic:
       return lower_shared_atomic(b, intrin, nak_mesh_skew_total_size(ctx));
+   case nir_intrinsic_load_task_payload:
+      return lower_load_task_payload(b, intrin, false);
+   default:
+      return false;
+   }
+}
+
+static bool
+lower_launch_mesh_workgroups(nir_builder *b,
+                             nir_intrinsic_instr *intrin)
+{
+   nir_def *dimensions = intrin->src[0].ssa;
+   nir_def *x = nir_channel(b, dimensions, 0);
+   nir_def *y = nir_channel(b, dimensions, 1);
+   nir_def *z = nir_channel(b, dimensions, 2);
+   nir_def *task_count = nir_imul(b, nir_imul(b, x, y), z);
+
+   const struct nak_nir_isbe_flags flags = {
+      .mode = NAK_ISBE_MODE_ATTR,
+      .output = true,
+      .skew = false,
+      .per_primitive = false,
+   };
+
+   uint32_t flags_u32 = pack_isbe_flags(flags);
+
+   nir_isbewr_nv(b, task_count, nir_imm_int(b, 0x4),
+                 .flags = flags_u32);
+   nir_isbewr_nv(b, x, nir_imm_int(b, 0x8),
+                 .flags = flags_u32);
+   nir_isbewr_nv(b, y, nir_imm_int(b, 0xC),
+                 .flags = flags_u32);
+   nir_isbewr_nv(b, z, nir_imm_int(b, 0x10),
+                 .flags = flags_u32);
+
+   nir_instr_remove(&intrin->instr);
+
+   return true;
+}
+
+static bool
+lower_task_intrin(nir_builder *b,
+                  nir_intrinsic_instr *intrin,
+                  void *cb_data)
+{
+   b->cursor = nir_before_instr(&intrin->instr);
+
+   /* TODO: nir_intrinsic_task_payload_atomic */
+   /* TODO: nir_intrinsic_task_payload_atomic_swap */
+
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_load_shared:
+      return lower_load_shared(b, intrin, 0);
+   case nir_intrinsic_store_shared:
+      return lower_store_shared(b, intrin, 0);
+   case nir_intrinsic_shared_atomic:
+      return lower_shared_atomic(b, intrin, 0);
+   case nir_intrinsic_load_task_payload:
+      return lower_load_task_payload(b, intrin, true);
+   case nir_intrinsic_store_task_payload:
+      return lower_store_task_payload(b, intrin);
+   case nir_intrinsic_load_workgroup_index:
+      return lower_load_workgroup_index(b, intrin, true);
+   case nir_intrinsic_launch_mesh_workgroups:
+      return lower_launch_mesh_workgroups(b, intrin);
    default:
       return false;
    }
@@ -477,4 +616,14 @@ nak_nir_lower_mesh_intrinsics(nir_shader *nir, struct lower_mesh_intrinsics_ctx 
                                      nir_metadata_block_index |
                                      nir_metadata_dominance,
                                      ctx);
+}
+
+
+bool
+nak_nir_lower_task_intrinsics(nir_shader *nir)
+{
+   return nir_shader_intrinsics_pass(nir, lower_task_intrin,
+                                     nir_metadata_block_index |
+                                     nir_metadata_dominance,
+                                     NULL);
 }

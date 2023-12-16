@@ -239,8 +239,9 @@ pub extern "C" fn nak_compile_shader(
     nak: *const nak_compiler,
     robust2_modes: nir_variable_mode,
     fs_key: *const nak_fs_key,
+    has_task_shader: bool,
 ) -> *mut nak_shader_bin {
-    unsafe { nak_postprocess_nir(nir, nak, robust2_modes, fs_key) };
+    unsafe { nak_postprocess_nir(nir, nak, robust2_modes, fs_key, has_task_shader) };
     let nak = unsafe { &*nak };
     let nir = unsafe { &*nir };
     let fs_key = if fs_key.is_null() {
@@ -249,7 +250,7 @@ pub extern "C" fn nak_compile_shader(
         Some(unsafe { &*fs_key })
     };
 
-    let mut s = nak_shader_from_nir(nir, nak.sm);
+    let mut s = nak_shader_from_nir(nir, nak.sm, has_task_shader);
 
     if DEBUG.print() {
         eprintln!("NAK IR:\n{}", &s);
@@ -409,6 +410,19 @@ pub extern "C" fn nak_compile_shader(
                     },
                 }
             }
+            ShaderStageInfo::Task => {
+                let local_size = nir.info.workgroup_size[0] *
+                                      nir.info.workgroup_size[1] *
+                                      nir.info.workgroup_size[2];
+
+                nak_shader_info__bindgen_ty_1 {
+                    task: nak_shader_info__bindgen_ty_1__bindgen_ty_5 {
+                        // The max local size supported by hardware is the size of a WARP (32)
+                        local_size: local_size.min(32),
+                        _pad: [0; 134],
+                    },
+                }
+            },
             _ => nak_shader_info__bindgen_ty_1 {
                 _pad: [0; 136],
             },

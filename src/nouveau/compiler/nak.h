@@ -51,7 +51,8 @@ struct nak_fs_key {
 
 void nak_postprocess_nir(nir_shader *nir, const struct nak_compiler *nak,
                          nir_variable_mode robust2_modes,
-                         const struct nak_fs_key *fs_key);
+                         const struct nak_fs_key *fs_key,
+                         bool has_task_shader);
 
 enum ENUM_PACKED nak_ts_domain {
    NAK_TS_DOMAIN_ISOLINE = 0,
@@ -152,6 +153,11 @@ struct nak_shader_info {
          uint32_t gs_hdr[32];
       } mesh;
 
+      struct {
+         uint16_t local_size;
+         uint8_t _pad[134];
+      } task;
+
       /* Used to initialize the union for other stages */
       uint8_t _pad[136];
    };
@@ -186,7 +192,8 @@ struct nak_shader_bin *
 nak_compile_shader(nir_shader *nir, bool dump_asm,
                    const struct nak_compiler *nak,
                    nir_variable_mode robust2_modes,
-                   const struct nak_fs_key *fs_key);
+                   const struct nak_fs_key *fs_key,
+                   bool has_task_shader);
 
 #ifdef __cplusplus
 }

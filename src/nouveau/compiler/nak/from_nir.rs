@@ -14,7 +14,7 @@ use std::cmp::max;
 use std::collections::{HashMap, HashSet};
 use std::ops::Index;
 
-fn init_info_from_nir(nir: &nir_shader, sm: u8) -> ShaderInfo {
+fn init_info_from_nir(nir: &nir_shader, sm: u8, has_task_shader: bool) -> ShaderInfo {
     ShaderInfo {
         sm: sm,
         num_gprs: 0,
@@ -68,8 +68,7 @@ fn init_info_from_nir(nir: &nir_shader, sm: u8) -> ShaderInfo {
             MESA_SHADER_TESS_EVAL => ShaderStageInfo::Tessellation,
             MESA_SHADER_TASK => ShaderStageInfo::Task,
             MESA_SHADER_MESH => ShaderStageInfo::Mesh(MeshShaderInfo {
-                // TODO: Implement this
-                has_task_shader: false,
+                has_task_shader,
                 has_gs_sph: false,
                 primitive_io: VtgIoInfo {
                     sysvals_in: SysValInfo::default(),
@@ -119,20 +118,27 @@ fn init_info_from_nir(nir: &nir_shader, sm: u8) -> ShaderInfo {
                 store_req_end: 0,
             }),
             MESA_SHADER_TASK
-            | MESA_SHADER_MESH => ShaderIoInfo::Vtg(VtgIoInfo {
-                sysvals_in: SysValInfo {
-                    ab: 0,
-                    c: 1 << 15,
-                },
-                sysvals_in_d: 0,
-                sysvals_out: SysValInfo::default(),
-                sysvals_out_d: 0,
-                attr_in: [0; 4],
-                attr_out: [0; 4],
+            | MESA_SHADER_MESH => {
+                let sysval_c = if nir.info.stage() == MESA_SHADER_TASK ||
+                                       !has_task_shader {
+                    1 << 15
+                } else { 0 };
 
-                store_req_start: 0,
-                store_req_end: u8::MAX,
-            }),
+                ShaderIoInfo::Vtg(VtgIoInfo {
+                    sysvals_in: SysValInfo {
+                        ab: 0,
+                        c: sysval_c,
+                    },
+                    sysvals_in_d: 0,
+                    sysvals_out: SysValInfo::default(),
+                    sysvals_out_d: 0,
+                    attr_in: [0; 4],
+                    attr_out: [0; 4],
+
+                    store_req_start: 0,
+                    store_req_end: u8::MAX,
+                })
+            },
             _ => panic!("Unknown shader stage"),
         },
     }
@@ -273,10 +279,10 @@ struct ShaderFromNir<'a> {
 }
 
 impl<'a> ShaderFromNir<'a> {
-    fn new(nir: &'a nir_shader, sm: u8) -> Self {
+    fn new(nir: &'a nir_shader, sm: u8, has_task_shader: bool) -> Self {
         Self {
             nir: nir,
-            info: init_info_from_nir(nir, sm),
+            info: init_info_from_nir(nir, sm, has_task_shader),
             float_ctl: ShaderFloatControls::from_nir(nir),
             cfg: CFGBuilder::new(),
             label_alloc: LabelAllocator::new(),
@@ -3155,6 +3161,6 @@ impl<'a> ShaderFromNir<'a> {
     }
 }
 
-pub fn nak_shader_from_nir(ns: &nir_shader, sm: u8) -> Shader {
-    ShaderFromNir::new(ns, sm).parse_shader()
+pub fn nak_shader_from_nir(ns: &nir_shader, sm: u8, has_task_shader: bool) -> Shader {
+    ShaderFromNir::new(ns, sm, has_task_shader).parse_shader()
 }

@@ -66,6 +66,7 @@ struct lower_descriptors_ctx {
 
    struct hash_table *cbufs;
    struct nvk_cbuf_map *cbuf_map;
+   bool has_task_shader;
 };
 
 static void
@@ -882,8 +883,10 @@ try_lower_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
       unreachable("Should have been lowered by nir_lower_cs_intrinsics()");
 
    case nir_intrinsic_load_num_workgroups:
-      // TODO: do not lower here if a task shader is present (use ISBE)
-      if (stage == MESA_SHADER_MESH)
+      // This use ISBE to comunicate the information from task.
+      if (stage == MESA_SHADER_MESH && ctx->has_task_shader)
+         return false;
+      if (stage == MESA_SHADER_TASK || stage == MESA_SHADER_MESH)
          return lower_sysval_to_root_table(b, intrin, mesh.group_count, ctx);
       return lower_sysval_to_root_table(b, intrin, cs.group_count, ctx);
    case nir_intrinsic_load_base_workgroup_id:
@@ -1213,7 +1216,8 @@ nvk_nir_lower_descriptors(nir_shader *nir,
                           const struct vk_pipeline_robustness_state *rs,
                           uint32_t set_layout_count,
                           struct vk_descriptor_set_layout * const *set_layouts,
-                          struct nvk_cbuf_map *cbuf_map_out)
+                          struct nvk_cbuf_map *cbuf_map_out,
+                          bool has_task_shader)
 {
    struct lower_descriptors_ctx ctx = {
       .clamp_desc_array_bounds =
@@ -1222,6 +1226,7 @@ nvk_nir_lower_descriptors(nir_shader *nir,
          rs->images != VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED_EXT,
       .ssbo_addr_format = nvk_buffer_addr_format(rs->storage_buffers),
       .ubo_addr_format = nvk_buffer_addr_format(rs->uniform_buffers),
+      .has_task_shader = has_task_shader,
    };
 
    assert(set_layout_count <= NVK_MAX_SETS);

@@ -1964,6 +1964,8 @@ nvk_flush_descriptors(struct nvk_cmd_buffer *cmd)
    desc->root.root_desc_addr = root_desc_addr;
    memcpy(root_desc_map, &desc->root, sizeof(desc->root));
 
+   bool has_task_shader = false;
+
    /* Find cbuf maps for the 5 cbuf groups */
    const struct nvk_shader *cbuf_shaders[5] = { NULL, };
    for (gl_shader_stage stage = 0; stage < MESA_VULKAN_SHADER_STAGES; stage++) {
@@ -1971,7 +1973,9 @@ nvk_flush_descriptors(struct nvk_cmd_buffer *cmd)
       if (!shader || shader->code_size == 0)
          continue;
 
-      uint32_t group = nvk_cbuf_binding_for_stage(stage);
+      has_task_shader |= stage == MESA_SHADER_TASK;
+
+      uint32_t group = nvk_cbuf_binding_for_stage(stage, has_task_shader);
       assert(group < ARRAY_SIZE(cbuf_shaders));
       cbuf_shaders[group] = shader;
    }

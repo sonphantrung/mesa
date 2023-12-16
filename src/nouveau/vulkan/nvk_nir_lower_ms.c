@@ -32,6 +32,31 @@ lower_set_vertex_and_primitive_count(nir_builder *b,
 }
 
 static bool
+lower_launch_mesh_workgroups(nir_builder *b,
+                             nir_intrinsic_instr *intrin,
+                             void *data)
+{
+   if (intrin->intrinsic != nir_intrinsic_launch_mesh_workgroups &&
+       intrin->intrinsic != nir_intrinsic_launch_mesh_workgroups_with_payload_deref)
+      return false;
+
+   b->cursor = nir_before_instr(&intrin->instr);
+
+   nir_def *dimensions = intrin->src[0].ssa;
+   nir_def *local_invocation_index = nir_load_local_invocation_index(b);
+   nir_push_if(b, nir_ieq(b, local_invocation_index, nir_imm_int(b, 0)));
+   {
+      nir_launch_mesh_workgroups(b, dimensions);
+      nir_jump(b, nir_jump_return);
+   }
+   nir_pop_if(b, NULL);
+
+   nir_instr_remove(&intrin->instr);
+
+   return true;
+}
+
+static bool
 lower_mesh_workgroup_id_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
                                void *data)
 {
@@ -80,11 +105,25 @@ lower_local_invocation_index_to_arg(nir_builder *b, nir_instr *instr,
    return true;
 }
 
+bool nvk_nir_lower_mesh_workgroup_id(nir_shader *nir) {
+   return nir_shader_intrinsics_pass(nir, lower_mesh_workgroup_id_intrin,
+                                     nir_metadata_block_index | nir_metadata_dominance,
+                                     NULL);
+}
+
 bool nvk_nir_lower_mesh(nir_shader *nir) {
-   /* First, we avoid ensure that set_vertex_and_primitive_count will only be called on the first local invocation */
+   /* First, we avoid ensure that set_vertex_and_primitive_count/launch_mesh_workgroups will only be called on the first local invocation */
    nir_shader_intrinsics_pass(nir, lower_set_vertex_and_primitive_count,
                               nir_metadata_none,
                               NULL);
+   bool progress = nir_shader_intrinsics_pass(nir, lower_launch_mesh_workgroups,
+                                              nir_metadata_none,
+                                              NULL);
+
+   /* Ensure we lower all returns */
+   if (progress)
+      nir_lower_returns_impl(nir_shader_get_entrypoint(nir));
+
 
    /* We then lower the workgroup and local invocation ids to use their respective index */
    nir_shader_intrinsics_pass(nir, lower_mesh_workgroup_id_intrin,

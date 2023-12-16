@@ -278,9 +278,13 @@ nvk_graphics_pipeline_create(struct nvk_device *dev,
             goto fail;
          }
 
+         if (has_mesh_shader)
+            shader->has_task_shader = has_task_shader;
+
          nvk_lower_nir(dev, nir[stage], &robustness[stage],
                        state.rp->view_mask != 0, pipeline_layout,
-                       &shader->cbuf_map);
+                       &shader->cbuf_map,
+                       shader->has_task_shader);
 
          result = nvk_compile_nir(dev, nir[stage],
                                   pipeline_flags, &robustness[stage],
@@ -319,6 +323,10 @@ nvk_graphics_pipeline_create(struct nvk_device *dev,
 
    struct nvk_shader *last_geom = NULL;
 
+   if (dev->pdev->info.cls_eng3d >= TURING_A) {
+      P_IMMD(p, NVC597, SET_MESH_ENABLE, has_mesh_shader);
+   }
+
    if (has_task_shader) {
       struct nvk_shader *shader = pipeline->base.shaders[MESA_SHADER_TASK];
 
@@ -327,11 +335,19 @@ nvk_graphics_pipeline_create(struct nvk_device *dev,
          .type    = TYPE_VERTEX,
       });
 
-      assert(0 && "todo");
-   }
+      uint64_t addr = nvk_shader_address(shader);
+      P_MTHD(p, NVC397, SET_PIPELINE_PROGRAM_ADDRESS_A(1));
+      P_NVC397_SET_PIPELINE_PROGRAM_ADDRESS_A(p, 1, addr >> 32);
+      P_NVC397_SET_PIPELINE_PROGRAM_ADDRESS_B(p, 1, addr);
 
-   if (dev->pdev->info.cls_eng3d >= TURING_A) {
-      P_IMMD(p, NVC597, SET_MESH_ENABLE, has_mesh_shader);
+      P_MTHD(p, NVC397, SET_PIPELINE_REGISTER_COUNT(1));
+      P_NVC397_SET_PIPELINE_REGISTER_COUNT(p, 1, shader->info.num_gprs);
+      P_NVC397_SET_PIPELINE_BINDING(p, 1, nvk_cbuf_binding_for_stage(MESA_SHADER_TASK, has_task_shader));
+
+      P_IMMD(p, NVC597, SET_TASK_LAYOUT, {
+         .invocation_count = shader->info.task.local_size,
+         .unk12 = 0x401,
+      });
    }
 
    if (has_mesh_shader) {
@@ -353,7 +369,7 @@ nvk_graphics_pipeline_create(struct nvk_device *dev,
 
       P_MTHD(p, NVC397, SET_PIPELINE_REGISTER_COUNT(idx));
       P_NVC397_SET_PIPELINE_REGISTER_COUNT(p, idx, shader->info.num_gprs);
-      P_NVC397_SET_PIPELINE_BINDING(p, idx, nvk_cbuf_binding_for_stage(MESA_SHADER_MESH));
+      P_NVC397_SET_PIPELINE_BINDING(p, idx, nvk_cbuf_binding_for_stage(MESA_SHADER_MESH, has_task_shader));
 
       assert(shader->info.mesh.max_vertices != 0);
       assert(shader->info.mesh.max_primitives != 0);
@@ -427,7 +443,7 @@ nvk_graphics_pipeline_create(struct nvk_device *dev,
 
       P_MTHD(p, NVC397, SET_PIPELINE_REGISTER_COUNT(idx));
       P_NVC397_SET_PIPELINE_REGISTER_COUNT(p, idx, shader->info.num_gprs);
-      P_NVC397_SET_PIPELINE_BINDING(p, idx, nvk_cbuf_binding_for_stage(stage));
+      P_NVC397_SET_PIPELINE_BINDING(p, idx, nvk_cbuf_binding_for_stage(stage, false));
 
       switch (stage) {
       case MESA_SHADER_VERTEX:

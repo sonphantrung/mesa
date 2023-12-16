@@ -30,12 +30,12 @@ struct vk_shader_module;
 #define WARP_SIZE (32)
 
 static inline uint32_t
-nvk_cbuf_binding_for_stage(gl_shader_stage stage)
+nvk_cbuf_binding_for_stage(gl_shader_stage stage, bool has_task_shader)
 {
+   if (stage == MESA_SHADER_TASK)
+      return MESA_SHADER_VERTEX;
    if (stage == MESA_SHADER_MESH)
-      return 0;
-   else if (stage == MESA_SHADER_TASK)
-      return 1;
+      return has_task_shader ? MESA_SHADER_TESS_EVAL : MESA_SHADER_VERTEX;
 
    return stage;
 }
@@ -79,6 +79,7 @@ struct nvk_shader {
    uint32_t hdr_offset;
    uint32_t gs_hdr_offset;
    uint32_t data_offset;
+   bool has_task_shader;
 };
 
 static inline uint64_t
@@ -137,8 +138,10 @@ nvk_nir_lower_descriptors(nir_shader *nir,
                           const struct vk_pipeline_robustness_state *rs,
                           uint32_t set_layout_count,
                           struct vk_descriptor_set_layout * const *set_layouts,
-                          struct nvk_cbuf_map *cbuf_map_out);
+                          struct nvk_cbuf_map *cbuf_map_out,
+                          bool has_task_shader);
 
+bool nvk_nir_lower_mesh_workgroup_id(nir_shader *nir);
 bool nvk_nir_lower_mesh(nir_shader *nir);
 
 VkResult
@@ -153,7 +156,8 @@ nvk_lower_nir(struct nvk_device *dev, nir_shader *nir,
               const struct vk_pipeline_robustness_state *rs,
               bool is_multiview,
               const struct vk_pipeline_layout *layout,
-              struct nvk_cbuf_map *cbuf_map_out);
+              struct nvk_cbuf_map *cbuf_map_out,
+              bool has_task_shader);
 
 VkResult
 nvk_compile_nir(struct nvk_device *dev, nir_shader *nir,

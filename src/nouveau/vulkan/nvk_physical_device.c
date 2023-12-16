@@ -472,10 +472,8 @@ nvk_get_device_features(const struct nv_device_info *info,
       .multiDraw = true,
 
       /* VK_EXT_mesh_shader */
-      /* TODO: Implement this */
-      //.taskShader = info->cls_eng3d >= TURING_A &&
-      //   (nvk_nak_stages(info) & VK_SHADER_STAGE_TASK_BIT_EXT) != 0,
-      .taskShader = false,
+      .taskShader = info->cls_eng3d >= TURING_A &&
+         (nvk_nak_stages(info) & VK_SHADER_STAGE_TASK_BIT_EXT) != 0,
       .meshShader = info->cls_eng3d >= TURING_A &&
          (nvk_nak_stages(info) & VK_SHADER_STAGE_MESH_BIT_EXT) != 0,
       .multiviewMeshShader = true,

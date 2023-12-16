@@ -37,6 +37,7 @@ nak_nir_workgroup_has_one_subgroup(const nir_shader *nir)
        */
       return true;
 
+   case MESA_SHADER_TASK:
    case MESA_SHADER_MESH:
       /*
        * Mesh runs on the Tesselation stage and follows the same rules.
@@ -517,7 +518,8 @@ nak_nir_lower_system_value_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
 
       if (intrin->intrinsic == nir_intrinsic_load_workgroup_id_zero_base) {
          sysval = SYSTEM_VALUE_WORKGROUP_ID;
-      } else if (b->shader->info.stage == MESA_SHADER_MESH &&
+      } else if ((b->shader->info.stage == MESA_SHADER_TASK ||
+                  b->shader->info.stage == MESA_SHADER_MESH) &&
                  intrin->intrinsic == nir_intrinsic_load_local_invocation_index) {
          sysval = SYSTEM_VALUE_SUBGROUP_INVOCATION;
       } else {
@@ -1248,7 +1250,8 @@ void
 nak_postprocess_nir(nir_shader *nir,
                     const struct nak_compiler *nak,
                     nir_variable_mode robust2_modes,
-                    const struct nak_fs_key *fs_key)
+                    const struct nak_fs_key *fs_key,
+                    bool has_task_shader)
 {
    UNUSED bool progress = false;
 
@@ -1292,13 +1295,14 @@ nak_postprocess_nir(nir_shader *nir,
    vectorize_opts.modes = nir_var_mem_global |
                           nir_var_mem_ssbo |
                           nir_var_mem_shared |
-                          nir_var_shader_temp;
+                          nir_var_shader_temp |
+                          (is_mesh_stage ? nir_var_mem_task_payload : 0);
    vectorize_opts.callback = nak_mem_vectorize_cb;
    vectorize_opts.robust_modes = robust2_modes;
    OPT(nir, nir_opt_load_store_vectorize, &vectorize_opts);
 
    nir_lower_mem_access_bit_sizes_options mem_bit_size_options = {
-      .modes = nir_var_mem_constant | nir_var_mem_ubo | nir_var_mem_generic,
+      .modes = nir_var_mem_constant | nir_var_mem_ubo | nir_var_mem_generic | nir_var_mem_task_payload,
       .callback = is_mesh_stage ? nak_mesh_mem_access_size_align : nak_mem_access_size_align,
    };
    OPT(nir, nir_lower_mem_access_bit_sizes, &mem_bit_size_options);
@@ -1349,11 +1353,16 @@ nak_postprocess_nir(nir_shader *nir,
       OPT(nir, nak_nir_lower_gs_intrinsics);
       break;
 
+   case MESA_SHADER_TASK:
+      OPT(nir, nak_nir_lower_task_intrinsics);
+      break;
+
    case MESA_SHADER_MESH:
       struct lower_mesh_intrinsics_ctx ctx = {
          .nak = nak,
          .max_vertices_out = nir->info.mesh.max_vertices_out,
          .max_primitives_out = nir->info.mesh.max_primitives_out,
+         .has_task_shader = has_task_shader,
       };
 
       OPT(nir, nak_nir_lower_mesh_outputs, &ctx);

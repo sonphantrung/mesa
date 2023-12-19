@@ -258,20 +258,6 @@ panvk_GetImageSubresourceLayout(VkDevice _device, VkImage _image,
    pLayout->depthPitch = slice_layout->surface_stride;
 }
 
-VKAPI_ATTR void VKAPI_CALL
-panvk_DestroyImageView(VkDevice _device, VkImageView _view,
-                       const VkAllocationCallbacks *pAllocator)
-{
-   VK_FROM_HANDLE(panvk_device, device, _device);
-   VK_FROM_HANDLE(panvk_image_view, view, _view);
-
-   if (!view)
-      return;
-
-   panvk_priv_bo_destroy(view->bo, NULL);
-   vk_image_view_destroy(&device->vk, pAllocator, &view->vk);
-}
-
 VKAPI_ATTR VkResult VKAPI_CALL
 panvk_GetImageDrmFormatModifierPropertiesEXT(
    VkDevice device, VkImage _image,

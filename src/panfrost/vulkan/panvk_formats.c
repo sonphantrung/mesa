@@ -25,6 +25,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include "panvk_physical_device.h"
 #include "panvk_private.h"
 
 #include "panfrost/lib/pan_texture.h"

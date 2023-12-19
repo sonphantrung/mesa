@@ -4,7 +4,7 @@
  */
 
 #include "panvk_pipeline_layout.h"
-#include "panvk_private.h"
+#include "panvk_shader.h"
 
 unsigned
 panvk_pipeline_layout_ubo_start(const struct panvk_pipeline_layout *layout,

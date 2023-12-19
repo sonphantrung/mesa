@@ -12,10 +12,9 @@
 
 #include "pan_texture.h"
 
-struct panvk_priv_bo;
+#include "genxml/gen_macros.h"
 
-#define TEXTURE_DESC_WORDS    8
-#define ATTRIB_BUF_DESC_WORDS 4
+struct panvk_priv_bo;
 
 struct panvk_image_view {
    struct vk_image_view vk;
@@ -23,10 +22,13 @@ struct panvk_image_view {
    struct pan_image_view pview;
 
    struct panvk_priv_bo *bo;
+
+#ifdef PAN_ARCH
    struct {
-      uint32_t tex[TEXTURE_DESC_WORDS];
-      uint32_t img_attrib_buf[ATTRIB_BUF_DESC_WORDS * 2];
+      struct mali_texture_packed tex;
+      struct mali_attribute_buffer_packed img_attrib_buf[2];
    } descs;
+#endif
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_image_view, vk.base, VkImageView,

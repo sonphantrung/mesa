@@ -293,11 +293,12 @@ panvk_pipeline_builder_init_shaders(struct panvk_pipeline_builder *builder,
       pipeline->rsds[MESA_SHADER_FRAGMENT] = gpu_rsd;
    } else if (builder->create_info.gfx) {
       panvk_per_arch(emit_base_fs_rsd)(builder->device, pipeline,
-                                       &pipeline->fs.rsd_template);
+                                       pipeline->descs.fs.rsd_template.opaque);
       for (unsigned rt = 0; rt < MAX2(pipeline->blend.state.rt_count, 1);
            rt++) {
-         panvk_per_arch(emit_blend)(builder->device, pipeline, rt,
-                                    &pipeline->blend.bd_template[rt]);
+         panvk_per_arch(emit_blend)(
+            builder->device, pipeline, rt,
+            &pipeline->descs.blend.bd_template[rt].opaque);
       }
    }
 

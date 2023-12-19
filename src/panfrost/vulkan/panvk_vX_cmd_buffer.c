@@ -368,10 +368,8 @@ panvk_draw_prepare_fs_rsd(struct panvk_cmd_buffer *cmdbuf,
          PAN_DESC_ARRAY(pipeline->blend.state.rt_count, BLEND));
 
       struct mali_renderer_state_packed rsd_dyn;
-      struct mali_renderer_state_packed *rsd_templ =
-         (struct mali_renderer_state_packed *)&pipeline->fs.rsd_template;
-
-      STATIC_ASSERT(sizeof(pipeline->fs.rsd_template) >= sizeof(*rsd_templ));
+      const struct mali_renderer_state_packed *rsd_templ =
+         &pipeline->descs.fs.rsd_template;
 
       panvk_per_arch(emit_dyn_fs_rsd)(pipeline, &cmdbuf->state, &rsd_dyn);
       pan_merge(rsd_dyn, (*rsd_templ), RENDERER_STATE);
@@ -381,11 +379,9 @@ panvk_draw_prepare_fs_rsd(struct panvk_cmd_buffer *cmdbuf,
       for (unsigned i = 0; i < pipeline->blend.state.rt_count; i++) {
          if (pipeline->blend.constant[i].index != (uint8_t)~0) {
             struct mali_blend_packed bd_dyn;
-            struct mali_blend_packed *bd_templ =
-               (struct mali_blend_packed *)&pipeline->blend.bd_template[i];
+            const struct mali_blend_packed *bd_templ =
+               &pipeline->descs.blend.bd_template[i];
 
-            STATIC_ASSERT(sizeof(pipeline->blend.bd_template[0]) >=
-                          sizeof(*bd_templ));
             panvk_per_arch(emit_blend_constant)(cmdbuf->device, pipeline, i,
                                                 cmdbuf->state.blend.constants,
                                                 &bd_dyn);

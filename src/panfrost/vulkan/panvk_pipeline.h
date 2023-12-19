@@ -18,8 +18,7 @@
 
 #include "panvk_varyings.h"
 
-#define RSD_WORDS        16
-#define BLEND_DESC_WORDS 4
+#include "genxml/gen_macros.h"
 
 #define MAX_RTS                     8
 
@@ -81,7 +80,6 @@ struct panvk_pipeline {
    struct {
       uint64_t address;
       struct pan_shader_info info;
-      uint32_t rsd_template[RSD_WORDS];
       bool required;
       bool dynamic_rsd;
       uint8_t rt_mask;
@@ -138,7 +136,6 @@ struct panvk_pipeline {
 
    struct {
       struct pan_blend_state state;
-      uint32_t bd_template[8][BLEND_DESC_WORDS];
       struct {
          uint8_t index;
          uint16_t bifrost_factor;
@@ -148,6 +145,18 @@ struct panvk_pipeline {
 
    VkViewport viewport;
    VkRect2D scissor;
+
+#ifdef PAN_ARCH
+   struct {
+      struct {
+         struct mali_renderer_state_packed rsd_template;
+      } fs;
+
+      struct {
+         struct mali_blend_packed bd_template[8];
+      } blend;
+   } descs;
+#endif
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_pipeline, base, VkPipeline,

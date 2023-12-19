@@ -28,6 +28,7 @@
 
 #include "pan_props.h"
 
+#include "panvk_image.h"
 #include "panvk_private.h"
 
 #include "drm-uapi/drm_fourcc.h"
@@ -36,6 +37,8 @@
 #include "vk_format.h"
 #include "vk_object.h"
 #include "vk_util.h"
+
+#define PANVK_MAX_PLANES 1
 
 unsigned
 panvk_image_get_plane_size(const struct panvk_image *image, unsigned plane)

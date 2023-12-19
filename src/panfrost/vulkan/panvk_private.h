@@ -746,24 +746,6 @@ panvk_shader_create(struct panvk_device *dev, gl_shader_stage stage,
 void panvk_shader_destroy(struct panvk_device *dev, struct panvk_shader *shader,
                           const VkAllocationCallbacks *alloc);
 
-#define PANVK_MAX_PLANES 1
-
-struct panvk_image {
-   struct vk_image vk;
-
-   /* TODO: See if we can rework the synchronization logic so we don't need to
-    * pass BOs around.
-    */
-   struct pan_kmod_bo *bo;
-
-   struct pan_image pimage;
-};
-
-unsigned panvk_image_get_plane_size(const struct panvk_image *image,
-                                    unsigned plane);
-
-unsigned panvk_image_get_total_size(const struct panvk_image *image);
-
 VK_DEFINE_HANDLE_CASTS(panvk_cmd_buffer, vk.base, VkCommandBuffer,
                        VK_OBJECT_TYPE_COMMAND_BUFFER)
 VK_DEFINE_HANDLE_CASTS(panvk_device, vk.base, VkDevice, VK_OBJECT_TYPE_DEVICE)
@@ -783,8 +765,6 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_descriptor_set_layout, vk.base,
                                VkDescriptorSetLayout,
                                VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT)
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_event, base, VkEvent, VK_OBJECT_TYPE_EVENT)
-VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_image, vk.base, VkImage,
-                               VK_OBJECT_TYPE_IMAGE)
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_pipeline_layout, vk.base, VkPipelineLayout,
                                VK_OBJECT_TYPE_PIPELINE_LAYOUT)
 

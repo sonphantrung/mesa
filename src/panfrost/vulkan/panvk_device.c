@@ -27,6 +27,7 @@
  */
 
 #include "panvk_device_memory.h"
+#include "panvk_image.h"
 #include "panvk_private.h"
 
 #include "decode.h"

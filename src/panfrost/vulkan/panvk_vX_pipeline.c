@@ -38,6 +38,7 @@
 #include "util/u_debug.h"
 #include "vk_blend.h"
 #include "vk_format.h"
+#include "vk_pipeline_cache.h"
 #include "vk_render_pass.h"
 #include "vk_util.h"
 
@@ -45,7 +46,7 @@
 
 struct panvk_pipeline_builder {
    struct panvk_device *device;
-   struct panvk_pipeline_cache *cache;
+   struct vk_pipeline_cache *cache;
    const VkAllocationCallbacks *alloc;
    struct {
       const VkGraphicsPipelineCreateInfo *gfx;
@@ -850,7 +851,7 @@ panvk_pipeline_builder_build(struct panvk_pipeline_builder *builder,
 static void
 panvk_pipeline_builder_init_graphics(
    struct panvk_pipeline_builder *builder, struct panvk_device *dev,
-   struct panvk_pipeline_cache *cache,
+   struct vk_pipeline_cache *cache,
    const VkGraphicsPipelineCreateInfo *create_info,
    const VkAllocationCallbacks *alloc)
 {
@@ -902,7 +903,7 @@ panvk_per_arch(CreateGraphicsPipelines)(
    const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines)
 {
    VK_FROM_HANDLE(panvk_device, dev, device);
-   VK_FROM_HANDLE(panvk_pipeline_cache, cache, pipelineCache);
+   VK_FROM_HANDLE(vk_pipeline_cache, cache, pipelineCache);
 
    for (uint32_t i = 0; i < count; i++) {
       struct panvk_pipeline_builder builder;
@@ -931,7 +932,7 @@ panvk_per_arch(CreateGraphicsPipelines)(
 static void
 panvk_pipeline_builder_init_compute(
    struct panvk_pipeline_builder *builder, struct panvk_device *dev,
-   struct panvk_pipeline_cache *cache,
+   struct vk_pipeline_cache *cache,
    const VkComputePipelineCreateInfo *create_info,
    const VkAllocationCallbacks *alloc)
 {
@@ -953,7 +954,7 @@ panvk_per_arch(CreateComputePipelines)(
    const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines)
 {
    VK_FROM_HANDLE(panvk_device, dev, device);
-   VK_FROM_HANDLE(panvk_pipeline_cache, cache, pipelineCache);
+   VK_FROM_HANDLE(vk_pipeline_cache, cache, pipelineCache);
 
    for (uint32_t i = 0; i < count; i++) {
       struct panvk_pipeline_builder builder;

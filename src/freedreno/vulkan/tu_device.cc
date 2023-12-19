@@ -696,6 +696,11 @@ tu_physical_device_init(struct tu_physical_device *device,
    if (result != VK_SUCCESS)
       goto fail_free_name;
 
+   device->vk.properties.apiVersion =
+      (device->info->a6xx.has_hw_multiview || TU_DEBUG(NOCONFORM))
+         ? TU_API_VERSION
+         : VK_MAKE_VERSION(1, 0, VK_HEADER_VERSION);
+
    get_device_extensions(device, &device->vk.supported_extensions);
    tu_get_features(device, &device->vk.supported_features);
 
@@ -1177,9 +1182,7 @@ tu_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
    };
 
    pProperties->properties = (VkPhysicalDeviceProperties) {
-      .apiVersion =
-         (pdevice->info->a6xx.has_hw_multiview || TU_DEBUG(NOCONFORM)) ?
-            TU_API_VERSION : VK_MAKE_VERSION(1, 0, VK_HEADER_VERSION),
+      .apiVersion = pdevice->vk.properties.apiVersion,
       .driverVersion = vk_get_driver_version(),
       .vendorID = 0x5143,
       .deviceID = pdevice->dev_id.chip_id,

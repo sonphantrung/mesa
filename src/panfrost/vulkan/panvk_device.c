@@ -462,6 +462,8 @@ panvk_physical_device_init(struct panvk_physical_device *device,
 
    panvk_arch_dispatch(device->pdev.arch, meta_init, device);
 
+   device->vk.properties.apiVersion = PANVK_API_VERSION;
+
    memset(device->name, 0, sizeof(device->name));
    sprintf(device->name, "%s", device->pdev.model->name);
 

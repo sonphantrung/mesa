@@ -925,6 +925,7 @@ create_physical_device(struct v3dv_instance *instance,
       goto fail;
    }
 
+   device->vk.properties.apiVersion = V3DV_API_VERSION;
    get_device_extensions(device, &device->vk.supported_extensions);
    get_features(device, &device->vk.supported_features);
 

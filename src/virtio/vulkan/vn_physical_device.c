@@ -691,6 +691,9 @@ vn_physical_device_init_properties(struct vn_physical_device *physical_dev)
    VN_SET_CORE_VALUE(vk12_props, conformanceVersion.patch, 0);
 
    vn_physical_device_init_uuids(physical_dev);
+
+   physical_dev->base.base.properties.apiVersion =
+      physical_dev->properties.vulkan_1_0.apiVersion;
 }
 
 static VkResult

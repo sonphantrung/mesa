@@ -1227,6 +1227,14 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
 
    anv_physical_device_init_perf(device, fd);
 
+#ifdef ANDROID_STRICT
+   device->vk.properties.apiVersion = ANV_API_VERSION;
+#else
+   device->vk.properties.apiVersion =
+      (device->use_softpin || device->instance->report_vk_1_3) ?
+      ANV_API_VERSION_1_3 : ANV_API_VERSION_1_2;
+#endif
+
    get_device_extensions(device, &device->vk.supported_extensions);
    get_features(device, &device->vk.supported_features);
 
@@ -1571,12 +1579,7 @@ void anv_GetPhysicalDeviceProperties(
    };
 
    *pProperties = (VkPhysicalDeviceProperties) {
-#ifdef ANDROID_STRICT
-      .apiVersion = ANV_API_VERSION,
-#else
-      .apiVersion =  (pdevice->use_softpin || pdevice->instance->report_vk_1_3) ?
-                     ANV_API_VERSION_1_3 : ANV_API_VERSION_1_2,
-#endif
+      .apiVersion = pdevice->vk.properties.apiVersion,
       .driverVersion = vk_get_driver_version(),
       .vendorID = 0x8086,
       .deviceID = pdevice->info.pci_device_id,

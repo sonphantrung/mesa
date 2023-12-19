@@ -32,7 +32,7 @@ import xml.etree.ElementTree as et
 
 import mako
 from mako.template import Template
-from vk_extensions import get_all_required, filter_api
+from vk_extensions import Requirements, get_all_required, filter_api
 
 def str_removeprefix(s, prefix):
     if s.startswith(prefix):
@@ -124,9 +124,26 @@ def get_renamed_feature(c_type, feature):
 
 @dataclass
 class FeatureStruct:
+    reqs: Requirements
     c_type: str
     s_type: str
     features: typing.List[str]
+
+    def condition(self, physical_dev):
+        conds = []
+        if self.reqs.core_version:
+            conds.append('(' + physical_dev + '->properties.apiVersion >= ' +
+                         self.reqs.core_version.c_vk_version() + ')')
+        for ext in self.reqs.extensions:
+            conds.append(physical_dev + '->supported_extensions.' +
+                         ext.name[3:])
+
+        if not conds:
+            return 'true'
+        elif len(conds) == 1:
+            return conds[0]
+        else:
+            return '(' + ' || '.join(conds) + ')'
 
 TEMPLATE_H = Template(COPYRIGHT + """
 /* This file generated from ${filename}, don't edit directly. */
@@ -189,6 +206,9 @@ vk_physical_device_check_device_features(struct vk_physical_device *physical_dev
    VkPhysicalDevice vk_physical_device =
       vk_physical_device_to_handle(physical_device);
 
+   /* drivers must at least initialize the api version */
+   assert(physical_device->properties.apiVersion >= VK_API_VERSION_1_0);
+
    /* Query the device what kind of features are supported. */
    VkPhysicalDeviceFeatures2 supported_features2 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
@@ -203,6 +223,8 @@ vk_physical_device_check_device_features(struct vk_physical_device *physical_dev
       switch (features->sType) {
 % for f in feature_structs:
       case ${f.s_type}:
+         if (!${f.condition("physical_device")})
+            break;
          supported = (VkBaseOutStructure *) &supported_${f.c_type};
          break;
 % endfor
@@ -252,6 +274,8 @@ vk_physical_device_check_device_features(struct vk_physical_device *physical_dev
       }
 % for f in feature_structs:
       case ${f.s_type}: {
+         if (!${f.condition("physical_device")})
+            break;
          const ${f.c_type} *a = &supported_${f.c_type};
          const ${f.c_type} *b = (const void *) features;
 % for flag in f.features:
@@ -365,8 +389,9 @@ def get_feature_structs(doc, api, beta):
         if _type.attrib['name'] not in required:
             continue
 
+        reqs = required[_type.attrib['name']]
         # Skip extensions with a define for now
-        guard = required[_type.attrib['name']].guard
+        guard = reqs.guard
         if guard is not None and (guard != "VK_ENABLE_BETA_EXTENSIONS" or not beta):
             continue
 
@@ -391,7 +416,7 @@ def get_feature_structs(doc, api, beta):
                 assert p.find('./type').text == 'VkBool32'
                 flags.append(m_name)
 
-        feature_struct = FeatureStruct(c_type=_type.attrib.get('name'), s_type=s_type, features=flags)
+        feature_struct = FeatureStruct(reqs=reqs, c_type=_type.attrib.get('name'), s_type=s_type, features=flags)
         feature_structs[feature_struct.c_type] = feature_struct
 
     return feature_structs.values()

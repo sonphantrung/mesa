@@ -9,7 +9,6 @@
 #include <stdint.h>
 
 #include "vulkan/runtime/vk_queue.h"
-#include "panvk_private.h"
 
 struct panvk_queue {
    struct vk_queue vk;

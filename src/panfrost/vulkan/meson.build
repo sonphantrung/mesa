@@ -49,7 +49,6 @@ libpanvk_files = files(
   'panvk_physical_device.c',
   'panvk_pipeline.c',
   'panvk_pipeline_layout.c',
-  'panvk_private.h',
   'panvk_priv_bo.c',
   'panvk_query.c',
   'panvk_shader.c',

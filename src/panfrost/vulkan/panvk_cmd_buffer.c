@@ -29,14 +29,16 @@
 #include "panvk_buffer.h"
 #include "panvk_cmd_buffer.h"
 #include "panvk_cmd_pool.h"
+#include "panvk_entrypoints.h"
 #include "panvk_pipeline.h"
 #include "panvk_pipeline_layout.h"
-#include "panvk_private.h"
 
 #include "pan_encoder.h"
 #include "pan_props.h"
 
 #include "util/rounding.h"
+
+#include "vk_alloc.h"
 #include "vk_format.h"
 #include "vk_framebuffer.h"
 

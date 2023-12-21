@@ -25,15 +25,19 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include "panvk_entrypoints.h"
+#include "panvk_macros.h"
 #include "panvk_physical_device.h"
-#include "panvk_private.h"
 
 #include "panfrost/lib/pan_texture.h"
+
+#include "util/compiler.h"
 #include "util/format_r11g11b10f.h"
 #include "util/format_srgb.h"
 #include "util/half_float.h"
-#include "vulkan/util/vk_format.h"
+
 #include "vk_format.h"
+#include "vk_log.h"
 #include "vk_util.h"
 
 static void

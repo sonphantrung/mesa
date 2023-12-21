@@ -31,6 +31,7 @@
 #include "panvk_buffer.h"
 #include "panvk_cmd_buffer.h"
 #include "panvk_cmd_pool.h"
+#include "panvk_entrypoints.h"
 #include "panvk_device.h"
 #include "panvk_event.h"
 #include "panvk_image.h"
@@ -39,7 +40,6 @@
 #include "panvk_physical_device.h"
 #include "panvk_pipeline.h"
 #include "panvk_pipeline_layout.h"
-#include "panvk_private.h"
 #include "panvk_priv_bo.h"
 
 #include "pan_blitter.h"

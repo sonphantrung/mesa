@@ -29,16 +29,17 @@
 #include "pan_props.h"
 
 #include "panvk_device.h"
+#include "panvk_entrypoints.h"
 #include "panvk_image.h"
 #include "panvk_instance.h"
 #include "panvk_physical_device.h"
-#include "panvk_private.h"
 
 #include "drm-uapi/drm_fourcc.h"
 #include "util/u_atomic.h"
 #include "util/u_debug.h"
 #include "vk_format.h"
 #include "vk_object.h"
+#include "vk_log.h"
 #include "vk_util.h"
 
 #define PANVK_MAX_PLANES 1

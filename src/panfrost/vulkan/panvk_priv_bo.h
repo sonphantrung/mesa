@@ -8,6 +8,8 @@
 
 #include "panfrost-job.h"
 
+#include "vk_alloc.h"
+
 struct panvk_kmod_bo;
 
 /* Used for internal object allocation. */

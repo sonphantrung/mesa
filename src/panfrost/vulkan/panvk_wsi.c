@@ -28,6 +28,7 @@
 #include "panvk_instance.h"
 #include "panvk_physical_device.h"
 #include "panvk_private.h"
+#include "panvk_wsi.h"
 
 #include "vk_util.h"
 #include "wsi_common.h"

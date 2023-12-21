@@ -50,6 +50,7 @@ libpanvk_files = files(
   'panvk_pipeline.c',
   'panvk_pipeline_layout.c',
   'panvk_private.h',
+  'panvk_priv_bo.c',
   'panvk_query.c',
   'panvk_shader.c',
   'panvk_wsi.c',

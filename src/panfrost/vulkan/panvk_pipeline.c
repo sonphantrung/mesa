@@ -29,6 +29,7 @@
 #include "panvk_device.h"
 #include "panvk_pipeline.h"
 #include "panvk_private.h"
+#include "panvk_priv_bo.h"
 
 #include "nir/nir.h"
 #include "nir/nir_builder.h"

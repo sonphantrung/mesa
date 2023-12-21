@@ -28,6 +28,7 @@
 #include "panvk_descriptor_set.h"
 #include "panvk_device.h"
 #include "panvk_private.h"
+#include "panvk_priv_bo.h"
 #include "panvk_sampler.h"
 
 #include <assert.h>

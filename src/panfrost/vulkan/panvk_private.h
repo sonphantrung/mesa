@@ -217,6 +217,18 @@ struct panvk_device {
    } debug;
 };
 
+#if PAN_ARCH
+VkResult
+panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
+                              const VkDeviceCreateInfo *pCreateInfo,
+                              const VkAllocationCallbacks *pAllocator,
+                              VkDevice *pDevice);
+
+void
+panvk_per_arch(destroy_device)(struct panvk_device *device,
+                               const VkAllocationCallbacks *pAllocator);
+#endif
+
 #define TILER_DESC_WORDS 56
 
 struct panvk_batch {

@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "panvk_device.h"
 #include "panvk_event.h"
 #include "panvk_private.h"
 

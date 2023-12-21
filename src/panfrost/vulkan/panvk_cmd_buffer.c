@@ -27,6 +27,7 @@
  */
 
 #include "panvk_buffer.h"
+#include "panvk_cmd_buffer.h"
 #include "panvk_cmd_pool.h"
 #include "panvk_pipeline.h"
 #include "panvk_pipeline_layout.h"

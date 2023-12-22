@@ -3,6 +3,7 @@ use crate::pipe::screen::*;
 use mesa_rust_gen::*;
 use mesa_rust_util::ptr::ThreadSafeCPtr;
 use mesa_rust_util::string::c_string_to_string;
+use mesa_rust_gen::pipe_loader_probe_options::pipe_loader_probe_with_native_context;
 
 use std::collections::HashMap;
 use std::{env, ptr};
@@ -43,10 +44,10 @@ impl Drop for PipeLoaderDevice {
 }
 
 fn load_devs() -> impl Iterator<Item = PipeLoaderDevice> {
-    let n = unsafe { pipe_loader_probe(ptr::null_mut(), 0, true) };
+    let n = unsafe { pipe_loader_probe(ptr::null_mut(), 0, pipe_loader_probe_with_native_context) };
     let mut devices: Vec<*mut pipe_loader_device> = vec![ptr::null_mut(); n as usize];
     unsafe {
-        pipe_loader_probe(devices.as_mut_ptr(), n, true);
+        pipe_loader_probe(devices.as_mut_ptr(), n, pipe_loader_probe_with_native_context);
     }
 
     devices.into_iter().filter_map(PipeLoaderDevice::new)

@@ -48,6 +48,7 @@
 #include "pipe-loader/pipe_loader.h"
 #include "main/bufferobj.h"
 #include "main/texobj.h"
+#include "loader/loader.h"
 
 #include "dri_util.h"
 
@@ -2340,7 +2341,23 @@ dri2_init_screen(struct dri_screen *screen)
    (void) mtx_init(&screen->opencl_func_mutex, mtx_plain);
 
 #ifdef HAVE_LIBDRM
-   if (pipe_loader_drm_probe_fd(&screen->dev, screen->fd, false))
+   char *driver_name = loader_get_driver_for_fd(screen->fd);
+
+   if (driver_name) {
+      /* Try virtio gpu native context if it makes sense.
+       * TODO: check HAVE_AMDGPU_VIRTIO / HAVE_FREEDRENO_VIRTIO?
+       */
+      if (strcmp(driver_name, "virtio_gpu") == 0) {
+         if (pipe_loader_drm_probe_fd(&screen->dev, screen->fd,
+                                      pipe_loader_probe_with_native_context))
+            pscreen = pipe_loader_create_screen(screen->dev);
+      }
+      free(driver_name);
+   }
+
+   if (!pscreen &&
+       pipe_loader_drm_probe_fd(&screen->dev, screen->fd,
+                                pipe_loader_probe_no_special_drivers))
       pscreen = pipe_loader_create_screen(screen->dev);
 #endif
 
@@ -2348,6 +2365,7 @@ dri2_init_screen(struct dri_screen *screen)
        goto fail;
 
    dri_init_options(screen);
+
    screen->throttle = pscreen->get_param(pscreen, PIPE_CAP_THROTTLE);
 
    dri2_init_screen_extensions(screen, pscreen, false);

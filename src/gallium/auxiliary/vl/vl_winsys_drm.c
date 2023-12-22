@@ -46,7 +46,7 @@ vl_drm_screen_create(int fd)
    if (!vscreen)
       return NULL;
 
-   if (pipe_loader_drm_probe_fd(&vscreen->dev, fd, false))
+   if (pipe_loader_drm_probe_fd(&vscreen->dev, fd, pipe_loader_probe_with_native_context))
       vscreen->pscreen = pipe_loader_create_screen(vscreen->dev);
 
    if (!vscreen->pscreen)

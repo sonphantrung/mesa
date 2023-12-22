@@ -5,6 +5,7 @@
 #include "target-helpers/inline_debug_helper.h"
 #include "target-helpers/drm_helper_public.h"
 #include "frontend/drm_driver.h"
+#include "pipe/p_screen.h"
 #include "util/driconf.h"
 
 /**
@@ -269,10 +270,12 @@ pipe_virtio_gpu_create_screen(int fd, const struct pipe_screen_config *config)
    struct pipe_screen *screen = NULL;
 
    /* Try native guest driver(s) first, and then fallback to virgl: */
+   if (config->allow_virtio_native_driver) {
 #ifdef GALLIUM_FREEDRENO
    if (!screen)
       screen = fd_drm_screen_create_renderonly(fd, NULL, config);
 #endif
+   }
 #ifdef GALLIUM_VIRGL
    if (!screen)
       screen = virgl_drm_screen_create(fd, config);

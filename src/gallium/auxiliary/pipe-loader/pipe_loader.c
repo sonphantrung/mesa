@@ -44,7 +44,7 @@
 
 #define MODULE_PREFIX "pipe_"
 
-static int (*backends[])(struct pipe_loader_device **, int) = {
+static int (*backends[])(struct pipe_loader_device **, int, enum pipe_loader_probe_options) = {
 #ifdef HAVE_LIBDRM
    &pipe_loader_drm_probe,
 #endif
@@ -56,15 +56,15 @@ const driOptionDescription gallium_driconf[] = {
 };
 
 int
-pipe_loader_probe(struct pipe_loader_device **devs, int ndev, bool with_zink)
+pipe_loader_probe(struct pipe_loader_device **devs, int ndev, enum pipe_loader_probe_options opts)
 {
    int i, n = 0;
 
    for (i = 0; i < ARRAY_SIZE(backends); i++)
-      n += backends[i](&devs[n], MAX2(0, ndev - n));
+      n += backends[i](&devs[n], MAX2(0, ndev - n), opts & pipe_loader_probe_with_native_context);
 
 #if defined(HAVE_ZINK) && defined(HAVE_LIBDRM)
-   if (with_zink)
+   if (opts & pipe_loader_probe_with_zink)
       n += pipe_loader_drm_zink_probe(&devs[n], MAX2(0, ndev - n));
 #endif
 
@@ -176,6 +176,7 @@ pipe_loader_create_screen_vk(struct pipe_loader_device *dev, bool sw_vk)
    pipe_loader_load_options(dev);
    config.options_info = &dev->option_info;
    config.options = &dev->option_cache;
+   config.allow_virtio_native_driver = dev->allow_virtio_native_driver;
 
    return dev->ops->create_screen(dev, &config, sw_vk);
 }

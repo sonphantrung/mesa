@@ -810,6 +810,7 @@ struct pipe_screen {
 struct pipe_screen_config {
    struct driOptionCache *options;
    const struct driOptionCache *options_info;
+   bool allow_virtio_native_driver;
 };
 
 

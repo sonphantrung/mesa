@@ -128,7 +128,8 @@ kopper_init_screen(struct dri_screen *screen)
    bool success;
 #ifdef HAVE_LIBDRM
    if (screen->fd != -1)
-      success = pipe_loader_drm_probe_fd(&screen->dev, screen->fd, false);
+      success = pipe_loader_drm_probe_fd(&screen->dev, screen->fd,
+                                         pipe_loader_probe_no_special_drivers);
    else
       success = pipe_loader_vk_probe_dri(&screen->dev, NULL);
 #else

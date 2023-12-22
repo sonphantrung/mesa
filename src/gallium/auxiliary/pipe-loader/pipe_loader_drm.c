@@ -122,7 +122,8 @@ get_driver_descriptor(const char *driver_name, struct util_dl_library **plib)
 }
 
 static bool
-pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd, bool zink)
+pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd,
+                               enum pipe_loader_probe_options options)
 {
    struct pipe_loader_drm_device *ddev = CALLOC_STRUCT(pipe_loader_drm_device);
    int vendor_id, chip_id;
@@ -140,7 +141,7 @@ pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd, bool zin
    ddev->base.ops = &pipe_loader_drm_ops;
    ddev->fd = fd;
 
-   if (zink)
+   if (options & pipe_loader_probe_with_zink)
       ddev->base.driver_name = strdup("zink");
    else
       ddev->base.driver_name = loader_get_driver_for_fd(fd);
@@ -156,6 +157,14 @@ pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd, bool zin
       ddev->base.driver_name = strdup("radeonsi");
    }
 
+   if (options & pipe_loader_probe_with_native_context) {
+      /* Drivers supporting virtio-gpu native context should override
+       * driver_name here.
+       * TODO: Probably not the right place for this but we need to get the
+       * correct options initialized.
+       */
+   }
+
    struct util_dl_library **plib = NULL;
 #ifndef GALLIUM_STATIC_TARGETS
    plib = &ddev->lib;
@@ -167,7 +176,7 @@ pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd, bool zin
       goto fail;
 
    /* kmsro supports lots of drivers, try as a fallback */
-   if (!ddev->dd && !zink)
+   if (!ddev->dd && !(options & pipe_loader_probe_with_zink))
       ddev->dd = get_driver_descriptor("kmsro", plib);
 
    if (!ddev->dd)
@@ -187,7 +196,8 @@ pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd, bool zin
 }
 
 bool
-pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd, bool zink)
+pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd,
+                         enum pipe_loader_probe_options options)
 {
    bool ret;
    int new_fd;
@@ -195,7 +205,7 @@ pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd, bool zink)
    if (fd < 0 || (new_fd = os_dupfd_cloexec(fd)) < 0)
      return false;
 
-   ret = pipe_loader_drm_probe_fd_nodup(dev, new_fd, zink);
+   ret = pipe_loader_drm_probe_fd_nodup(dev, new_fd, options);
    if (!ret)
       close(new_fd);
 
@@ -212,7 +222,8 @@ open_drm_render_node_minor(int minor)
 }
 
 static int
-pipe_loader_drm_probe_internal(struct pipe_loader_device **devs, int ndev, bool zink)
+pipe_loader_drm_probe_internal(struct pipe_loader_device **devs, int ndev,
+                               enum pipe_loader_probe_options options)
 {
    int i, j, fd;
 
@@ -224,9 +235,15 @@ pipe_loader_drm_probe_internal(struct pipe_loader_device **devs, int ndev, bool 
       if (fd < 0)
          continue;
 
-      if (!pipe_loader_drm_probe_fd_nodup(&dev, fd, zink)) {
-         close(fd);
-         continue;
+      if (!pipe_loader_drm_probe_fd_nodup(&dev, fd, options)) {
+         if (options != pipe_loader_probe_no_special_drivers) {
+            /* Retry without special drivers. */
+            if (!pipe_loader_drm_probe_fd_nodup(&dev, fd,
+                                                pipe_loader_probe_no_special_drivers)) {
+               close(fd);
+               continue;
+            }
+         }
       }
 
       if (j < ndev) {
@@ -242,16 +259,18 @@ pipe_loader_drm_probe_internal(struct pipe_loader_device **devs, int ndev, bool 
 }
 
 int
-pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev)
+pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev,
+                      enum pipe_loader_probe_options options)
 {
-   return pipe_loader_drm_probe_internal(devs, ndev, false);
+   return pipe_loader_drm_probe_internal(devs, ndev, options);
 }
 
 #ifdef HAVE_ZINK
 int
 pipe_loader_drm_zink_probe(struct pipe_loader_device **devs, int ndev)
 {
-   return pipe_loader_drm_probe_internal(devs, ndev, true);
+   return pipe_loader_drm_probe_internal(devs, ndev,
+      pipe_loader_probe_with_zink);
 }
 #endif
 

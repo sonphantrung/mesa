@@ -208,6 +208,7 @@ struct radeon_info {
    uint32_t drm_patchlevel;
    uint32_t max_submitted_ibs[AMD_NUM_IP_TYPES];
    bool is_amdgpu;
+   bool is_virtio;
    bool has_userptr;
    bool has_timeline_syncobj;
    bool has_local_buffers;

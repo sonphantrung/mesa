@@ -115,6 +115,9 @@ vdrm_execbuf(struct vdrm_device *vdev, struct vdrm_execbuf_params *p)
    if (ret)
       goto out_unlock;
 
+   /* TODO: this is needed to be able to use vdrm_host_sync */
+   p->req->seqno = ++vdev->next_seqno;
+
    ret = vdev->funcs->execbuf_locked(vdev, p, p->req, p->req->len);
 
 out_unlock:
@@ -130,6 +133,9 @@ int
 vdrm_send_req(struct vdrm_device *vdev, struct vdrm_ccmd_req *req, bool sync)
 {
    MESA_TRACE_FUNC();
+
+   /* TODO: fix me */
+   sync = true;
 
    uintptr_t fence = 0;
    int ret = 0;

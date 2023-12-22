@@ -1988,6 +1988,7 @@ static void *si_texture_transfer_map(struct pipe_context *ctx, struct pipe_resou
 
    /* Always unmap texture CPU mappings on 32-bit architectures, so that
     * we don't run out of the CPU address space.
+    * TODO: virtio
     */
    if (sizeof(void *) == 4)
       usage |= RADEON_MAP_TEMPORARY;
@@ -2014,6 +2015,7 @@ static void si_texture_transfer_unmap(struct pipe_context *ctx, struct pipe_tran
 
    /* Always unmap texture CPU mappings on 32-bit architectures, so that
     * we don't run out of the CPU address space.
+    * TODO: virtio
     */
    if (sizeof(void *) == 4) {
       struct si_resource *buf = stransfer->staging ? stransfer->staging : &tex->buffer;

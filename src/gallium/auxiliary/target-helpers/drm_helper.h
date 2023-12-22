@@ -219,8 +219,11 @@ pipe_radeonsi_create_screen(int fd, const struct pipe_screen_config *config)
 const driOptionDescription radeonsi_driconf[] = {
       #include "radeonsi/driinfo_radeonsi.h"
 };
+#ifdef HAVE_AMDGPU_VIRTIO
+DRM_DRIVER_DESCRIPTOR2(radeonsi, radeonsi_driconf, ARRAY_SIZE(radeonsi_driconf), 2 /* VIRTGPU_DRM_CONTEXT_AMDGPU */)
+#else
 DRM_DRIVER_DESCRIPTOR(radeonsi, radeonsi_driconf, ARRAY_SIZE(radeonsi_driconf))
-
+#endif
 #else
 DRM_DRIVER_DESCRIPTOR_STUB(radeonsi)
 #endif
@@ -272,7 +275,7 @@ DRM_DRIVER_DESCRIPTOR_STUB(msm)
 DRM_DRIVER_DESCRIPTOR_STUB(kgsl)
 #endif
 
-#if defined(GALLIUM_VIRGL) || (defined(GALLIUM_FREEDRENO) && !defined(PIPE_LOADER_DYNAMIC))
+#if defined(GALLIUM_VIRGL) || (defined(GALLIUM_FREEDRENO) && !defined(PIPE_LOADER_DYNAMIC)) || (defined(GALLIUM_RADEONSI) && !defined(PIPE_LOADER_DYNAMIC))
 #include "virgl/drm/virgl_drm_public.h"
 #include "virgl/virgl_public.h"
 

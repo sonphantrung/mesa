@@ -1052,7 +1052,7 @@ bool ac_query_gpu_info(struct libdrm_amdgpu *libdrm_amdgpu,
    info->memory_freq_mhz_effective *= ac_memory_ops_per_clock(info->vram_type);
 
    info->has_userptr = !info->is_virtio;
-   info->has_timeline_syncobj = has_timeline_syncobj(fd);
+   info->has_timeline_syncobj = !info->is_virtio && has_timeline_syncobj(fd);
    info->has_local_buffers = true;
    info->has_bo_metadata = true;
    info->has_eqaa_surface_allocator = info->gfx_level < GFX11;

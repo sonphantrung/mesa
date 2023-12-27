@@ -288,6 +288,178 @@ panvk_get_features(const struct panvk_physical_device *device,
    };
 }
 
+static VkResult
+panvk_init_properties(struct panvk_physical_device *device)
+{
+   struct vk_properties *properties = &device->vk.properties;
+
+   VkSampleCountFlags sample_counts =
+      VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_4_BIT;
+
+   /* make sure that the entire descriptor set is addressable with a signed
+    * 32-bit int. So the sum of all limits scaled by descriptor size has to
+    * be at most 2 GiB. the combined image & samples object count as one of
+    * both. This limit is for the pipeline layout, not for the set layout, but
+    * there is no set limit, so we just set a pipeline limit. I don't think
+    * any app is going to hit this soon. */
+   size_t max_descriptor_set_size =
+      ((1ull << 31) - 16 * MAX_DYNAMIC_BUFFERS) /
+      (32 /* uniform buffer, 32 due to potential space wasted on alignment */ +
+       32 /* storage buffer, 32 due to potential space wasted on alignment */ +
+       32 /* sampler, largest when combined with image */ +
+       64 /* sampled image */ + 64 /* storage image */);
+
+   *properties = (struct vk_properties){
+      /* VkPhysicalDeviceProperties */
+      .apiVersion = PANVK_API_VERSION,
+      .driverVersion = vk_get_driver_version(),
+      .vendorID = 0, /* TODO */
+      .deviceID = 0,
+      .deviceType = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU,
+
+      /* VkPhysicalDeviceLimits */
+      .maxImageDimension1D = (1 << 14),
+      .maxImageDimension2D = (1 << 14),
+      .maxImageDimension3D = (1 << 11),
+      .maxImageDimensionCube = (1 << 14),
+      .maxImageArrayLayers = (1 << 11),
+      .maxTexelBufferElements = 128 * 1024 * 1024,
+      .maxUniformBufferRange = UINT32_MAX,
+      .maxStorageBufferRange = UINT32_MAX,
+      .maxPushConstantsSize = MAX_PUSH_CONSTANTS_SIZE,
+      .maxMemoryAllocationCount = UINT32_MAX,
+      .maxSamplerAllocationCount = 64 * 1024,
+      .bufferImageGranularity = 64,          /* A cache line */
+      .sparseAddressSpaceSize = 0xffffffffu, /* buffer max size */
+      .maxBoundDescriptorSets = MAX_SETS,
+      .maxPerStageDescriptorSamplers = max_descriptor_set_size,
+      .maxPerStageDescriptorUniformBuffers = max_descriptor_set_size,
+      .maxPerStageDescriptorStorageBuffers = max_descriptor_set_size,
+      .maxPerStageDescriptorSampledImages = max_descriptor_set_size,
+      .maxPerStageDescriptorStorageImages = max_descriptor_set_size,
+      .maxPerStageDescriptorInputAttachments = max_descriptor_set_size,
+      .maxPerStageResources = max_descriptor_set_size,
+      .maxDescriptorSetSamplers = max_descriptor_set_size,
+      .maxDescriptorSetUniformBuffers = max_descriptor_set_size,
+      .maxDescriptorSetUniformBuffersDynamic = MAX_DYNAMIC_UNIFORM_BUFFERS,
+      .maxDescriptorSetStorageBuffers = max_descriptor_set_size,
+      .maxDescriptorSetStorageBuffersDynamic = MAX_DYNAMIC_STORAGE_BUFFERS,
+      .maxDescriptorSetSampledImages = max_descriptor_set_size,
+      .maxDescriptorSetStorageImages = max_descriptor_set_size,
+      .maxDescriptorSetInputAttachments = max_descriptor_set_size,
+      .maxVertexInputAttributes = 32,
+      .maxVertexInputBindings = 32,
+      .maxVertexInputAttributeOffset = 2047,
+      .maxVertexInputBindingStride = 2048,
+      .maxVertexOutputComponents = 128,
+      .maxTessellationGenerationLevel = 64,
+      .maxTessellationPatchSize = 32,
+      .maxTessellationControlPerVertexInputComponents = 128,
+      .maxTessellationControlPerVertexOutputComponents = 128,
+      .maxTessellationControlPerPatchOutputComponents = 120,
+      .maxTessellationControlTotalOutputComponents = 4096,
+      .maxTessellationEvaluationInputComponents = 128,
+      .maxTessellationEvaluationOutputComponents = 128,
+      .maxGeometryShaderInvocations = 127,
+      .maxGeometryInputComponents = 64,
+      .maxGeometryOutputComponents = 128,
+      .maxGeometryOutputVertices = 256,
+      .maxGeometryTotalOutputComponents = 1024,
+      .maxFragmentInputComponents = 128,
+      .maxFragmentOutputAttachments = 8,
+      .maxFragmentDualSrcAttachments = 1,
+      .maxFragmentCombinedOutputResources =
+         MAX_RTS + max_descriptor_set_size * 2,
+      .maxComputeSharedMemorySize = 32768,
+      .maxComputeWorkGroupCount = {65535, 65535, 65535},
+      .maxComputeWorkGroupInvocations = 2048,
+      .maxComputeWorkGroupSize = {2048, 2048, 2048},
+      .subPixelPrecisionBits = 4 /* FIXME */,
+      .subTexelPrecisionBits = 4 /* FIXME */,
+      .mipmapPrecisionBits = 4 /* FIXME */,
+      .maxDrawIndexedIndexValue = UINT32_MAX,
+      .maxDrawIndirectCount = UINT32_MAX,
+      .maxSamplerLodBias = 16,
+      .maxSamplerAnisotropy = 16,
+      .maxViewports = MAX_VIEWPORTS,
+      .maxViewportDimensions = {(1 << 14), (1 << 14)},
+      .viewportBoundsRange = {INT16_MIN, INT16_MAX},
+      .viewportSubPixelBits = 8,
+      .minMemoryMapAlignment = 4096, /* A page */
+      .minTexelBufferOffsetAlignment = 64,
+      .minUniformBufferOffsetAlignment = 16,
+      .minStorageBufferOffsetAlignment = 4,
+      .minTexelOffset = -32,
+      .maxTexelOffset = 31,
+      .minTexelGatherOffset = -32,
+      .maxTexelGatherOffset = 31,
+      .minInterpolationOffset = -2,
+      .maxInterpolationOffset = 2,
+      .subPixelInterpolationOffsetBits = 8,
+      .maxFramebufferWidth = (1 << 14),
+      .maxFramebufferHeight = (1 << 14),
+      .maxFramebufferLayers = (1 << 10),
+      .framebufferColorSampleCounts = sample_counts,
+      .framebufferDepthSampleCounts = sample_counts,
+      .framebufferStencilSampleCounts = sample_counts,
+      .framebufferNoAttachmentsSampleCounts = sample_counts,
+      .maxColorAttachments = MAX_RTS,
+      .sampledImageColorSampleCounts = sample_counts,
+      .sampledImageIntegerSampleCounts = VK_SAMPLE_COUNT_1_BIT,
+      .sampledImageDepthSampleCounts = sample_counts,
+      .sampledImageStencilSampleCounts = sample_counts,
+      .storageImageSampleCounts = VK_SAMPLE_COUNT_1_BIT,
+      .maxSampleMaskWords = 1,
+      .timestampComputeAndGraphics = true,
+      .timestampPeriod = 1,
+      .maxClipDistances = 8,
+      .maxCullDistances = 8,
+      .maxCombinedClipAndCullDistances = 8,
+      .discreteQueuePriorities = 1,
+      .pointSizeRange = {0.125, 4095.9375},
+      .lineWidthRange = {0.0, 7.9921875},
+      .pointSizeGranularity = (1.0 / 16.0),
+      .lineWidthGranularity = (1.0 / 128.0),
+      .strictLines = false, /* FINISHME */
+      .standardSampleLocations = true,
+      .optimalBufferCopyOffsetAlignment = 128,
+      .optimalBufferCopyRowPitchAlignment = 128,
+      .nonCoherentAtomSize = 64,
+
+      /* VkPhysicalDeviceVulkan11Properties */
+      .deviceLUIDValid = false,
+      .pointClippingBehavior = VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES,
+      .maxMultiviewViewCount = 0,
+      .maxMultiviewInstanceIndex = 0,
+      .protectedNoFault = false,
+      /* Make sure everything is addressable by a signed 32-bit int, and
+       * our largest descriptors are 96 bytes. */
+      .maxPerSetDescriptors = (1ull << 31) / 96,
+      /* Our buffer size fields allow only this much */
+      .maxMemoryAllocationSize = 0xFFFFFFFFull,
+
+      /* VkPhysicalDevicePushDescriptorPropertiesKHR */
+      .maxPushDescriptors = MAX_PUSH_DESCRIPTORS,
+
+      /* VkPhysicalDeviceVertexAttributeDivisorPropertiesKHR */
+      /* We have to restrict this a bit for multiview */
+      properties->maxVertexAttribDivisor = UINT32_MAX / (16 * 2048),
+   };
+
+   sprintf(properties->deviceName, "%s", device->pdev.model->name);
+
+   if (panvk_device_get_cache_uuid(panfrost_device_gpu_id(&device->pdev),
+                                   &properties->pipelineCacheUUID)) {
+      return vk_errorf(device->instance, VK_ERROR_INITIALIZATION_FAILED,
+                       "cannot generate UUID");
+   }
+
+   panvk_get_driver_uuid(&properties->driverUUID);
+   panvk_get_device_uuid(&properties->deviceUUID);
+
+   return VK_SUCCESS;
+}
+
 VkResult panvk_physical_device_try_create(struct vk_instance *vk_instance,
                                           struct _drmDevice *drm_device,
                                           struct vk_physical_device **out);
@@ -462,20 +634,11 @@ panvk_physical_device_init(struct panvk_physical_device *device,
 
    panvk_arch_dispatch(device->pdev.arch, meta_init, device);
 
-   memset(device->name, 0, sizeof(device->name));
-   sprintf(device->name, "%s", device->pdev.model->name);
-
-   if (panvk_device_get_cache_uuid(panfrost_device_gpu_id(&device->pdev),
-                                   device->cache_uuid)) {
-      result = vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
-                         "cannot generate UUID");
+   result = panvk_init_properties(device);
+   if (result != VK_SUCCESS)
       goto fail_close_device;
-   }
 
    vk_warn_non_conformant_implementation("panvk");
-
-   panvk_get_driver_uuid(&device->driver_uuid);
-   panvk_get_device_uuid(&device->device_uuid);
 
    device->drm_syncobj_type =
       vk_drm_syncobj_get_type(panfrost_device_fd(&device->pdev));
@@ -533,204 +696,6 @@ panvk_physical_device_try_create(struct vk_instance *vk_instance,
 
    *out = &device->vk;
    return VK_SUCCESS;
-}
-
-void
-panvk_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
-                                   VkPhysicalDeviceProperties2 *pProperties)
-{
-   VK_FROM_HANDLE(panvk_physical_device, pdevice, physicalDevice);
-
-   VkSampleCountFlags sample_counts =
-      VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_4_BIT;
-
-   /* make sure that the entire descriptor set is addressable with a signed
-    * 32-bit int. So the sum of all limits scaled by descriptor size has to
-    * be at most 2 GiB. the combined image & samples object count as one of
-    * both. This limit is for the pipeline layout, not for the set layout, but
-    * there is no set limit, so we just set a pipeline limit. I don't think
-    * any app is going to hit this soon. */
-   size_t max_descriptor_set_size =
-      ((1ull << 31) - 16 * MAX_DYNAMIC_BUFFERS) /
-      (32 /* uniform buffer, 32 due to potential space wasted on alignment */ +
-       32 /* storage buffer, 32 due to potential space wasted on alignment */ +
-       32 /* sampler, largest when combined with image */ +
-       64 /* sampled image */ + 64 /* storage image */);
-
-   const VkPhysicalDeviceLimits limits = {
-      .maxImageDimension1D = (1 << 14),
-      .maxImageDimension2D = (1 << 14),
-      .maxImageDimension3D = (1 << 11),
-      .maxImageDimensionCube = (1 << 14),
-      .maxImageArrayLayers = (1 << 11),
-      .maxTexelBufferElements = 128 * 1024 * 1024,
-      .maxUniformBufferRange = UINT32_MAX,
-      .maxStorageBufferRange = UINT32_MAX,
-      .maxPushConstantsSize = MAX_PUSH_CONSTANTS_SIZE,
-      .maxMemoryAllocationCount = UINT32_MAX,
-      .maxSamplerAllocationCount = 64 * 1024,
-      .bufferImageGranularity = 64,          /* A cache line */
-      .sparseAddressSpaceSize = 0xffffffffu, /* buffer max size */
-      .maxBoundDescriptorSets = MAX_SETS,
-      .maxPerStageDescriptorSamplers = max_descriptor_set_size,
-      .maxPerStageDescriptorUniformBuffers = max_descriptor_set_size,
-      .maxPerStageDescriptorStorageBuffers = max_descriptor_set_size,
-      .maxPerStageDescriptorSampledImages = max_descriptor_set_size,
-      .maxPerStageDescriptorStorageImages = max_descriptor_set_size,
-      .maxPerStageDescriptorInputAttachments = max_descriptor_set_size,
-      .maxPerStageResources = max_descriptor_set_size,
-      .maxDescriptorSetSamplers = max_descriptor_set_size,
-      .maxDescriptorSetUniformBuffers = max_descriptor_set_size,
-      .maxDescriptorSetUniformBuffersDynamic = MAX_DYNAMIC_UNIFORM_BUFFERS,
-      .maxDescriptorSetStorageBuffers = max_descriptor_set_size,
-      .maxDescriptorSetStorageBuffersDynamic = MAX_DYNAMIC_STORAGE_BUFFERS,
-      .maxDescriptorSetSampledImages = max_descriptor_set_size,
-      .maxDescriptorSetStorageImages = max_descriptor_set_size,
-      .maxDescriptorSetInputAttachments = max_descriptor_set_size,
-      .maxVertexInputAttributes = 32,
-      .maxVertexInputBindings = 32,
-      .maxVertexInputAttributeOffset = 2047,
-      .maxVertexInputBindingStride = 2048,
-      .maxVertexOutputComponents = 128,
-      .maxTessellationGenerationLevel = 64,
-      .maxTessellationPatchSize = 32,
-      .maxTessellationControlPerVertexInputComponents = 128,
-      .maxTessellationControlPerVertexOutputComponents = 128,
-      .maxTessellationControlPerPatchOutputComponents = 120,
-      .maxTessellationControlTotalOutputComponents = 4096,
-      .maxTessellationEvaluationInputComponents = 128,
-      .maxTessellationEvaluationOutputComponents = 128,
-      .maxGeometryShaderInvocations = 127,
-      .maxGeometryInputComponents = 64,
-      .maxGeometryOutputComponents = 128,
-      .maxGeometryOutputVertices = 256,
-      .maxGeometryTotalOutputComponents = 1024,
-      .maxFragmentInputComponents = 128,
-      .maxFragmentOutputAttachments = 8,
-      .maxFragmentDualSrcAttachments = 1,
-      .maxFragmentCombinedOutputResources =
-         MAX_RTS + max_descriptor_set_size * 2,
-      .maxComputeSharedMemorySize = 32768,
-      .maxComputeWorkGroupCount = {65535, 65535, 65535},
-      .maxComputeWorkGroupInvocations = 2048,
-      .maxComputeWorkGroupSize = {2048, 2048, 2048},
-      .subPixelPrecisionBits = 4 /* FIXME */,
-      .subTexelPrecisionBits = 4 /* FIXME */,
-      .mipmapPrecisionBits = 4 /* FIXME */,
-      .maxDrawIndexedIndexValue = UINT32_MAX,
-      .maxDrawIndirectCount = UINT32_MAX,
-      .maxSamplerLodBias = 16,
-      .maxSamplerAnisotropy = 16,
-      .maxViewports = MAX_VIEWPORTS,
-      .maxViewportDimensions = {(1 << 14), (1 << 14)},
-      .viewportBoundsRange = {INT16_MIN, INT16_MAX},
-      .viewportSubPixelBits = 8,
-      .minMemoryMapAlignment = 4096, /* A page */
-      .minTexelBufferOffsetAlignment = 64,
-      .minUniformBufferOffsetAlignment = 16,
-      .minStorageBufferOffsetAlignment = 4,
-      .minTexelOffset = -32,
-      .maxTexelOffset = 31,
-      .minTexelGatherOffset = -32,
-      .maxTexelGatherOffset = 31,
-      .minInterpolationOffset = -2,
-      .maxInterpolationOffset = 2,
-      .subPixelInterpolationOffsetBits = 8,
-      .maxFramebufferWidth = (1 << 14),
-      .maxFramebufferHeight = (1 << 14),
-      .maxFramebufferLayers = (1 << 10),
-      .framebufferColorSampleCounts = sample_counts,
-      .framebufferDepthSampleCounts = sample_counts,
-      .framebufferStencilSampleCounts = sample_counts,
-      .framebufferNoAttachmentsSampleCounts = sample_counts,
-      .maxColorAttachments = MAX_RTS,
-      .sampledImageColorSampleCounts = sample_counts,
-      .sampledImageIntegerSampleCounts = VK_SAMPLE_COUNT_1_BIT,
-      .sampledImageDepthSampleCounts = sample_counts,
-      .sampledImageStencilSampleCounts = sample_counts,
-      .storageImageSampleCounts = VK_SAMPLE_COUNT_1_BIT,
-      .maxSampleMaskWords = 1,
-      .timestampComputeAndGraphics = true,
-      .timestampPeriod = 1,
-      .maxClipDistances = 8,
-      .maxCullDistances = 8,
-      .maxCombinedClipAndCullDistances = 8,
-      .discreteQueuePriorities = 1,
-      .pointSizeRange = {0.125, 4095.9375},
-      .lineWidthRange = {0.0, 7.9921875},
-      .pointSizeGranularity = (1.0 / 16.0),
-      .lineWidthGranularity = (1.0 / 128.0),
-      .strictLines = false, /* FINISHME */
-      .standardSampleLocations = true,
-      .optimalBufferCopyOffsetAlignment = 128,
-      .optimalBufferCopyRowPitchAlignment = 128,
-      .nonCoherentAtomSize = 64,
-   };
-
-   pProperties->properties = (VkPhysicalDeviceProperties){
-      .apiVersion = PANVK_API_VERSION,
-      .driverVersion = vk_get_driver_version(),
-      .vendorID = 0, /* TODO */
-      .deviceID = 0,
-      .deviceType = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU,
-      .limits = limits,
-      .sparseProperties = {0},
-   };
-
-   strcpy(pProperties->properties.deviceName, pdevice->name);
-   memcpy(pProperties->properties.pipelineCacheUUID, pdevice->cache_uuid,
-          VK_UUID_SIZE);
-
-   VkPhysicalDeviceVulkan11Properties core_1_1 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES,
-      .deviceLUIDValid = false,
-      .pointClippingBehavior = VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES,
-      .maxMultiviewViewCount = 0,
-      .maxMultiviewInstanceIndex = 0,
-      .protectedNoFault = false,
-      /* Make sure everything is addressable by a signed 32-bit int, and
-       * our largest descriptors are 96 bytes. */
-      .maxPerSetDescriptors = (1ull << 31) / 96,
-      /* Our buffer size fields allow only this much */
-      .maxMemoryAllocationSize = 0xFFFFFFFFull,
-   };
-   memcpy(core_1_1.driverUUID, pdevice->driver_uuid, VK_UUID_SIZE);
-   memcpy(core_1_1.deviceUUID, pdevice->device_uuid, VK_UUID_SIZE);
-
-   const VkPhysicalDeviceVulkan12Properties core_1_2 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES,
-   };
-
-   const VkPhysicalDeviceVulkan13Properties core_1_3 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES,
-   };
-
-   vk_foreach_struct(ext, pProperties->pNext) {
-      if (vk_get_physical_device_core_1_1_property_ext(ext, &core_1_1))
-         continue;
-      if (vk_get_physical_device_core_1_2_property_ext(ext, &core_1_2))
-         continue;
-      if (vk_get_physical_device_core_1_3_property_ext(ext, &core_1_3))
-         continue;
-
-      switch (ext->sType) {
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR: {
-         VkPhysicalDevicePushDescriptorPropertiesKHR *properties =
-            (VkPhysicalDevicePushDescriptorPropertiesKHR *)ext;
-         properties->maxPushDescriptors = MAX_PUSH_DESCRIPTORS;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT: {
-         VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT *properties =
-            (VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT *)ext;
-         /* We have to restrict this a bit for multiview */
-         properties->maxVertexAttribDivisor = UINT32_MAX / (16 * 2048);
-         break;
-      }
-      default:
-         break;
-      }
-   }
 }
 
 static const VkQueueFamilyProperties panvk_queue_family_properties = {

@@ -66,6 +66,8 @@ struct amdgpu_userq {
    uint32_t init_once;
    simple_mtx_t lock;
 
+   uint64_t user_fence_seq_num;
+
    union {
       struct amdgpu_userq_gfx_data gfx_data;
       struct amdgpu_userq_compute_data compute_data;

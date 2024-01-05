@@ -1132,7 +1132,6 @@ static const struct intel_device_info intel_device_info_sg1 = {
    XEHP_FEATURES(0, 1, 0),                                      \
    .display_ver = 13,                                           \
    .revision = 4, /* For offline compiler */                    \
-   .apply_hwconfig = true,                                      \
    .has_coarse_pixel_primitive_and_cb = true,                   \
    .has_mesh_shading = true,                                    \
    .has_ray_tracing = true,                                     \
@@ -1175,7 +1174,6 @@ static const struct intel_device_info intel_device_info_atsm_g11 = {
    XEHP_FEATURES(0, 1, 0),                                      \
    .has_local_mem = false,                                      \
    .has_aux_map = true,                                         \
-   .apply_hwconfig = true,                                      \
    .has_64bit_float = true,                                     \
    .has_64bit_float_via_math_pipe = true,                       \
    .has_integer_dword_mul = false,                              \

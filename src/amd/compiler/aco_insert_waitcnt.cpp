@@ -290,6 +290,7 @@ struct wait_entry {
 struct wait_ctx {
    Program* program;
    enum amd_gfx_level gfx_level;
+   bool delay_alu_mode;
    uint16_t max_vm_cnt;
    uint16_t max_exp_cnt;
    uint16_t max_lgkm_cnt;
@@ -310,8 +311,8 @@ struct wait_ctx {
    std::map<PhysReg, wait_entry> gpr_map;
 
    wait_ctx() {}
-   wait_ctx(Program* program_)
-       : program(program_), gfx_level(program_->gfx_level),
+   wait_ctx(Program* program_, bool delay_alu_mode_)
+       : program(program_), gfx_level(program_->gfx_level), delay_alu_mode(delay_alu_mode_),
          max_vm_cnt(program_->gfx_level >= GFX9 ? 62 : 14), max_exp_cnt(6),
          max_lgkm_cnt(program_->gfx_level >= GFX10 ? 62 : 14),
          max_vs_cnt(program_->gfx_level >= GFX10 ? 62 : 0),
@@ -1055,9 +1056,10 @@ handle_block(Program* program, Block& block, wait_ctx& ctx)
       memory_sync_info sync_info = get_sync_info(instr.get());
       kill(queued_imm, queued_delay, instr.get(), ctx, sync_info);
 
-      if (program->gfx_level >= GFX11)
+      if (ctx.delay_alu_mode)
          gen_alu(instr.get(), ctx);
-      gen(instr.get(), ctx);
+      else
+         gen(instr.get(), ctx);
 
       if (instr->format != Format::PSEUDO_BARRIER && !is_wait && !is_delay_alu) {
          if (instr->isVINTERP_INREG() && queued_imm.exp != wait_imm::unset_counter) {
@@ -1096,15 +1098,13 @@ handle_block(Program* program, Block& block, wait_ctx& ctx)
    block.instructions.swap(new_instructions);
 }
 
-} /* end namespace */
-
 void
-insert_wait_states(Program* program)
+insert_delay_wait(Program* program, bool delay_alu_mode)
 {
    /* per BB ctx */
    std::vector<bool> done(program->blocks.size());
-   std::vector<wait_ctx> in_ctx(program->blocks.size(), wait_ctx(program));
-   std::vector<wait_ctx> out_ctx(program->blocks.size(), wait_ctx(program));
+   std::vector<wait_ctx> in_ctx(program->blocks.size(), wait_ctx(program, delay_alu_mode));
+   std::vector<wait_ctx> out_ctx(program->blocks.size(), wait_ctx(program, delay_alu_mode));
 
    std::stack<unsigned, std::vector<unsigned>> loop_header_indices;
    unsigned loop_progress = 0;
@@ -1166,6 +1166,20 @@ insert_wait_states(Program* program)
 
       out_ctx[current.index] = std::move(ctx);
    }
+}
+
+} /* end namespace */
+
+void
+insert_waitcnt(Program* program)
+{
+   insert_delay_wait(program, false);
+}
+
+void
+insert_delay_alu(Program* program)
+{
+   insert_delay_wait(program, true);
 
    /* Combine s_delay_alu using the skip field. */
    if (program->gfx_level >= GFX11) {

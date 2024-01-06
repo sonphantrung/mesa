@@ -199,8 +199,9 @@ aco_postprocess_shader(const struct aco_compiler_options* options,
    aco::lower_to_hw_instr(program.get());
    validate(program.get());
 
-   /* Insert Waitcnt */
-   aco::insert_wait_states(program.get());
+   aco::insert_waitcnt(program.get());
+   if (program->gfx_level >= GFX11)
+      aco::insert_delay_alu(program.get());
    aco::insert_NOPs(program.get());
 
    if (program->gfx_level >= GFX10)
@@ -281,7 +282,9 @@ aco_compile_rt_prolog(const struct aco_compiler_options* options,
 
    aco::select_rt_prolog(program.get(), &config, options, info, in_args, out_args);
    validate(program.get());
-   aco::insert_wait_states(program.get());
+   aco::insert_waitcnt(program.get());
+   if (program->gfx_level >= GFX11)
+      aco::insert_delay_alu(program.get());
    aco::insert_NOPs(program.get());
    if (program->gfx_level >= GFX10)
       aco::form_hard_clauses(program.get());

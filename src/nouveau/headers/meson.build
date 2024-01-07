@@ -1,3 +1,5 @@
+fs = import('fs')
+
 nvk_classes = [
   'cl902d',
   'cl9039',
@@ -29,12 +31,20 @@ nvk_cl_header_depend_files = [
 
 cl_generated = []
 foreach cl : nvk_classes
+  headers = ['nvidia/classes/'+cl+'.h']
+  if fs.exists('mixin/classes/'+cl+'.h')
+    headers += ['mixin/classes/'+cl+'.h']
+  endif
+  command = [prog_python, '@INPUT0@',
+             '--out_h', '@OUTPUT0@', '--out_c', '@OUTPUT1@']
+  foreach i : range(headers.length())
+    command += ['--in_h', '@INPUT'+(i+1).to_string()+'@']
+  endforeach
   cl_generated += custom_target(
     cl + '.h',
-    input : ['class_parser.py', 'nvidia/classes/'+cl+'.h'],
+    input : ['class_parser.py'] + headers,
     output : ['nvk_'+cl+'.h', 'nvk_'+cl+'.c'],
-    command : [prog_python, '@INPUT0@', '--in_h', '@INPUT1@',
-               '--out_h', '@OUTPUT0@', '--out_c', '@OUTPUT1@'],
+    command : command,
     depend_files: nvk_cl_header_depend_files,
   )
 endforeach

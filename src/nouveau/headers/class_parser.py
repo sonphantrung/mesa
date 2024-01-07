@@ -50,7 +50,9 @@ TEMPLATE_H = Template("""\
 /* parsed class ${nvcl} */
 
 #include "nvtypes.h"
+%for clheader in clheaders:
 #include "${clheader}"
+%endfor
 
 #include <assert.h>
 #include <stdio.h>
@@ -341,22 +343,25 @@ def main():
     parser.add_argument('--out_h', required=True, help='Output C header.')
     parser.add_argument('--out_c', required=True, help='Output C file.')
     parser.add_argument('--in_h',
-                        help='Input class header file.',
-                        required=True)
+                        help='Input class header file(s).',
+                        required=True,
+                        action='append')
     args = parser.parse_args()
 
-    clheader = os.path.join(*split_path(args.in_h)[-3:])
-    nvcl = os.path.basename(args.in_h)
+    clheaders = [os.path.join(*split_path(header)[-3:]) for header in args.in_h]
+    nvcl = os.path.basename(args.in_h[0])
     nvcl = nvcl.removeprefix("cl")
     nvcl = nvcl.removesuffix(".h")
     nvcl = nvcl.upper()
     nvcl = "NV" + nvcl
 
-    with open(args.in_h, 'r', encoding='utf-8') as f:
-        mthddict = parse_header(nvcl, f)
+    mthddict = {}
+    for header in args.in_h:
+        with open(header, 'r', encoding='utf-8') as f:
+            mthddict.update(parse_header(nvcl, f))
 
     environment = {
-        'clheader': clheader,
+        'clheaders': clheaders,
         'header': os.path.basename(args.out_h),
         'nvcl': nvcl,
         'mthddict': mthddict,

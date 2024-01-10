@@ -132,8 +132,8 @@ panvk_descriptor_set_destroy(struct panvk_device *device,
                              struct panvk_descriptor_pool *pool,
                              struct panvk_descriptor_set *set)
 {
-   if (set->desc_bo)
-      panvk_priv_bo_destroy(set->desc_bo, NULL);
+   if (set->desc_ubo.bo)
+      panvk_priv_bo_destroy(set->desc_ubo.bo, NULL);
 
    vk_object_free(&device->vk, NULL, set);
 }

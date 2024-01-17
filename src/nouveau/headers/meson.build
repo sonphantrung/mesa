@@ -42,13 +42,13 @@ endforeach
 _libnvidia_headers = static_library(
   'nvidia_headers',
   ['nv_push.c', cl_generated],
-  include_directories : ['.', 'nvidia/classes', inc_include, inc_src],
+  include_directories : ['.', inc_include, inc_src],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
 )
 
 idep_nvidia_headers = declare_dependency(
-  include_directories : include_directories('.', 'nvidia/classes'),
+  include_directories : include_directories('.'),
   sources : cl_generated,
   link_with : _libnvidia_headers,
 )

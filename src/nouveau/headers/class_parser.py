@@ -326,6 +326,16 @@ def parse_header(nvcl, f):
 
     return mthddict
 
+def split_path(p):
+    l = []
+    while True:
+        (p, tail) = os.path.split(p)
+        if tail:
+            l.append(tail)
+        else:
+            l.reverse()
+            return l
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out_h', required=True, help='Output C header.')
@@ -335,8 +345,8 @@ def main():
                         required=True)
     args = parser.parse_args()
 
-    clheader = os.path.basename(args.in_h)
-    nvcl = clheader
+    clheader = os.path.join(*split_path(args.in_h)[-3:])
+    nvcl = os.path.basename(args.in_h)
     nvcl = nvcl.removeprefix("cl")
     nvcl = nvcl.removesuffix(".h")
     nvcl = nvcl.upper()

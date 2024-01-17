@@ -25,22 +25,22 @@
 #include <sys/sysmacros.h>
 #include <xf86drm.h>
 
-#include "cl90c0.h"
-#include "cl91c0.h"
-#include "cla097.h"
-#include "cla0c0.h"
-#include "cla1c0.h"
-#include "clb097.h"
-#include "clb0c0.h"
-#include "clb197.h"
-#include "clb1c0.h"
-#include "clc0c0.h"
-#include "clc1c0.h"
-#include "clc397.h"
-#include "clc3c0.h"
-#include "clc597.h"
-#include "clc5c0.h"
-#include "clc997.h"
+#include "nvidia/classes/cl90c0.h"
+#include "nvidia/classes/cl91c0.h"
+#include "nvidia/classes/cla097.h"
+#include "nvidia/classes/cla0c0.h"
+#include "nvidia/classes/cla1c0.h"
+#include "nvidia/classes/clb097.h"
+#include "nvidia/classes/clb0c0.h"
+#include "nvidia/classes/clb197.h"
+#include "nvidia/classes/clb1c0.h"
+#include "nvidia/classes/clc0c0.h"
+#include "nvidia/classes/clc1c0.h"
+#include "nvidia/classes/clc397.h"
+#include "nvidia/classes/clc3c0.h"
+#include "nvidia/classes/clc597.h"
+#include "nvidia/classes/clc5c0.h"
+#include "nvidia/classes/clc997.h"
 
 static bool
 nvk_use_nak(const struct nv_device_info *info)

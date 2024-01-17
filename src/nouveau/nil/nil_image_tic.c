@@ -9,10 +9,11 @@
 
 #include "nouveau_device.h"
 
-#include "cl9097.h"
-#include "cl9097tex.h"
-#include "clb097.h"
-#include "clb097tex.h"
+#include "nvidia/classes/cl9097.h"
+#include "nvidia/classes/cl9097tex.h"
+#include "nvidia/classes/clb097.h"
+#include "nvidia/classes/clb097tex.h"
+
 #include "drf.h"
 
 ALWAYS_INLINE static void

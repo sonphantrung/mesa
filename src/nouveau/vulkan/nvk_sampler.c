@@ -17,11 +17,12 @@
 #include "util/format/format_utils.h"
 #include "util/format_srgb.h"
 
-#include "cla097.h"
-#include "clb197.h"
-#include "cl9097tex.h"
-#include "cla097tex.h"
-#include "clb197tex.h"
+#include "nvidia/classes/cla097.h"
+#include "nvidia/classes/clb197.h"
+#include "nvidia/classes/cl9097tex.h"
+#include "nvidia/classes/cla097tex.h"
+#include "nvidia/classes/clb197tex.h"
+
 #include "drf.h"
 
 ALWAYS_INLINE static void

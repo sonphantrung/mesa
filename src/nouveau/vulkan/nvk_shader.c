@@ -27,10 +27,10 @@
 #include "util/mesa-sha1.h"
 #include "util/u_debug.h"
 
-#include "cla097.h"
-#include "clb097.h"
-#include "clc397.h"
-#include "clc597.h"
+#include "nvidia/classes/cla097.h"
+#include "nvidia/classes/clb097.h"
+#include "nvidia/classes/clc397.h"
+#include "nvidia/classes/clc597.h"
 
 static void
 shared_var_info(const struct glsl_type *type, unsigned *size, unsigned *align)

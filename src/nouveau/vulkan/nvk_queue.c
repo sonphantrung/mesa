@@ -16,7 +16,7 @@
 #include "nvk_cl9097.h"
 #include "nvk_cl90b5.h"
 #include "nvk_cla0c0.h"
-#include "cla1c0.h"
+#include "nvk_cla1c0.h"
 #include "nvk_clc3c0.h"
 #include "nvk_clc397.h"
 

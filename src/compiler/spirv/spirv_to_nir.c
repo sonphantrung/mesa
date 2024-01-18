@@ -40,7 +40,6 @@
 
 #include <stdio.h>
 
-#ifndef NDEBUG
 uint32_t mesa_spirv_debug = 0;
 
 static const struct debug_named_value mesa_spirv_debug_control[] = {
@@ -50,6 +49,8 @@ static const struct debug_named_value mesa_spirv_debug_control[] = {
 };
 
 DEBUG_GET_ONCE_FLAGS_OPTION(mesa_spirv_debug, "MESA_SPIRV_DEBUG", mesa_spirv_debug_control, 0)
+
+#ifndef NDEBUG
 
 static enum nir_spirv_debug_level
 vtn_default_log_level(void)
@@ -6918,13 +6919,11 @@ can_remove(nir_variable *var, void *data)
    return !_mesa_set_search(vars_used_indirectly, var);
 }
 
-#ifndef NDEBUG
 static void
 initialize_mesa_spirv_debug(void)
 {
    mesa_spirv_debug = debug_get_option_mesa_spirv_debug();
 }
-#endif
 
 nir_shader *
 spirv_to_nir(const uint32_t *words, size_t word_count,
@@ -6934,10 +6933,8 @@ spirv_to_nir(const uint32_t *words, size_t word_count,
              const nir_shader_compiler_options *nir_options)
 
 {
-#ifndef NDEBUG
    static once_flag initialized_debug_flag = ONCE_FLAG_INIT;
    call_once(&initialized_debug_flag, initialize_mesa_spirv_debug);
-#endif
 
    const uint32_t *word_end = words + word_count;
 
@@ -7305,10 +7302,8 @@ bool
 spirv_library_to_nir_builder(FILE *fp, const uint32_t *words, size_t word_count,
                              const struct spirv_to_nir_options *options)
 {
-#ifndef NDEBUG
    static once_flag initialized_debug_flag = ONCE_FLAG_INIT;
    call_once(&initialized_debug_flag, initialize_mesa_spirv_debug);
-#endif
 
    const uint32_t *word_end = words + word_count;
 

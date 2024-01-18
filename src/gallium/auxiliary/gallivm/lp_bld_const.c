@@ -233,7 +233,7 @@ lp_build_zero(struct gallivm_state *gallivm, struct lp_type type)
       if (type.floating)
          return lp_build_const_float(gallivm, 0.0);
       else
-         return LLVMConstInt(LLVMIntTypeInContext(gallivm->context, type.width), 0, 0);
+         return LLVMConstInt(LLVMIntTypeInContext(gallivm->context.ref, type.width), 0, 0);
    } else {
       LLVMTypeRef vec_type = lp_build_vec_type(gallivm, type);
       return LLVMConstNull(vec_type);
@@ -406,7 +406,7 @@ lp_build_const_mask_aos(struct gallivm_state *gallivm,
                         unsigned mask,
                         unsigned channels)
 {
-   LLVMTypeRef elem_type = LLVMIntTypeInContext(gallivm->context, type.width);
+   LLVMTypeRef elem_type = LLVMIntTypeInContext(gallivm->context.ref, type.width);
    LLVMValueRef masks[LP_MAX_VECTOR_LENGTH];
 
    assert(type.length <= LP_MAX_VECTOR_LENGTH);
@@ -453,11 +453,11 @@ lp_build_const_string(struct gallivm_state *gallivm,
                       const char *str)
 {
    unsigned len = strlen(str) + 1;
-   LLVMTypeRef i8 = LLVMInt8TypeInContext(gallivm->context);
+   LLVMTypeRef i8 = LLVMInt8TypeInContext(gallivm->context.ref);
    LLVMValueRef string = LLVMAddGlobal(gallivm->module, LLVMArrayType(i8, len), "");
    LLVMSetGlobalConstant(string, true);
    LLVMSetLinkage(string, LLVMInternalLinkage);
-   LLVMSetInitializer(string, LLVMConstStringInContext(gallivm->context, str, len, true));
+   LLVMSetInitializer(string, LLVMConstStringInContext(gallivm->context.ref, str, len, true));
    string = LLVMConstBitCast(string, LLVMPointerType(i8, 0));
    return string;
 }

@@ -554,7 +554,7 @@ build_gather(struct lp_build_tgsi_context *bld_base,
    unsigned i;
 
    if (indexes2)
-      res = LLVMGetUndef(LLVMVectorType(LLVMFloatTypeInContext(gallivm->context), bld_base->base.type.length * 2));
+      res = LLVMGetUndef(LLVMVectorType(LLVMFloatTypeInContext(gallivm->context.ref), bld_base->base.type.length * 2));
    else
       res = bld->undef;
    /*
@@ -897,15 +897,15 @@ emit_fetch_constant(
          res = LLVMBuildInsertElement(builder, res, scalar2, shuffles[1], "");
       } else {
         if (stype == TGSI_TYPE_DOUBLE) {
-           LLVMTypeRef dptr_type = LLVMPointerType(LLVMDoubleTypeInContext(gallivm->context), 0);
+           LLVMTypeRef dptr_type = LLVMPointerType(LLVMDoubleTypeInContext(gallivm->context.ref), 0);
            scalar_ptr = LLVMBuildBitCast(builder, scalar_ptr, dptr_type, "");
            bld_broad = &bld_base->dbl_bld;
         } else if (stype == TGSI_TYPE_UNSIGNED64) {
-           LLVMTypeRef u64ptr_type = LLVMPointerType(LLVMInt64TypeInContext(gallivm->context), 0);
+           LLVMTypeRef u64ptr_type = LLVMPointerType(LLVMInt64TypeInContext(gallivm->context.ref), 0);
            scalar_ptr = LLVMBuildBitCast(builder, scalar_ptr, u64ptr_type, "");
            bld_broad = &bld_base->uint64_bld;
         } else if (stype == TGSI_TYPE_SIGNED64) {
-           LLVMTypeRef i64ptr_type = LLVMPointerType(LLVMInt64TypeInContext(gallivm->context), 0);
+           LLVMTypeRef i64ptr_type = LLVMPointerType(LLVMInt64TypeInContext(gallivm->context.ref), 0);
            scalar_ptr = LLVMBuildBitCast(builder, scalar_ptr, i64ptr_type, "");
            bld_broad = &bld_base->int64_bld;
         }
@@ -974,7 +974,7 @@ emit_fetch_immediate(
       LLVMTypeRef fptr_type;
 
       /* cast imms_array pointer to float* */
-      fptr_type = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context), 0);
+      fptr_type = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context.ref), 0);
       imms_array = LLVMBuildBitCast(builder, bld->imms_array, fptr_type, "");
 
       if (reg->Register.Indirect) {
@@ -1074,7 +1074,7 @@ emit_fetch_input(
                                            true);
       }
       /* cast inputs_array pointer to float* */
-      fptr_type = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context), 0);
+      fptr_type = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context.ref), 0);
       inputs_array = LLVMBuildBitCast(builder, bld->inputs_array, fptr_type, "");
 
       /* Gather values from the input register array */
@@ -1442,7 +1442,7 @@ emit_fetch_temporary(
       }
 
       /* cast temps_array pointer to float* */
-      fptr_type = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context), 0);
+      fptr_type = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context.ref), 0);
       temps_array = LLVMBuildBitCast(builder, bld->temps_array, fptr_type, "");
 
       /* Gather values from the temporary register array */
@@ -1708,7 +1708,7 @@ emit_store_output(struct lp_build_tgsi_context *bld_base,
                                           chan_index,
                                           true);
 
-      fptr_type = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context), 0);
+      fptr_type = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context.ref), 0);
       outputs_array = LLVMBuildBitCast(builder, bld->outputs_array, fptr_type, "");
 
       /* Scatter store values into output registers */
@@ -1807,7 +1807,7 @@ emit_store_temp(struct lp_build_tgsi_context *bld_base,
    if (!tgsi_type_is_64bit(dtype))
       value = LLVMBuildBitCast(builder, value, float_bld->vec_type, "");
    else
-      value = LLVMBuildBitCast(builder, value,  LLVMVectorType(LLVMFloatTypeInContext(gallivm->context), bld_base->base.type.length * 2), "");
+      value = LLVMBuildBitCast(builder, value,  LLVMVectorType(LLVMFloatTypeInContext(gallivm->context.ref), bld_base->base.type.length * 2), "");
 
    if (reg->Register.Indirect) {
       LLVMValueRef index_vec;  /* indexes into the temp registers */
@@ -1819,7 +1819,7 @@ emit_store_temp(struct lp_build_tgsi_context *bld_base,
                                           chan_index,
                                           true);
 
-      fptr_type = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context), 0);
+      fptr_type = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context.ref), 0);
       temps_array = LLVMBuildBitCast(builder, bld->temps_array, fptr_type, "");
 
       /* Scatter store values into temp registers */
@@ -2973,7 +2973,7 @@ lp_emit_declaration_soa(
       assert(idx2D < LP_MAX_TGSI_CONST_BUFFERS);
       bld->consts[idx2D] = lp_llvm_buffer_base(gallivm, bld->consts_ptr,
                                                index2D, LP_MAX_TGSI_CONST_BUFFERS);
-      bld->consts[idx2D] = LLVMBuildBitCast(gallivm->builder, bld->consts[idx2D], LLVMPointerType(LLVMFloatTypeInContext(gallivm->context), 0), "");
+      bld->consts[idx2D] = LLVMBuildBitCast(gallivm->builder, bld->consts[idx2D], LLVMPointerType(LLVMFloatTypeInContext(gallivm->context.ref), 0), "");
       bld->consts_sizes[idx2D] = lp_llvm_buffer_num_elements(gallivm, bld->consts_ptr,
                                                              index2D, LP_MAX_TGSI_CONST_BUFFERS);
    }

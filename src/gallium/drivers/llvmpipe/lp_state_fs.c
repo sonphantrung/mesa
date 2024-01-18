@@ -220,7 +220,7 @@ generate_quad_mask(struct gallivm_state *gallivm,
                    LLVMValueRef mask_input) /* int64 */
 {
    LLVMBuilderRef builder = gallivm->builder;
-   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context.ref);
    LLVMValueRef bits[16];
    LLVMValueRef mask, bits_vec;
 
@@ -507,8 +507,8 @@ fs_fb_fetch(const struct lp_build_fs_iface *iface,
    struct lp_build_fs_llvm_iface *fs_iface = (struct lp_build_fs_llvm_iface *)iface;
    struct gallivm_state *gallivm = bld->gallivm;
    LLVMBuilderRef builder = gallivm->builder;
-   LLVMTypeRef int32_type = LLVMInt32TypeInContext(gallivm->context);
-   LLVMTypeRef int8_type = LLVMInt8TypeInContext(gallivm->context);
+   LLVMTypeRef int32_type = LLVMInt32TypeInContext(gallivm->context.ref);
+   LLVMTypeRef int8_type = LLVMInt8TypeInContext(gallivm->context.ref);
    LLVMTypeRef int8p_type = LLVMPointerType(int8_type, 0);
    const struct lp_fragment_shader_variant_key *key = fs_iface->key;
 
@@ -683,10 +683,10 @@ generate_fs_loop(struct gallivm_state *gallivm,
    /* truncate then sign extend. */
    system_values.front_facing =
       LLVMBuildTrunc(gallivm->builder, facing,
-                     LLVMInt1TypeInContext(gallivm->context), "");
+                     LLVMInt1TypeInContext(gallivm->context.ref), "");
    system_values.front_facing =
       LLVMBuildSExt(gallivm->builder, system_values.front_facing,
-                    LLVMInt32TypeInContext(gallivm->context), "");
+                    LLVMInt32TypeInContext(gallivm->context.ref), "");
    system_values.view_index =
       lp_jit_thread_data_raster_state_view_index(gallivm,
                                                  thread_data_type,
@@ -888,7 +888,7 @@ generate_fs_loop(struct gallivm_state *gallivm,
       LLVMValueRef sample_offset =
          LLVMBuildMul(builder, sample_loop_state.counter,
                       depth_sample_stride, "");
-      depth_ptr = LLVMBuildGEP2(builder, LLVMInt8TypeInContext(gallivm->context),
+      depth_ptr = LLVMBuildGEP2(builder, LLVMInt8TypeInContext(gallivm->context.ref),
                                 depth_ptr, &sample_offset, 1, "");
    }
 
@@ -1263,7 +1263,7 @@ generate_fs_loop(struct gallivm_state *gallivm,
    depth_ptr = depth_base_ptr;
    if (key->multisample) {
       LLVMValueRef sample_offset = LLVMBuildMul(builder, sample_loop_state.counter, depth_sample_stride, "");
-      depth_ptr = LLVMBuildGEP2(builder, LLVMInt8TypeInContext(gallivm->context),
+      depth_ptr = LLVMBuildGEP2(builder, LLVMInt8TypeInContext(gallivm->context.ref),
                                 depth_ptr, &sample_offset, 1, "");
    }
 
@@ -2164,8 +2164,8 @@ convert_from_blend_type(struct gallivm_state *gallivm,
          unsigned num_fetch = src_type.length == 8 ? num_srcs / 2 : num_srcs / 4;
          type16x8.length = 8;
          type32x4.width = 32;
-         ltypei128 = LLVMIntTypeInContext(gallivm->context, 128);
-         ltypei64 = LLVMIntTypeInContext(gallivm->context, 64);
+         ltypei128 = LLVMIntTypeInContext(gallivm->context.ref, 128);
+         ltypei64 = LLVMIntTypeInContext(gallivm->context.ref, 64);
          ltype16x4 = lp_build_vec_type(gallivm, dst_type);
          /* We could do vector truncation but it doesn't generate very good code */
          for (i = 0; i < num_fetch; i++) {
@@ -2355,7 +2355,7 @@ convert_alpha(struct gallivm_state *gallivm,
             if (j < pixels * channels) {
                shuffles[j] = lp_build_const_int32(gallivm, j / channels);
             } else {
-               shuffles[j] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context));
+               shuffles[j] = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context.ref));
             }
          }
 
@@ -3108,9 +3108,9 @@ generate_fragment(struct llvmpipe_context *lp,
    LLVMTypeRef blend_vec_type;
    LLVMTypeRef arg_types[16];
    LLVMTypeRef func_type;
-   LLVMTypeRef int32_type = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef int32_type = LLVMInt32TypeInContext(gallivm->context.ref);
    LLVMTypeRef int32p_type = LLVMPointerType(int32_type, 0);
-   LLVMTypeRef int8_type = LLVMInt8TypeInContext(gallivm->context);
+   LLVMTypeRef int8_type = LLVMInt8TypeInContext(gallivm->context.ref);
    LLVMTypeRef int8p_type = LLVMPointerType(int8_type, 0);
    LLVMValueRef context_ptr;
    LLVMValueRef resources_ptr;
@@ -3193,14 +3193,14 @@ generate_fragment(struct llvmpipe_context *lp,
    arg_types[7] = LLVMPointerType(fs_elem_type, 0);    /* dady */
    arg_types[8] = LLVMPointerType(int8p_type, 0);  /* color */
    arg_types[9] = int8p_type;       /* depth */
-   arg_types[10] = LLVMInt64TypeInContext(gallivm->context);  /* mask_input */
+   arg_types[10] = LLVMInt64TypeInContext(gallivm->context.ref);  /* mask_input */
    arg_types[11] = variant->jit_thread_data_ptr_type;  /* per thread data */
    arg_types[12] = int32p_type;     /* stride */
    arg_types[13] = int32_type;                         /* depth_stride */
    arg_types[14] = int32p_type;     /* color sample strides */
    arg_types[15] = int32_type;                         /* depth sample stride */
 
-   func_type = LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context),
+   func_type = LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context.ref),
                                 arg_types, ARRAY_SIZE(arg_types), 0);
 
    function = LLVMAddFunction(gallivm->module, func_name, func_type);
@@ -3255,7 +3255,7 @@ generate_fragment(struct llvmpipe_context *lp,
     * Function body
     */
 
-   block = LLVMAppendBasicBlockInContext(gallivm->context, function, "entry");
+   block = LLVMAppendBasicBlockInContext(gallivm->context.ref, function, "entry");
    builder = gallivm->builder;
    assert(builder);
    LLVMPositionBuilderAtEnd(builder, block);
@@ -3271,11 +3271,11 @@ generate_fragment(struct llvmpipe_context *lp,
     */
    if (shader->info.base.num_instructions > 1) {
       LLVMValueRef invocs, val;
-      LLVMTypeRef invocs_type = LLVMInt64TypeInContext(gallivm->context);
+      LLVMTypeRef invocs_type = LLVMInt64TypeInContext(gallivm->context.ref);
       invocs = lp_jit_thread_data_ps_invocations(gallivm, variant->jit_thread_data_type, thread_data_ptr);
       val = LLVMBuildLoad2(builder, invocs_type, invocs, "");
       val = LLVMBuildAdd(builder, val,
-                         LLVMConstInt(LLVMInt64TypeInContext(gallivm->context),
+                         LLVMConstInt(LLVMInt64TypeInContext(gallivm->context.ref),
                                       1, 0),
                          "invoc_count");
       LLVMBuildStore(builder, val, invocs);
@@ -3302,7 +3302,7 @@ generate_fragment(struct llvmpipe_context *lp,
       LLVMValueRef mask_store =
          lp_build_array_alloca(gallivm, mask_type,
                                num_loop_samp, "mask_store");
-      LLVMTypeRef flt_type = LLVMFloatTypeInContext(gallivm->context);
+      LLVMTypeRef flt_type = LLVMFloatTypeInContext(gallivm->context.ref);
       LLVMValueRef glob_sample_pos =
          LLVMAddGlobal(gallivm->module,
                        LLVMArrayType(flt_type, key->coverage_samples * 2), "");
@@ -3317,14 +3317,14 @@ generate_fragment(struct llvmpipe_context *lp,
                                                       lp_sample_pos_4x[i][1]);
          }
          sample_pos_array =
-            LLVMConstArray(LLVMFloatTypeInContext(gallivm->context),
+            LLVMConstArray(LLVMFloatTypeInContext(gallivm->context.ref),
                            sample_pos_arr, 8);
       } else {
          LLVMValueRef sample_pos_arr[2];
          sample_pos_arr[0] = LLVMConstReal(flt_type, 0.5);
          sample_pos_arr[1] = LLVMConstReal(flt_type, 0.5);
          sample_pos_array =
-            LLVMConstArray(LLVMFloatTypeInContext(gallivm->context),
+            LLVMConstArray(LLVMFloatTypeInContext(gallivm->context.ref),
                            sample_pos_arr, 2);
       }
       LLVMSetInitializer(glob_sample_pos, sample_pos_array);

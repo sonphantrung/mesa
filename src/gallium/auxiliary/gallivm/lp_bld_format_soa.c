@@ -1096,9 +1096,9 @@ lp_build_store_rgba_soa(struct gallivm_state *gallivm,
 
    assert(exec_mask);
 
-   LLVMTypeRef int32_ptr_type = LLVMPointerType(LLVMInt32TypeInContext(gallivm->context), 0);
-   LLVMTypeRef int16_ptr_type = LLVMPointerType(LLVMInt16TypeInContext(gallivm->context), 0);
-   LLVMTypeRef int8_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0);
+   LLVMTypeRef int32_ptr_type = LLVMPointerType(LLVMInt32TypeInContext(gallivm->context.ref), 0);
+   LLVMTypeRef int16_ptr_type = LLVMPointerType(LLVMInt16TypeInContext(gallivm->context.ref), 0);
+   LLVMTypeRef int8_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0);
 
    LLVMValueRef should_store_mask = LLVMBuildAnd(gallivm->builder, exec_mask, LLVMBuildNot(gallivm->builder, out_of_bounds, ""), "store_mask");
    should_store_mask = LLVMBuildICmp(gallivm->builder, LLVMIntNE, should_store_mask, lp_build_const_int_vec(gallivm, type, 0), "");
@@ -1106,7 +1106,7 @@ lp_build_store_rgba_soa(struct gallivm_state *gallivm,
       struct lp_build_loop_state loop_state;
 
       LLVMValueRef store_offset = LLVMBuildAdd(gallivm->builder, offset, lp_build_const_int_vec(gallivm, type, i * 4), "");
-      store_offset = LLVMBuildGEP2(gallivm->builder, LLVMInt8TypeInContext(gallivm->context), base_ptr, &store_offset, 1, "");
+      store_offset = LLVMBuildGEP2(gallivm->builder, LLVMInt8TypeInContext(gallivm->context.ref), base_ptr, &store_offset, 1, "");
 
       lp_build_loop_begin(&loop_state, gallivm, lp_build_const_int32(gallivm, 0));
 
@@ -1119,10 +1119,10 @@ lp_build_store_rgba_soa(struct gallivm_state *gallivm,
 
       if (format_desc->block.bits == 8) {
          this_offset = LLVMBuildBitCast(gallivm->builder, this_offset, int8_ptr_type, "");
-         data = LLVMBuildTrunc(gallivm->builder, data, LLVMInt8TypeInContext(gallivm->context), "");
+         data = LLVMBuildTrunc(gallivm->builder, data, LLVMInt8TypeInContext(gallivm->context.ref), "");
       } else if (format_desc->block.bits == 16) {
          this_offset = LLVMBuildBitCast(gallivm->builder, this_offset, int16_ptr_type, "");
-         data = LLVMBuildTrunc(gallivm->builder, data, LLVMInt16TypeInContext(gallivm->context), "");
+         data = LLVMBuildTrunc(gallivm->builder, data, LLVMInt16TypeInContext(gallivm->context.ref), "");
       } else
          this_offset = LLVMBuildBitCast(gallivm->builder, this_offset, int32_ptr_type, "");
       LLVMBuildStore(gallivm->builder, data, this_offset);

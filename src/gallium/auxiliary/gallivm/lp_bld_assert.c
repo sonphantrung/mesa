@@ -62,7 +62,7 @@ lp_build_assert(struct gallivm_state *gallivm,
                 const char *msg)
 {
    LLVMBuilderRef builder = gallivm->builder;
-   LLVMContextRef context = gallivm->context;
+   LLVMContextRef context = gallivm->context.ref;
    LLVMTypeRef arg_types[2];
    LLVMTypeRef ret_type;
    LLVMValueRef function;

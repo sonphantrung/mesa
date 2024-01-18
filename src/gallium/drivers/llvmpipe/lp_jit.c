@@ -48,7 +48,7 @@ static void
 lp_jit_create_types(struct lp_fragment_shader_variant *lp)
 {
    struct gallivm_state *gallivm = lp->gallivm;
-   LLVMContextRef lc = gallivm->context;
+   LLVMContextRef lc = gallivm->context.ref;
    LLVMTypeRef viewport_type;
    LLVMTypeRef linear_elem_type;
 
@@ -245,7 +245,7 @@ static void
 lp_jit_create_cs_types(struct lp_compute_shader_variant *lp)
 {
    struct gallivm_state *gallivm = lp->gallivm;
-   LLVMContextRef lc = gallivm->context;
+   LLVMContextRef lc = gallivm->context.ref;
 
    /* struct lp_jit_cs_thread_data */
    {

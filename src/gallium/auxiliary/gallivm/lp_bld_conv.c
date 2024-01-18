@@ -121,7 +121,7 @@ lp_build_half_to_float(struct gallivm_state *gallivm,
             intrinsic = "llvm.x86.vcvtph2ps.256";
          }
          src = LLVMBuildBitCast(builder, src,
-                                LLVMVectorType(LLVMInt16TypeInContext(gallivm->context), 8), "");
+                                LLVMVectorType(LLVMInt16TypeInContext(gallivm->context.ref), 8), "");
          return lp_build_intrinsic_unary(builder, intrinsic,
                                          lp_build_vec_type(gallivm, f32_type), src);
       } else {
@@ -135,7 +135,7 @@ lp_build_half_to_float(struct gallivm_state *gallivm,
           * this at some point.
           */
          src = LLVMBuildBitCast(builder, src,
-                                LLVMVectorType(LLVMHalfTypeInContext(gallivm->context), src_length), "");
+                                LLVMVectorType(LLVMHalfTypeInContext(gallivm->context.ref), src_length), "");
          return LLVMBuildFPExt(builder, src, lp_build_vec_type(gallivm, f32_type), "");
       }
    }
@@ -181,7 +181,7 @@ lp_build_float_to_half(struct gallivm_state *gallivm,
        (length == 4 || length == 8)) {
       struct lp_type i168_type = lp_type_int_vec(16, 16 * 8);
       unsigned mode = 3; /* same as LP_BUILD_ROUND_TRUNCATE */
-      LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
+      LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context.ref);
       const char *intrinsic = NULL;
       if (length == 4) {
          intrinsic = "llvm.x86.vcvtps2ph.128";
@@ -208,9 +208,9 @@ lp_build_float_to_half(struct gallivm_state *gallivm,
     * Debugging code.
     */
    if (0) {
-     LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
-     LLVMTypeRef i16t = LLVMInt16TypeInContext(gallivm->context);
-     LLVMTypeRef f32t = LLVMFloatTypeInContext(gallivm->context);
+     LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context.ref);
+     LLVMTypeRef i16t = LLVMInt16TypeInContext(gallivm->context.ref);
+     LLVMTypeRef f32t = LLVMFloatTypeInContext(gallivm->context.ref);
      LLVMValueRef ref_result = LLVMGetUndef(LLVMVectorType(i16t, length));
      unsigned i;
 

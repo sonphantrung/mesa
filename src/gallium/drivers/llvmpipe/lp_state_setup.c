@@ -131,7 +131,7 @@ emit_facing_coef(struct gallivm_state *gallivm,
                  unsigned slot)
 {
    LLVMBuilderRef builder = gallivm->builder;
-   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context);
+   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context.ref);
    LLVMValueRef a0_0 = args->facing;
    LLVMValueRef a0_0f = LLVMBuildSIToFP(builder, a0_0, float_type, "");
    LLVMValueRef a0, face_val;
@@ -165,7 +165,7 @@ vert_attrib(struct gallivm_state *gallivm,
 {
    LLVMBuilderRef b = gallivm->builder;
    LLVMValueRef idx[2];
-   LLVMTypeRef v_type = LLVMFloatTypeInContext(gallivm->context);
+   LLVMTypeRef v_type = LLVMFloatTypeInContext(gallivm->context.ref);
 
    idx[0] = lp_build_const_int32(gallivm, attr);
    idx[1] = lp_build_const_int32(gallivm, elem);
@@ -220,7 +220,7 @@ lp_do_offset_tri(struct gallivm_state *gallivm,
    LLVMValueRef dzdxdzdy, dzdx, dzdy, dzxyz20, dyzzx01, dyzzx01_dzxyz20, dzx01_dyz20;
    LLVMValueRef max, max_value, res12;
    LLVMValueRef shuffles[4];
-   LLVMTypeRef shuf_type = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef shuf_type = LLVMInt32TypeInContext(gallivm->context.ref);
    LLVMValueRef onei = lp_build_const_int32(gallivm, 1);
    LLVMValueRef zeroi = lp_build_const_int32(gallivm, 0);
    LLVMValueRef twoi = lp_build_const_int32(gallivm, 2);
@@ -546,7 +546,7 @@ init_args(struct gallivm_state *gallivm,
           struct lp_setup_args *args)
 {
    LLVMBuilderRef b = gallivm->builder;
-   LLVMTypeRef shuf_type = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef shuf_type = LLVMInt32TypeInContext(gallivm->context.ref);
    LLVMValueRef onef = lp_build_const_float(gallivm, 1.0);
    LLVMValueRef onei = lp_build_const_int32(gallivm, 1);
    LLVMValueRef zeroi = lp_build_const_int32(gallivm, 0);
@@ -671,20 +671,20 @@ generate_setup_variant(struct lp_setup_variant_key *key,
     */
 
    LLVMTypeRef vec4f_type =
-      LLVMVectorType(LLVMFloatTypeInContext(gallivm->context), 4);
+      LLVMVectorType(LLVMFloatTypeInContext(gallivm->context.ref), 4);
 
    LLVMTypeRef arg_types[8];
    arg_types[0] = LLVMPointerType(vec4f_type, 0);        /* v0 */
    arg_types[1] = LLVMPointerType(vec4f_type, 0);        /* v1 */
    arg_types[2] = LLVMPointerType(vec4f_type, 0);        /* v2 */
-   arg_types[3] = LLVMInt32TypeInContext(gallivm->context); /* facing */
+   arg_types[3] = LLVMInt32TypeInContext(gallivm->context.ref); /* facing */
    arg_types[4] = LLVMPointerType(vec4f_type, 0);	/* a0, aligned */
    arg_types[5] = LLVMPointerType(vec4f_type, 0);	/* dadx, aligned */
    arg_types[6] = LLVMPointerType(vec4f_type, 0);	/* dady, aligned */
    arg_types[7] = LLVMPointerType(vec4f_type, 0);	/* key (placeholder) */
 
    LLVMTypeRef func_type =
-      LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context),
+      LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context.ref),
                        arg_types, ARRAY_SIZE(arg_types), 0);
 
    variant->function = LLVMAddFunction(gallivm->module, func_name, func_type);
@@ -717,7 +717,7 @@ generate_setup_variant(struct lp_setup_variant_key *key,
     * Function body
     */
    LLVMBasicBlockRef block =
-      LLVMAppendBasicBlockInContext(gallivm->context,
+      LLVMAppendBasicBlockInContext(gallivm->context.ref,
                                     variant->function, "entry");
    LLVMPositionBuilderAtEnd(builder, block);
 

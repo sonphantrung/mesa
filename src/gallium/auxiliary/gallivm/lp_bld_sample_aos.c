@@ -570,7 +570,7 @@ lp_build_sample_fetch_image_linear(struct lp_build_sample_context *bld,
    LLVMBuilderRef builder = bld->gallivm->builder;
    struct lp_build_context u8n;
    LLVMTypeRef u8n_vec_type;
-   LLVMTypeRef elem_type = LLVMInt32TypeInContext(bld->gallivm->context);
+   LLVMTypeRef elem_type = LLVMInt32TypeInContext(bld->gallivm->context.ref);
    LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH];
    LLVMValueRef shuffle;
    LLVMValueRef neighbors[2][2][2]; /* [z][y][x] */
@@ -1167,7 +1167,7 @@ lp_build_sample_aos(struct lp_build_sample_context *bld,
                                                 lp_build_const_int32(bld->gallivm, 0), "");
 
       lod_positive = LLVMBuildTrunc(builder, lod_positive,
-                                    LLVMInt1TypeInContext(bld->gallivm->context), "");
+                                    LLVMInt1TypeInContext(bld->gallivm->context.ref), "");
 
       lp_build_if(&if_ctx, bld->gallivm, lod_positive);
       {

@@ -397,7 +397,7 @@ split_64bit(struct lp_build_nir_context *bld_base,
    }
 
    src = LLVMBuildBitCast(gallivm->builder, src,
-           LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), len), "");
+           LLVMVectorType(LLVMInt32TypeInContext(gallivm->context.ref), len), "");
    return LLVMBuildShuffleVector(gallivm->builder, src,
                                  LLVMGetUndef(LLVMTypeOf(src)),
                                  LLVMConstVector(hi ? shuffles2 : shuffles,
@@ -450,7 +450,7 @@ split_16bit(struct lp_build_nir_context *bld_base,
 #endif
    }
 
-   src = LLVMBuildBitCast(gallivm->builder, src, LLVMVectorType(LLVMInt16TypeInContext(gallivm->context), len), "");
+   src = LLVMBuildBitCast(gallivm->builder, src, LLVMVectorType(LLVMInt16TypeInContext(gallivm->context.ref), len), "");
    return LLVMBuildShuffleVector(gallivm->builder, src,
                                  LLVMGetUndef(LLVMTypeOf(src)),
                                  LLVMConstVector(hi ? shuffles2 : shuffles,

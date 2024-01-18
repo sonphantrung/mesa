@@ -93,7 +93,7 @@ lp_build_action_set_dst_type(struct lp_build_emit_data *emit_data,
 {
    if (emit_data->arg_count == 0) {
       emit_data->dst_type =
-         LLVMVoidTypeInContext(bld_base->base.gallivm->context);
+         LLVMVoidTypeInContext(bld_base->base.gallivm->context.ref);
    } else {
       /* XXX: Not all opcodes have the same src and dst types. */
       emit_data->dst_type = LLVMTypeOf(emit_data->args[0]);

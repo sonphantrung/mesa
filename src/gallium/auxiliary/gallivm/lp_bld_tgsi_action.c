@@ -357,7 +357,7 @@ kil_fetch_args(
    emit_data->args[3] = lp_build_emit_fetch(bld_base, emit_data->inst,
                                             0, TGSI_CHAN_W);
    emit_data->arg_count = 4;
-   emit_data->dst_type = LLVMVoidTypeInContext(bld_base->base.gallivm->context);
+   emit_data->dst_type = LLVMVoidTypeInContext(bld_base->base.gallivm->context.ref);
 }
 
 /* TGSI_OPCODE_KILL */
@@ -367,7 +367,7 @@ kilp_fetch_args(
    struct lp_build_tgsi_context * bld_base,
    struct lp_build_emit_data * emit_data)
 {
-   emit_data->dst_type = LLVMVoidTypeInContext(bld_base->base.gallivm->context);
+   emit_data->dst_type = LLVMVoidTypeInContext(bld_base->base.gallivm->context.ref);
 }
 
 /* TGSI_OPCODE_LIT */
@@ -521,7 +521,7 @@ up2h_emit(
 {
    struct gallivm_state *gallivm = bld_base->base.gallivm;
    LLVMBuilderRef builder = gallivm->builder;
-   LLVMContextRef context = gallivm->context;
+   LLVMContextRef context = gallivm->context.ref;
    LLVMValueRef lo, hi, res[2], arg;
    unsigned nr = bld_base->base.type.length;
    LLVMTypeRef i16t = LLVMVectorType(LLVMInt16TypeInContext(context), nr * 2);

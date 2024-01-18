@@ -76,7 +76,7 @@ load_texture_functions_ptr(struct gallivm_state *gallivm, LLVMValueRef descripto
    LLVMValueRef texture_base_offset = lp_build_const_int64(gallivm, offset1);
    LLVMValueRef texture_base_ptr = LLVMBuildAdd(builder, descriptor, texture_base_offset, "");
 
-   LLVMTypeRef texture_base_type = LLVMInt64TypeInContext(gallivm->context);
+   LLVMTypeRef texture_base_type = LLVMInt64TypeInContext(gallivm->context.ref);
    LLVMTypeRef texture_base_ptr_type = LLVMPointerType(texture_base_type, 0);
 
    texture_base_ptr = LLVMBuildIntToPtr(builder, texture_base_ptr, texture_base_ptr_type, "");
@@ -165,7 +165,7 @@ lp_bld_llvm_sampler_soa_emit_fetch_texel(const struct lp_build_sampler_soa *base
 
       LLVMValueRef bitmask = LLVMBuildICmp(builder, LLVMIntNE, params->exec_mask, uint_zero, "exec_bitvec");
 
-      LLVMTypeRef bitmask_type = LLVMIntTypeInContext(gallivm->context, uint_type.length);
+      LLVMTypeRef bitmask_type = LLVMIntTypeInContext(gallivm->context.ref, uint_type.length);
       bitmask = LLVMBuildBitCast(builder, bitmask, bitmask_type, "exec_bitmask");
 
       LLVMValueRef any_active = LLVMBuildICmp(builder, LLVMIntNE, bitmask, LLVMConstInt(bitmask_type, 0, false), "any_active");
@@ -197,14 +197,14 @@ lp_bld_llvm_sampler_soa_emit_fetch_texel(const struct lp_build_sampler_soa *base
       LLVMValueRef sampler_desc_ptr;
       if (op_type == LP_SAMPLER_OP_FETCH) {
          texture_functions = texture_base;
-         sampler_desc_ptr = LLVMGetUndef(LLVMInt64TypeInContext(gallivm->context));
+         sampler_desc_ptr = LLVMGetUndef(LLVMInt64TypeInContext(gallivm->context.ref));
       } else {
          sampler_desc_ptr = lp_llvm_descriptor_base(gallivm, consts, params->sampler_resource, LP_MAX_TGSI_CONST_BUFFERS);
 
          LLVMValueRef sampler_index_offset = lp_build_const_int64(gallivm, offsetof(struct lp_descriptor, texture.sampler_index));
          LLVMValueRef sampler_index_ptr = LLVMBuildAdd(builder, sampler_desc_ptr, sampler_index_offset, "");
 
-         LLVMTypeRef sampler_index_type = LLVMInt32TypeInContext(gallivm->context);
+         LLVMTypeRef sampler_index_type = LLVMInt32TypeInContext(gallivm->context.ref);
          LLVMTypeRef sampler_index_ptr_type = LLVMPointerType(sampler_index_type, 0);
 
          sampler_index_ptr = LLVMBuildIntToPtr(builder, sampler_index_ptr, sampler_index_ptr_type, "");
@@ -343,7 +343,7 @@ lp_bld_llvm_sampler_soa_emit_size_query(const struct lp_build_sampler_soa *base,
 
       LLVMValueRef bitmask = LLVMBuildICmp(builder, LLVMIntNE, params->exec_mask, uint_zero, "exec_bitvec");
 
-      LLVMTypeRef bitmask_type = LLVMIntTypeInContext(gallivm->context, uint_type.length);
+      LLVMTypeRef bitmask_type = LLVMIntTypeInContext(gallivm->context.ref, uint_type.length);
       bitmask = LLVMBuildBitCast(builder, bitmask, bitmask_type, "exec_bitmask");
 
       LLVMValueRef any_active = LLVMBuildICmp(builder, LLVMIntNE, bitmask, LLVMConstInt(bitmask_type, 0, false), "any_active");
@@ -454,7 +454,7 @@ lp_bld_llvm_image_soa_emit_op(const struct lp_build_image_soa *base,
 
       LLVMValueRef bitmask = LLVMBuildICmp(builder, LLVMIntNE, params->exec_mask, uint_zero, "exec_bitvec");
 
-      LLVMTypeRef bitmask_type = LLVMIntTypeInContext(gallivm->context, uint_type.length);
+      LLVMTypeRef bitmask_type = LLVMIntTypeInContext(gallivm->context.ref, uint_type.length);
       bitmask = LLVMBuildBitCast(builder, bitmask, bitmask_type, "exec_bitmask");
 
       LLVMValueRef any_active = LLVMBuildICmp(builder, LLVMIntNE, bitmask, LLVMConstInt(bitmask_type, 0, false), "any_active");

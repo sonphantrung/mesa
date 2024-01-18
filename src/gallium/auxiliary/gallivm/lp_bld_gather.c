@@ -55,7 +55,7 @@ lp_build_gather_elem_ptr(struct gallivm_state *gallivm,
    LLVMValueRef offset;
    LLVMValueRef ptr;
 
-   ASSERTED LLVMTypeRef element_type = LLVMInt8TypeInContext(gallivm->context);
+   ASSERTED LLVMTypeRef element_type = LLVMInt8TypeInContext(gallivm->context.ref);
    assert(LLVMTypeOf(base_ptr) == LLVMPointerType(element_type, 0));
 
    if (length == 1) {
@@ -88,12 +88,12 @@ lp_build_gather_elem(struct gallivm_state *gallivm,
                      unsigned i,
                      bool vector_justify)
 {
-   LLVMTypeRef src_type = LLVMIntTypeInContext(gallivm->context, src_width);
-   LLVMTypeRef dst_elem_type = LLVMIntTypeInContext(gallivm->context, dst_width);
+   LLVMTypeRef src_type = LLVMIntTypeInContext(gallivm->context.ref, src_width);
+   LLVMTypeRef dst_elem_type = LLVMIntTypeInContext(gallivm->context.ref, dst_width);
    LLVMValueRef ptr;
    LLVMValueRef res;
 
-   assert(LLVMTypeOf(base_ptr) == LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0));
+   assert(LLVMTypeOf(base_ptr) == LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0));
 
    ptr = lp_build_gather_elem_ptr(gallivm, length, base_ptr, offsets, i);
    ptr = LLVMBuildBitCast(gallivm->builder, ptr, LLVMPointerType(src_type, 0), "");
@@ -173,7 +173,7 @@ lp_build_gather_elem_vec(struct gallivm_state *gallivm,
                          bool vector_justify)
 {
    LLVMValueRef ptr, res;
-   assert(LLVMTypeOf(base_ptr) == LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0));
+   assert(LLVMTypeOf(base_ptr) == LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0));
 
    ptr = lp_build_gather_elem_ptr(gallivm, length, base_ptr, offsets, i);
    ptr = LLVMBuildBitCast(gallivm->builder, ptr, LLVMPointerType(src_type, 0), "");
@@ -289,15 +289,15 @@ lp_build_gather_avx2(struct gallivm_state *gallivm,
    res_type.length *= length;
 
    if (dst_type.floating) {
-      src_type = src_width == 64 ? LLVMDoubleTypeInContext(gallivm->context) :
-                                   LLVMFloatTypeInContext(gallivm->context);
+      src_type = src_width == 64 ? LLVMDoubleTypeInContext(gallivm->context.ref) :
+                                   LLVMFloatTypeInContext(gallivm->context.ref);
    } else {
-      src_type = LLVMIntTypeInContext(gallivm->context, src_width);
+      src_type = LLVMIntTypeInContext(gallivm->context.ref, src_width);
    }
    src_vec_type = LLVMVectorType(src_type, length);
 
    /* XXX should allow hw scaling (can handle i8, i16, i32, i64 for x86) */
-   assert(LLVMTypeOf(base_ptr) == LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0));
+   assert(LLVMTypeOf(base_ptr) == LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0));
 
    if (0) {
       /*
@@ -308,9 +308,9 @@ lp_build_gather_avx2(struct gallivm_state *gallivm,
        * And the generated code doing the emulation is quite a bit worse
        * than what we get by doing it ourselves too.
        */
-      LLVMTypeRef i32_type = LLVMIntTypeInContext(gallivm->context, 32);
+      LLVMTypeRef i32_type = LLVMIntTypeInContext(gallivm->context.ref, 32);
       LLVMTypeRef i32_vec_type = LLVMVectorType(i32_type, length);
-      LLVMTypeRef i1_type = LLVMIntTypeInContext(gallivm->context, 1);
+      LLVMTypeRef i1_type = LLVMIntTypeInContext(gallivm->context.ref, 1);
       LLVMTypeRef i1_vec_type = LLVMVectorType(i1_type, length);
       LLVMTypeRef src_ptr_type = LLVMPointerType(src_type, 0);
       LLVMValueRef src_ptr;
@@ -336,7 +336,7 @@ lp_build_gather_avx2(struct gallivm_state *gallivm,
 
       res = lp_build_intrinsic(builder, intrinsic, src_vec_type, args, 4, 0);
    } else {
-      LLVMTypeRef i8_type = LLVMIntTypeInContext(gallivm->context, 8);
+      LLVMTypeRef i8_type = LLVMIntTypeInContext(gallivm->context.ref, 8);
       const char *intrinsic = NULL;
       unsigned l_idx = 0;
 
@@ -654,6 +654,6 @@ lp_build_masked_scatter(struct gallivm_state *gallivm,
    args[2] = lp_build_const_int32(gallivm, bit_size / 8);
    args[3] = LLVMBuildICmp(builder, LLVMIntNE, exec_mask,
                            LLVMConstNull(LLVMTypeOf(exec_mask)), "");
-   lp_build_intrinsic(builder, intrin_name, LLVMVoidTypeInContext(gallivm->context),
+   lp_build_intrinsic(builder, intrin_name, LLVMVoidTypeInContext(gallivm->context.ref),
                       args, 4, 0);
 }

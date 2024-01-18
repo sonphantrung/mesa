@@ -44,19 +44,19 @@ lp_build_elem_type(const struct gallivm_state *gallivm, struct lp_type type)
       switch (type.width) {
       case 16:
          return lp_has_fp16()
-            ? LLVMHalfTypeInContext(gallivm->context)
-            : LLVMInt16TypeInContext(gallivm->context);
+            ? LLVMHalfTypeInContext(gallivm->context.ref)
+            : LLVMInt16TypeInContext(gallivm->context.ref);
       case 32:
-         return LLVMFloatTypeInContext(gallivm->context);
+         return LLVMFloatTypeInContext(gallivm->context.ref);
       case 64:
-         return LLVMDoubleTypeInContext(gallivm->context);
+         return LLVMDoubleTypeInContext(gallivm->context.ref);
       default:
          assert(0);
-         return LLVMFloatTypeInContext(gallivm->context);
+         return LLVMFloatTypeInContext(gallivm->context.ref);
       }
    }
    else {
-      return LLVMIntTypeInContext(gallivm->context, type.width);
+      return LLVMIntTypeInContext(gallivm->context.ref, type.width);
    }
 }
 
@@ -178,7 +178,7 @@ LLVMTypeRef
 lp_build_int_elem_type(const struct gallivm_state *gallivm,
                        struct lp_type type)
 {
-   return LLVMIntTypeInContext(gallivm->context, type.width);
+   return LLVMIntTypeInContext(gallivm->context.ref, type.width);
 }
 
 

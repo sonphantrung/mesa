@@ -274,7 +274,7 @@ lp_build_cttz(struct lp_build_context *bld, LLVMValueRef a)
 
    lp_format_intrinsic(intr_str, sizeof(intr_str), "llvm.cttz", bld->vec_type);
 
-   LLVMValueRef undef_val = LLVMConstNull(LLVMInt1TypeInContext(bld->gallivm->context));
+   LLVMValueRef undef_val = LLVMConstNull(LLVMInt1TypeInContext(bld->gallivm->context.ref));
    result = lp_build_intrinsic_binary(builder, intr_str, bld->vec_type, a, undef_val);
    return LLVMBuildSelect(builder, LLVMBuildICmp(builder, LLVMIntEQ, a, bld->zero, ""),
 			  lp_build_const_int_vec(bld->gallivm, bld->type, -1), result, "");
@@ -289,7 +289,7 @@ lp_build_ctlz(struct lp_build_context *bld, LLVMValueRef a)
 
    lp_format_intrinsic(intr_str, sizeof(intr_str), "llvm.ctlz", bld->vec_type);
 
-   LLVMValueRef undef_val = LLVMConstNull(LLVMInt1TypeInContext(bld->gallivm->context));
+   LLVMValueRef undef_val = LLVMConstNull(LLVMInt1TypeInContext(bld->gallivm->context.ref));
    result = lp_build_intrinsic_binary(builder, intr_str, bld->vec_type, a, undef_val);
    return result;
 }

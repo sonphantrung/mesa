@@ -61,20 +61,20 @@ static LLVMValueRef
 add_printf_test(struct gallivm_state *gallivm)
 {
    LLVMModuleRef module = gallivm->module;
-   LLVMTypeRef args[1] = { LLVMIntTypeInContext(gallivm->context, 32) };
-   LLVMValueRef func = LLVMAddFunction(module, "test_printf", LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context), args, 1, 0));
+   LLVMTypeRef args[1] = { LLVMIntTypeInContext(gallivm->context.ref, 32) };
+   LLVMValueRef func = LLVMAddFunction(module, "test_printf", LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context.ref), args, 1, 0));
    LLVMBuilderRef builder = gallivm->builder;
-   LLVMBasicBlockRef block = LLVMAppendBasicBlockInContext(gallivm->context, func, "entry");
+   LLVMBasicBlockRef block = LLVMAppendBasicBlockInContext(gallivm->context.ref, func, "entry");
 
    LLVMSetFunctionCallConv(func, LLVMCCallConv);
 
    LLVMPositionBuilderAtEnd(builder, block);
    lp_build_printf(gallivm, "hello, world\n");
-   lp_build_printf(gallivm, "print 5 6: %d %d\n", LLVMConstInt(LLVMInt32TypeInContext(gallivm->context), 5, 0),
-				LLVMConstInt(LLVMInt32TypeInContext(gallivm->context), 6, 0));
+   lp_build_printf(gallivm, "print 5 6: %d %d\n", LLVMConstInt(LLVMInt32TypeInContext(gallivm->context.ref), 5, 0),
+				LLVMConstInt(LLVMInt32TypeInContext(gallivm->context.ref), 6, 0));
 
    /* Also test lp_build_assert().  This should not fail. */
-   lp_build_assert(gallivm, LLVMConstInt(LLVMInt32TypeInContext(gallivm->context), 1, 0), "assert(1)");
+   lp_build_assert(gallivm, LLVMConstInt(LLVMInt32TypeInContext(gallivm->context.ref), 1, 0), "assert(1)");
 
    LLVMBuildRetVoid(builder);
 
@@ -89,16 +89,13 @@ static bool
 test_printf(unsigned verbose, FILE *fp,
             const struct printf_test_case *testcase)
 {
-   LLVMContextRef context;
+   lp_context_ref context;
    struct gallivm_state *gallivm;
    LLVMValueRef test;
    test_printf_t test_printf_func;
    bool success = true;
 
-   context = LLVMContextCreate();
-#if LLVM_VERSION_MAJOR == 15
-   LLVMContextSetOpaquePointers(context, false);
-#endif
+   lp_context_create(&context);
    gallivm = gallivm_create("test_module", context, NULL);
 
    test = add_printf_test(gallivm);
@@ -112,7 +109,7 @@ test_printf(unsigned verbose, FILE *fp,
    test_printf_func(0);
 
    gallivm_destroy(gallivm);
-   LLVMContextDispose(context);
+   lp_context_destroy(&context);
 
    return success;
 }

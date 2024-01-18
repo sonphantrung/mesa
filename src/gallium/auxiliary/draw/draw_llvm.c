@@ -124,13 +124,13 @@ create_jit_dvbuffer_type(struct gallivm_state *gallivm,
    LLVMTargetDataRef target = gallivm->target;
    LLVMTypeRef dvbuffer_type;
    LLVMTypeRef elem_types[DRAW_JIT_DVBUFFER_NUM_FIELDS];
-   LLVMTypeRef int32_type = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef int32_type = LLVMInt32TypeInContext(gallivm->context.ref);
 
    elem_types[DRAW_JIT_DVBUFFER_MAP] =
-      LLVMPointerType(LLVMIntTypeInContext(gallivm->context, 8), 0);
+      LLVMPointerType(LLVMIntTypeInContext(gallivm->context.ref, 8), 0);
    elem_types[DRAW_JIT_DVBUFFER_SIZE] = int32_type;
 
-   dvbuffer_type = LLVMStructTypeInContext(gallivm->context, elem_types,
+   dvbuffer_type = LLVMStructTypeInContext(gallivm->context.ref, elem_types,
                                            ARRAY_SIZE(elem_types), 0);
 
    (void) target; /* silence unused var warning for non-debug build */
@@ -151,13 +151,13 @@ static LLVMTypeRef
 create_vs_jit_context_type(struct gallivm_state *gallivm, const char *struct_name)
 {
    LLVMTargetDataRef target = gallivm->target;
-   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context);
+   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context.ref);
    LLVMTypeRef elem_types[DRAW_VS_JIT_CTX_NUM_FIELDS];
 
    elem_types[DRAW_VS_JIT_CTX_PLANES] = LLVMPointerType(LLVMArrayType(LLVMArrayType(float_type, 4), DRAW_TOTAL_CLIP_PLANES), 0);
    elem_types[DRAW_VS_JIT_CTX_VIEWPORT] = LLVMPointerType(float_type, 0);
 
-   LLVMTypeRef context_type = LLVMStructTypeInContext(gallivm->context, elem_types, ARRAY_SIZE(elem_types), 0);
+   LLVMTypeRef context_type = LLVMStructTypeInContext(gallivm->context.ref, elem_types, ARRAY_SIZE(elem_types), 0);
 
    (void) target; /* silence unused var warning for non-debug build */
    LP_CHECK_MEMBER_OFFSET(struct draw_vs_jit_context, planes,
@@ -180,8 +180,8 @@ create_gs_jit_context_type(struct gallivm_state *gallivm,
                            const char *struct_name)
 {
    LLVMTargetDataRef target = gallivm->target;
-   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context);
-   LLVMTypeRef int_type = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context.ref);
+   LLVMTypeRef int_type = LLVMInt32TypeInContext(gallivm->context.ref);
    LLVMTypeRef elem_types[DRAW_GS_JIT_CTX_NUM_FIELDS];
    LLVMTypeRef context_type;
 
@@ -196,7 +196,7 @@ create_gs_jit_context_type(struct gallivm_state *gallivm,
    elem_types[DRAW_GS_JIT_CTX_EMITTED_PRIMS] = LLVMPointerType(LLVMVectorType(int_type,
                                                                               vector_length), 0);
 
-   context_type = LLVMStructTypeInContext(gallivm->context, elem_types,
+   context_type = LLVMStructTypeInContext(gallivm->context.ref, elem_types,
                                           ARRAY_SIZE(elem_types), 0);
 
    (void) target; /* silence unused var warning for non-debug build */
@@ -222,7 +222,7 @@ create_gs_jit_context_type(struct gallivm_state *gallivm,
 static LLVMTypeRef
 create_gs_jit_input_type_deref(struct gallivm_state *gallivm)
 {
-   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context);
+   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context.ref);
    LLVMTypeRef input_array;
 
    input_array = LLVMVectorType(float_type, TGSI_NUM_CHANNELS); /* num primitives */
@@ -250,11 +250,11 @@ create_jit_vertex_buffer_type(struct gallivm_state *gallivm,
    LLVMTypeRef elem_types[3];
    LLVMTypeRef vb_type;
 
-   elem_types[0] = LLVMInt8TypeInContext(gallivm->context);
-   elem_types[1] = LLVMInt32TypeInContext(gallivm->context);
-   elem_types[2] = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0);
+   elem_types[0] = LLVMInt8TypeInContext(gallivm->context.ref);
+   elem_types[1] = LLVMInt32TypeInContext(gallivm->context.ref);
+   elem_types[2] = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0);
 
-   vb_type = LLVMStructTypeInContext(gallivm->context, elem_types,
+   vb_type = LLVMStructTypeInContext(gallivm->context.ref, elem_types,
                                      ARRAY_SIZE(elem_types), 0);
 
    (void) target; /* silence unused var warning for non-debug build */
@@ -274,7 +274,7 @@ create_jit_vertex_buffer_type(struct gallivm_state *gallivm,
 static LLVMTypeRef
 create_tcs_jit_input_type_deref(struct gallivm_state *gallivm)
 {
-   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context);
+   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context.ref);
    LLVMTypeRef input_array;
 
    input_array = LLVMArrayType(float_type, TGSI_NUM_CHANNELS); /* num channels */
@@ -293,7 +293,7 @@ create_tcs_jit_input_type(struct gallivm_state *gallivm)
 static LLVMTypeRef
 create_tcs_jit_output_type_deref(struct gallivm_state *gallivm)
 {
-   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context);
+   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context.ref);
    LLVMTypeRef output_array;
 
    output_array = LLVMArrayType(float_type, TGSI_NUM_CHANNELS); /* num channels */
@@ -312,7 +312,7 @@ create_tcs_jit_output_type(struct gallivm_state *gallivm)
 static LLVMTypeRef
 create_tes_jit_input_deref_type(struct gallivm_state *gallivm)
 {
-   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context);
+   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context.ref);
    LLVMTypeRef input_array;
 
    input_array = LLVMArrayType(float_type, TGSI_NUM_CHANNELS); /* num channels */
@@ -382,7 +382,7 @@ get_vertex_header_ptr_type(struct draw_llvm_variant *variant)
  * Create per-context LLVM info.
  */
 struct draw_llvm *
-draw_llvm_create(struct draw_context *draw, LLVMContextRef context)
+draw_llvm_create(struct draw_context *draw, lp_context_ref *context)
 {
    struct draw_llvm *llvm;
 
@@ -395,17 +395,14 @@ draw_llvm_create(struct draw_context *draw, LLVMContextRef context)
 
    llvm->draw = draw;
 
-   llvm->context = context;
-   if (!llvm->context) {
-      llvm->context = LLVMContextCreate();
-
-#if LLVM_VERSION_MAJOR == 15
-      LLVMContextSetOpaquePointers(llvm->context, false);
-#endif
-
-      llvm->context_owned = true;
+   if (context) {
+      llvm->context = *context;
+      llvm->context.owned = false;
    }
-   if (!llvm->context)
+   if (!llvm->context.ref) {
+      lp_context_create(&llvm->context);
+   }
+   if (!llvm->context.ref)
       goto fail;
 
    llvm->nr_variants = 0;
@@ -434,9 +431,7 @@ fail:
 void
 draw_llvm_destroy(struct draw_llvm *llvm)
 {
-   if (llvm->context_owned)
-      LLVMContextDispose(llvm->context);
-   llvm->context = NULL;
+   lp_context_destroy(&llvm->context);
 
    /* XXX free other draw_llvm data? */
    FREE(llvm);
@@ -651,7 +646,7 @@ fetch_instanced(struct gallivm_state *gallivm,
                 LLVMValueRef *inputs,
                 LLVMValueRef index)
 {
-   LLVMTypeRef i32_t = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef i32_t = LLVMInt32TypeInContext(gallivm->context.ref);
    LLVMTypeRef aosf_t, aosi_t;
    LLVMValueRef zero = LLVMConstNull(i32_t);
    LLVMBuilderRef builder = gallivm->builder;
@@ -966,9 +961,9 @@ convert_to_aos(struct gallivm_state *gallivm,
             lp_build_name(out, "output%u.%c", attrib, "xyzw"[chan]);
 #if DEBUG_STORE
             lp_build_printf(gallivm, "output %d : %d ",
-                            LLVMConstInt(LLVMInt32TypeInContext(gallivm->context),
+                            LLVMConstInt(LLVMInt32TypeInContext(gallivm->context.ref),
                                          attrib, 0),
-                            LLVMConstInt(LLVMInt32TypeInContext(gallivm->context),
+                            LLVMConstInt(LLVMInt32TypeInContext(gallivm->context.ref),
                                          chan, 0));
             lp_build_print_value(gallivm, "val = ", out);
             {
@@ -1032,7 +1027,7 @@ store_clip(struct gallivm_state *gallivm,
    LLVMValueRef inds[LP_MAX_VECTOR_WIDTH / 32];
    LLVMValueRef clip_ptrs[LP_MAX_VECTOR_WIDTH / 32];
    LLVMTypeRef clip_ptr_type =
-      LLVMPointerType(LLVMVectorType(LLVMFloatTypeInContext(gallivm->context),
+      LLVMPointerType(LLVMVectorType(LLVMFloatTypeInContext(gallivm->context.ref),
                                      4), 0);
 
    for (int i = 0; i < vs_type.length; i++) {
@@ -1258,7 +1253,7 @@ generate_clipmask(struct draw_llvm *llvm,
 
    if (clip_user) {
       LLVMValueRef planes_ptr = draw_vs_jit_context_planes(gallivm, context_type, context_ptr);
-      LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context);
+      LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context.ref);
       LLVMTypeRef planes_type = LLVMArrayType(LLVMArrayType(float_type, 4), DRAW_TOTAL_CLIP_PLANES);
       LLVMValueRef indices[3];
       LLVMValueRef is_nan_or_inf;
@@ -1344,7 +1339,7 @@ clipmask_booli8(struct gallivm_state *gallivm,
                 bool edgeflag_in_clipmask)
 {
    LLVMBuilderRef builder = gallivm->builder;
-   LLVMTypeRef int8_type = LLVMInt8TypeInContext(gallivm->context);
+   LLVMTypeRef int8_type = LLVMInt8TypeInContext(gallivm->context.ref);
    LLVMValueRef clipmask_bool = LLVMBuildLoad2(builder, clipmask_bool_type, clipmask_bool_ptr, "");
    LLVMValueRef ret;
    struct lp_build_context bldivec;
@@ -1391,7 +1386,7 @@ draw_gs_llvm_fetch_input(const struct lp_build_gs_iface *gs_iface,
    LLVMValueRef res;
    struct lp_type type = bld->type;
 
-   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context);
+   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context.ref);
    LLVMTypeRef channel_vec_type = LLVMVectorType(float_type, TGSI_NUM_CHANNELS);
    LLVMTypeRef input_array_type = create_gs_jit_input_type_deref(gallivm);
 
@@ -1516,7 +1511,7 @@ draw_gs_llvm_end_primitive(const struct lp_build_gs_iface *gs_base,
       lp_build_if(&ifthen, gallivm, this_cond);
       prims_emitted = LLVMBuildMul(gallivm->builder, prims_emitted, lp_build_const_int32(gallivm, variant->shader->base.num_vertex_streams), "");
       prims_emitted = LLVMBuildAdd(gallivm->builder, prims_emitted, lp_build_const_int32(gallivm, stream), "");
-      LLVMTypeRef int_type = LLVMInt32TypeInContext(gallivm->context);
+      LLVMTypeRef int_type = LLVMInt32TypeInContext(gallivm->context.ref);
       LLVMTypeRef prim_lengths_type = LLVMPointerType(int_type, 0);
       store_ptr = LLVMBuildGEP2(builder, prim_lengths_type, prim_lengts_ptr, &prims_emitted, 1, "");
       store_ptr = LLVMBuildLoad2(builder, prim_lengths_type, store_ptr, "");
@@ -1554,7 +1549,7 @@ static void
 draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
 {
    struct gallivm_state *gallivm = variant->gallivm;
-   LLVMContextRef context = gallivm->context;
+   LLVMContextRef context = gallivm->context.ref;
    LLVMTypeRef int32_type = LLVMInt32TypeInContext(context);
    LLVMTypeRef arg_types[14];
    unsigned num_arg_types = ARRAY_SIZE(arg_types);
@@ -1681,7 +1676,7 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
     * Function body
     */
 
-   block = LLVMAppendBasicBlockInContext(gallivm->context, variant_func, "entry");
+   block = LLVMAppendBasicBlockInContext(gallivm->context.ref, variant_func, "entry");
    builder = gallivm->builder;
    LLVMPositionBuilderAtEnd(builder, block);
 
@@ -2309,7 +2304,7 @@ draw_gs_llvm_generate(struct draw_llvm *llvm,
                       struct draw_gs_llvm_variant *variant)
 {
    struct gallivm_state *gallivm = variant->gallivm;
-   LLVMContextRef context = gallivm->context;
+   LLVMContextRef context = gallivm->context.ref;
    LLVMTypeRef int32_type = LLVMInt32TypeInContext(context);
    LLVMTypeRef arg_types[9];
    LLVMTypeRef func_type;
@@ -2402,7 +2397,7 @@ draw_gs_llvm_generate(struct draw_llvm *llvm,
     * Function body
     */
 
-   block = LLVMAppendBasicBlockInContext(gallivm->context, variant_func, "entry");
+   block = LLVMAppendBasicBlockInContext(gallivm->context.ref, variant_func, "entry");
    builder = gallivm->builder;
    LLVMPositionBuilderAtEnd(builder, block);
 
@@ -2682,7 +2677,7 @@ draw_tcs_llvm_emit_fetch_input(const struct lp_build_tcs_iface *tes_iface,
    LLVMValueRef res;
    struct lp_type type = bld->type;
    LLVMTypeRef input_type = create_tcs_jit_input_type_deref(gallivm);
-   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context);
+   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context.ref);
 
    if (is_vindex_indirect || is_aindex_indirect || is_sindex_indirect) {
       res = bld->zero;
@@ -2744,7 +2739,7 @@ draw_tcs_llvm_emit_fetch_output(const struct lp_build_tcs_iface *tes_iface,
    LLVMValueRef res;
    struct lp_type type = bld->type;
    LLVMTypeRef output_type = create_tcs_jit_output_type_deref(gallivm);
-   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context);
+   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context.ref);
 
    if (is_vindex_indirect || is_aindex_indirect || is_sindex_indirect) {
       res = bld->zero;
@@ -2896,7 +2891,7 @@ draw_tcs_llvm_generate(struct draw_llvm *llvm,
                        struct draw_tcs_llvm_variant *variant)
 {
    struct gallivm_state *gallivm = variant->gallivm;
-   LLVMContextRef context = gallivm->context;
+   LLVMContextRef context = gallivm->context.ref;
    LLVMTypeRef int32_type = LLVMInt32TypeInContext(context);
    LLVMTypeRef arg_types[7];
    LLVMTypeRef func_type, coro_func_type;
@@ -2935,7 +2930,7 @@ draw_tcs_llvm_generate(struct draw_llvm *llvm,
 
    func_type = LLVMFunctionType(int32_type, arg_types, ARRAY_SIZE(arg_types) - 1, 0);
 
-   coro_func_type = LLVMFunctionType(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0), arg_types, ARRAY_SIZE(arg_types), 0);
+   coro_func_type = LLVMFunctionType(LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0), arg_types, ARRAY_SIZE(arg_types), 0);
 
    variant_func = LLVMAddFunction(gallivm->module, func_name, func_type);
 
@@ -2971,7 +2966,7 @@ draw_tcs_llvm_generate(struct draw_llvm *llvm,
    lp_build_name(patch_vertices_in, "patch_vertices_in");
    lp_build_name(view_index, "view_index");
 
-   block = LLVMAppendBasicBlockInContext(gallivm->context, variant_func, "entry");
+   block = LLVMAppendBasicBlockInContext(gallivm->context.ref, variant_func, "entry");
    builder = gallivm->builder;
    LLVMPositionBuilderAtEnd(builder, block);
 
@@ -2993,7 +2988,7 @@ draw_tcs_llvm_generate(struct draw_llvm *llvm,
    LLVMValueRef num_inner_loop;
    unsigned count_align = util_align_npot(variant->shader->base.vertices_out, tcs_type.length);
    num_inner_loop = lp_build_const_int32(gallivm, count_align / tcs_type.length);
-   LLVMTypeRef hdl_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0);
+   LLVMTypeRef hdl_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context.ref), 0);
    LLVMValueRef coro_hdls = LLVMBuildArrayAlloca(gallivm->builder, hdl_ptr_type, num_inner_loop, "coro_hdls");
    unsigned end_coroutine = INT_MAX;
    lp_build_loop_begin(&loop_state[1], gallivm,
@@ -3042,7 +3037,7 @@ draw_tcs_llvm_generate(struct draw_llvm *llvm,
                           NULL, LLVMIntEQ);
    LLVMBuildRet(builder, lp_build_zero(gallivm, lp_type_uint(32)));
 
-   block = LLVMAppendBasicBlockInContext(gallivm->context, variant_coro, "entry");
+   block = LLVMAppendBasicBlockInContext(gallivm->context.ref, variant_coro, "entry");
    LLVMPositionBuilderAtEnd(builder, block);
 
    resources_ptr = LLVMGetParam(variant_coro, 0);
@@ -3089,8 +3084,8 @@ draw_tcs_llvm_generate(struct draw_llvm *llvm,
 
       struct lp_build_coro_suspend_info coro_info;
 
-      LLVMBasicBlockRef sus_block = LLVMAppendBasicBlockInContext(gallivm->context, variant_coro, "suspend");
-      LLVMBasicBlockRef clean_block = LLVMAppendBasicBlockInContext(gallivm->context, variant_coro, "cleanup");
+      LLVMBasicBlockRef sus_block = LLVMAppendBasicBlockInContext(gallivm->context.ref, variant_coro, "suspend");
+      LLVMBasicBlockRef clean_block = LLVMAppendBasicBlockInContext(gallivm->context.ref, variant_coro, "cleanup");
 
       coro_info.suspend = sus_block;
       coro_info.cleanup = clean_block;
@@ -3383,7 +3378,7 @@ draw_tes_llvm_fetch_vertex_input(const struct lp_build_tes_iface *tes_iface,
          indices[2] = swiz_chan_index;
 
          channel_vec = LLVMBuildGEP2(builder, tes->variant->input_array_deref_type, tes->input, indices, 3, "");
-         channel_vec = LLVMBuildLoad2(builder, LLVMFloatTypeInContext(gallivm->context), channel_vec, "");
+         channel_vec = LLVMBuildLoad2(builder, LLVMFloatTypeInContext(gallivm->context.ref), channel_vec, "");
 
          res = LLVMBuildInsertElement(builder, res, channel_vec, idx, "");
       }
@@ -3393,7 +3388,7 @@ draw_tes_llvm_fetch_vertex_input(const struct lp_build_tes_iface *tes_iface,
       indices[2] = swizzle_index;
 
       res = LLVMBuildGEP2(builder, tes->variant->input_array_deref_type, tes->input, indices, 3, "");
-      res = LLVMBuildLoad2(builder, LLVMFloatTypeInContext(gallivm->context), res, "");
+      res = LLVMBuildLoad2(builder, LLVMFloatTypeInContext(gallivm->context.ref), res, "");
       res = lp_build_broadcast_scalar(bld, res);
    }
    return res;
@@ -3432,7 +3427,7 @@ draw_tes_llvm_fetch_patch_input(const struct lp_build_tes_iface *tes_iface,
          indices[2] = swizzle_index;
 
          channel_vec = LLVMBuildGEP2(builder, tes->variant->input_array_deref_type, tes->input, indices, 3, "");
-         channel_vec = LLVMBuildLoad2(builder, LLVMFloatTypeInContext(gallivm->context), channel_vec, "");
+         channel_vec = LLVMBuildLoad2(builder, LLVMFloatTypeInContext(gallivm->context.ref), channel_vec, "");
 
          res = LLVMBuildInsertElement(builder, res, channel_vec, idx, "");
       }
@@ -3442,7 +3437,7 @@ draw_tes_llvm_fetch_patch_input(const struct lp_build_tes_iface *tes_iface,
       indices[2] = swizzle_index;
 
       res = LLVMBuildGEP2(builder, tes->variant->input_array_deref_type, tes->input, indices, 3, "");
-      res = LLVMBuildLoad2(builder, LLVMFloatTypeInContext(gallivm->context), res, "");
+      res = LLVMBuildLoad2(builder, LLVMFloatTypeInContext(gallivm->context.ref), res, "");
       res = lp_build_broadcast_scalar(bld, res);
    }
    return res;
@@ -3454,7 +3449,7 @@ draw_tes_llvm_generate(struct draw_llvm *llvm,
                        struct draw_tes_llvm_variant *variant)
 {
    struct gallivm_state *gallivm = variant->gallivm;
-   LLVMContextRef context = gallivm->context;
+   LLVMContextRef context = gallivm->context.ref;
    LLVMTypeRef int32_type = LLVMInt32TypeInContext(context);
    LLVMTypeRef flt_type = LLVMFloatTypeInContext(context);
    LLVMTypeRef arg_types[11];
@@ -3544,7 +3539,7 @@ draw_tes_llvm_generate(struct draw_llvm *llvm,
    tes_iface.input = input_array;
    tes_iface.variant = variant;
 
-   block = LLVMAppendBasicBlockInContext(gallivm->context, variant_func, "entry");
+   block = LLVMAppendBasicBlockInContext(gallivm->context.ref, variant_func, "entry");
    builder = gallivm->builder;
    LLVMPositionBuilderAtEnd(builder, block);
 

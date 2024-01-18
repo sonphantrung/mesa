@@ -149,7 +149,7 @@ void lp_exec_mask_update(struct lp_exec_mask *mask)
 void
 lp_exec_mask_function_init(struct lp_exec_mask *mask, int function_idx)
 {
-   LLVMTypeRef int_type = LLVMInt32TypeInContext(mask->bld->gallivm->context);
+   LLVMTypeRef int_type = LLVMInt32TypeInContext(mask->bld->gallivm->context.ref);
    LLVMBuilderRef builder = mask->bld->gallivm->builder;
    struct function_ctx *ctx =  &mask->function_stack[function_idx];
 
@@ -276,8 +276,8 @@ void lp_exec_endloop(struct gallivm_state *gallivm,
    LLVMBuilderRef builder = mask->bld->gallivm->builder;
    struct function_ctx *ctx = func_ctx(mask);
    LLVMBasicBlockRef endloop;
-   LLVMTypeRef int_type = LLVMInt32TypeInContext(mask->bld->gallivm->context);
-   LLVMTypeRef reg_type = LLVMIntTypeInContext(gallivm->context,
+   LLVMTypeRef int_type = LLVMInt32TypeInContext(mask->bld->gallivm->context.ref);
+   LLVMTypeRef reg_type = LLVMIntTypeInContext(gallivm->context.ref,
                                                mask->bld->type.width *
                                                mask->bld->type.length);
    LLVMValueRef i1cond, i2cond, icond, limiter;

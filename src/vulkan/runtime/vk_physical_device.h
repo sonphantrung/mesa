@@ -77,6 +77,9 @@ struct vk_physical_device {
 
    /** Table of all physical device properties which is initialized similarly
     * to supported_features
+    *
+    * For vk_physical_device_check_device_features to work, at least
+    * apiVersion must be initialized.
     */
    struct vk_properties properties;
 

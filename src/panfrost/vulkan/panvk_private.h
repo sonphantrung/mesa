@@ -177,11 +177,6 @@ struct panvk_physical_device {
 
    struct panvk_instance *instance;
 
-   char name[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
-   uint8_t driver_uuid[VK_UUID_SIZE];
-   uint8_t device_uuid[VK_UUID_SIZE];
-   uint8_t cache_uuid[VK_UUID_SIZE];
-
    struct vk_sync_type drm_syncobj_type;
    const struct vk_sync_type *sync_types[2];
 

@@ -584,7 +584,7 @@ anv_rmv_log_cmd_buffer_create(struct anv_device *device,
    struct vk_rmv_resource_create_token create_token = {
       .type               = VK_RMV_RESOURCE_TYPE_COMMAND_ALLOCATOR,
       .resource_id        = resource_id_locked(device, cmd_buffer),
-      .is_driver_internal = true,
+      .is_driver_internal = false,
       .command_buffer     = {
          .preferred_domain                 = VK_RMV_KERNEL_MEMORY_DOMAIN_GTT /* TODO */,
          .executable_size                  = executable_size,

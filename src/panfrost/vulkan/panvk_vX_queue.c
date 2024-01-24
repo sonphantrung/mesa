@@ -32,8 +32,11 @@ panvk_queue_submit_batch(struct panvk_queue *queue, struct panvk_batch *batch,
                          uint32_t *bos, unsigned nr_bos, uint32_t *in_fences,
                          unsigned nr_in_fences)
 {
-   const struct panvk_device *dev = queue->device;
-   unsigned debug = dev->physical_device->instance->debug_flags;
+   const struct panvk_device *dev = panvk_queue_get_device(queue);
+   struct panvk_instance *instance = panvk_device_get_instance(dev);
+   struct panvk_physical_device *physical_device =
+      panvk_device_get_physical_device(dev);
+   unsigned debug = instance->debug_flags;
    int ret;
 
    /* Reset the batch if it's already been issued */
@@ -69,7 +72,7 @@ panvk_queue_submit_batch(struct panvk_queue *queue, struct panvk_batch *batch,
 
       if (debug & PANVK_DEBUG_TRACE) {
          pandecode_jc(dev->debug.decode_ctx, batch->jc.first_job,
-                      dev->physical_device->kmod.props.gpu_prod_id);
+                      physical_device->kmod.props.gpu_prod_id);
       }
 
       if (debug & PANVK_DEBUG_DUMP)
@@ -103,7 +106,7 @@ panvk_queue_submit_batch(struct panvk_queue *queue, struct panvk_batch *batch,
 
       if (debug & PANVK_DEBUG_TRACE)
          pandecode_jc(dev->debug.decode_ctx, batch->fragment_job,
-                      dev->physical_device->kmod.props.gpu_prod_id);
+                      physical_device->kmod.props.gpu_prod_id);
 
       if (debug & PANVK_DEBUG_DUMP)
          pandecode_dump_mappings(dev->debug.decode_ctx);
@@ -118,7 +121,7 @@ panvk_queue_submit_batch(struct panvk_queue *queue, struct panvk_batch *batch,
 static void
 panvk_queue_transfer_sync(struct panvk_queue *queue, uint32_t syncobj)
 {
-   struct panvk_device *dev = queue->device;
+   struct panvk_device *dev = panvk_queue_get_device(queue);
    int ret;
 
    struct drm_syncobj_handle handle = {
@@ -163,7 +166,7 @@ static void
 panvk_signal_event_syncobjs(struct panvk_queue *queue,
                             struct panvk_batch *batch)
 {
-   struct panvk_device *dev = queue->device;
+   struct panvk_device *dev = panvk_queue_get_device(queue);
 
    util_dynarray_foreach(&batch->event_ops, struct panvk_cmd_event_op, op) {
       switch (op->type) {
@@ -196,7 +199,7 @@ panvk_queue_submit(struct vk_queue *vk_queue,
                    struct vk_queue_submit *submit)
 {
    struct panvk_queue *queue = container_of(vk_queue, struct panvk_queue, vk);
-   struct panvk_device *dev = queue->device;
+   struct panvk_device *dev = panvk_queue_get_device(queue);
 
    unsigned nr_semaphores = submit->wait_count + 1;
    uint32_t semaphores[nr_semaphores];
@@ -297,8 +300,6 @@ panvk_per_arch(queue_init)(struct panvk_device *device,
    if (result != VK_SUCCESS)
       return result;
 
-   queue->device = device;
-
    int ret = drmSyncobjCreate(device->vk.drm_fd, DRM_SYNCOBJ_CREATE_SIGNALED,
                               &queue->sync);
    if (ret) {
@@ -314,8 +315,9 @@ VKAPI_ATTR VkResult VKAPI_CALL
 panvk_per_arch(QueueWaitIdle)(VkQueue _queue)
 {
    VK_FROM_HANDLE(panvk_queue, queue, _queue);
+   struct panvk_device *device = panvk_queue_get_device(queue);
 
-   if (vk_device_is_lost(&queue->device->vk))
+   if (vk_device_is_lost(&device->vk))
       return VK_ERROR_DEVICE_LOST;
 
    int ret = drmSyncobjWait(queue->vk.base.device->drm_fd, &queue->sync, 1,

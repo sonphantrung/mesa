@@ -10,9 +10,11 @@
 
 #include "vulkan/runtime/vk_device.h"
 
+#include "panvk_instance.h"
 #include "panvk_macros.h"
 #include "panvk_mempool.h"
 #include "panvk_meta.h"
+#include "panvk_physical_device.h"
 
 #include "kmod/pan_kmod.h"
 #include "pan_blend.h"
@@ -37,12 +39,8 @@ struct panvk_device {
 
    struct vk_device_dispatch_table cmd_dispatch;
 
-   struct panvk_instance *instance;
-
    struct panvk_queue *queues[PANVK_MAX_QUEUE_FAMILIES];
    int queue_count[PANVK_MAX_QUEUE_FAMILIES];
-
-   struct panvk_physical_device *physical_device;
 
    struct {
       struct pandecode_context *decode_ctx;
@@ -51,6 +49,20 @@ struct panvk_device {
 
 VK_DEFINE_HANDLE_CASTS(panvk_device, vk.base, VkDevice, VK_OBJECT_TYPE_DEVICE)
 
+static inline struct panvk_physical_device *
+panvk_device_get_physical_device(const struct panvk_device *dev)
+{
+   return container_of(dev->vk.physical, struct panvk_physical_device, vk);
+}
+
+static inline struct panvk_instance *
+panvk_device_get_instance(const struct panvk_device *dev)
+{
+   struct panvk_physical_device *phys_dev =
+      panvk_device_get_physical_device(dev);
+
+   return panvk_physical_device_get_instance(phys_dev);
+}
 
 #if PAN_ARCH
 VkResult

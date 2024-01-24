@@ -223,6 +223,9 @@ panvk_per_arch(shader_create)(struct panvk_device *dev, gl_shader_stage stage,
                               const VkAllocationCallbacks *alloc)
 {
    VK_FROM_HANDLE(vk_shader_module, module, stage_info->module);
+   struct panvk_physical_device *physical_device =
+      panvk_device_get_physical_device(dev);
+   struct panvk_instance *instance = panvk_device_get_instance(dev);
    struct panvk_shader *shader;
 
    shader = vk_zalloc2(&dev->vk.alloc, alloc, sizeof(*shader), 8,
@@ -258,7 +261,7 @@ panvk_per_arch(shader_create)(struct panvk_device *dev, gl_shader_stage stage,
               true, true);
 
    struct panfrost_compile_inputs inputs = {
-      .gpu_id = dev->physical_device->kmod.props.gpu_prod_id,
+      .gpu_id = physical_device->kmod.props.gpu_prod_id,
       .no_ubo_to_push = true,
       .no_idvs = true, /* TODO */
    };
@@ -342,8 +345,7 @@ panvk_per_arch(shader_create)(struct panvk_device *dev, gl_shader_stage stage,
    NIR_PASS_V(nir, nir_lower_global_vars_to_local);
 
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
-   if (unlikely(dev->physical_device->instance->debug_flags &
-                PANVK_DEBUG_NIR)) {
+   if (unlikely(instance->debug_flags & PANVK_DEBUG_NIR)) {
       fprintf(stderr, "translated nir:\n");
       nir_print_shader(nir, stderr);
    }
@@ -397,6 +399,9 @@ panvk_per_arch(blend_needs_lowering)(const struct panvk_device *dev,
                                      const struct pan_blend_state *state,
                                      unsigned rt)
 {
+   struct panvk_physical_device *physical_device =
+      panvk_device_get_physical_device(dev);
+
    /* LogicOp requires a blend shader */
    if (state->logicop_enable)
       return true;
@@ -417,7 +422,7 @@ panvk_per_arch(blend_needs_lowering)(const struct panvk_device *dev,
    if (!pan_blend_is_homogenous_constant(constant_mask, state->constants))
       return true;
 
-   unsigned arch = pan_arch(dev->physical_device->kmod.props.gpu_prod_id);
+   unsigned arch = pan_arch(physical_device->kmod.props.gpu_prod_id);
    bool supports_2src = pan_blend_supports_2src(arch);
    return !pan_blend_can_fixed_function(state->rts[rt].equation, supports_2src);
 }

@@ -56,12 +56,13 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
                               const VkAllocationCallbacks *pAllocator,
                               VkDevice *pDevice)
 {
-   struct panvk_instance *instance = physical_device->instance;
+   struct panvk_instance *instance =
+      panvk_physical_device_get_instance(physical_device);
    VkResult result;
    struct panvk_device *device;
 
-   device = vk_zalloc2(&physical_device->instance->vk.alloc, pAllocator,
-                       sizeof(*device), 8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   device = vk_zalloc2(&instance->vk.alloc, pAllocator, sizeof(*device), 8,
+                       VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
    if (!device)
       return vk_error(physical_device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
@@ -101,9 +102,6 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
     */
    device->vk.command_dispatch_table = &device->cmd_dispatch;
    device->vk.command_buffer_ops = &panvk_per_arch(cmd_buffer_ops);
-
-   device->instance = physical_device->instance;
-   device->physical_device = physical_device;
 
    device->kmod.allocator = (struct pan_kmod_allocator){
       .zalloc = panvk_kmod_zalloc,

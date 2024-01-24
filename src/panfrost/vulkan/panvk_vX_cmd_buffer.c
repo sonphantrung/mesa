@@ -31,8 +31,8 @@
 #include "panvk_buffer.h"
 #include "panvk_cmd_buffer.h"
 #include "panvk_cmd_pool.h"
-#include "panvk_entrypoints.h"
 #include "panvk_device.h"
+#include "panvk_entrypoints.h"
 #include "panvk_event.h"
 #include "panvk_image.h"
 #include "panvk_image_view.h"
@@ -109,7 +109,8 @@ static uint32_t
 panvk_debug_adjust_bo_flags(const struct panvk_device *device,
                             uint32_t bo_flags)
 {
-   uint32_t debug_flags = device->physical_device->instance->debug_flags;
+   struct panvk_instance *instance = panvk_device_get_instance(device);
+   uint32_t debug_flags = instance->debug_flags;
 
    if (debug_flags & PANVK_DEBUG_DUMP)
       bo_flags &= ~PAN_KMOD_BO_FLAG_NO_MMAP;
@@ -166,7 +167,9 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
       return;
    }
 
-   struct panvk_device *dev = cmdbuf->device;
+   struct panvk_device *dev = panvk_cmd_get_device(cmdbuf);
+   struct panvk_physical_device *physical_device =
+      panvk_device_get_physical_device(dev);
 
    list_addtail(&batch->node, &cmdbuf->batches);
 
@@ -182,11 +185,10 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
 
    if (batch->tlsinfo.tls.size) {
       unsigned thread_tls_alloc =
-         panfrost_query_thread_tls_alloc(&dev->physical_device->kmod.props);
+         panfrost_query_thread_tls_alloc(&physical_device->kmod.props);
       unsigned core_id_range;
 
-      panfrost_query_core_count(&dev->physical_device->kmod.props,
-                                &core_id_range);
+      panfrost_query_core_count(&physical_device->kmod.props, &core_id_range);
 
       unsigned size = panfrost_get_total_stack_size(
          batch->tlsinfo.tls.size, thread_tls_alloc, core_id_range);
@@ -206,7 +208,9 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
       GENX(pan_emit_tls)(&batch->tlsinfo, batch->tls.cpu);
 
    if (batch->fb.desc.cpu) {
-      fbinfo->sample_positions = cmdbuf->device->sample_positions->addr.dev +
+      struct panvk_device *dev = panvk_cmd_get_device(cmdbuf);
+
+      fbinfo->sample_positions = dev->sample_positions->addr.dev +
                                  panfrost_sample_positions_offset(
                                     pan_sample_pattern(fbinfo->nr_samples));
 
@@ -378,8 +382,8 @@ panvk_cmd_prepare_push_sets(struct panvk_cmd_buffer *cmdbuf,
 
       struct panvk_descriptor_set *set = &desc_state->push_sets[i]->set;
 
-      panvk_per_arch(push_descriptor_set_assign_layout)(desc_state->push_sets[i],
-                                                        slayout);
+      panvk_per_arch(push_descriptor_set_assign_layout)(
+         desc_state->push_sets[i], slayout);
       if (slayout->desc_ubo_size) {
          struct panfrost_ptr desc_ubo = pan_pool_alloc_aligned(
             &cmdbuf->desc_pool.base, slayout->desc_ubo_size, 16);
@@ -400,13 +404,15 @@ panvk_cmd_prepare_push_sets(struct panvk_cmd_buffer *cmdbuf,
 }
 
 static void
-panvk_cmd_unprepare_push_sets(struct panvk_cmd_buffer *cmdbuf,
-                              struct panvk_cmd_bind_point_state *bind_point_state)
+panvk_cmd_unprepare_push_sets(
+   struct panvk_cmd_buffer *cmdbuf,
+   struct panvk_cmd_bind_point_state *bind_point_state)
 {
    struct panvk_descriptor_state *desc_state = &bind_point_state->desc_state;
 
    for (unsigned i = 0; i < ARRAY_SIZE(desc_state->sets); i++) {
-      if (desc_state->push_sets[i] && &desc_state->push_sets[i]->set == desc_state->sets[i])
+      if (desc_state->push_sets[i] &&
+          &desc_state->push_sets[i]->set == desc_state->sets[i])
          desc_state->sets[i] = NULL;
    }
 }
@@ -649,7 +655,8 @@ panvk_per_arch(cmd_get_tiler_context)(struct panvk_cmd_buffer *cmdbuf,
       &cmdbuf->desc_pool.base, PAN_DESC(TILER_CONTEXT), PAN_DESC(TILER_HEAP));
    STATIC_ASSERT(sizeof(batch->tiler.templ) >=
                  pan_size(TILER_CONTEXT) + pan_size(TILER_HEAP));
-   struct panvk_device *dev = cmdbuf->device;
+
+   struct panvk_device *dev = panvk_cmd_get_device(cmdbuf);
 
    pan_pack((void *)((uint8_t *)batch->tiler.templ + pan_size(TILER_CONTEXT)),
             TILER_HEAP, cfg) {
@@ -1353,8 +1360,9 @@ panvk_index_minmax_search(struct panvk_cmd_buffer *cmdbuf, uint32_t start,
    assert(cmdbuf->state.ib.buffer->bo);
    assert(cmdbuf->state.ib.buffer->host_ptr);
 
-   uint32_t debug_flags =
-      cmdbuf->device->physical_device->instance->debug_flags;
+   struct panvk_device *dev = panvk_cmd_get_device(cmdbuf);
+   struct panvk_instance *instance = panvk_device_get_instance(dev);
+   uint32_t debug_flags = instance->debug_flags;
 
    if (!(debug_flags & PANVK_DEBUG_NO_KNOWN_WARN)) {
       fprintf(
@@ -1591,7 +1599,7 @@ panvk_destroy_cmdbuf(struct vk_command_buffer *vk_cmdbuf)
 {
    struct panvk_cmd_buffer *cmdbuf =
       container_of(vk_cmdbuf, struct panvk_cmd_buffer, vk);
-   struct panvk_device *device = cmdbuf->device;
+   struct panvk_device *device = panvk_cmd_get_device(cmdbuf);
 
    for (unsigned i = 0; i < MAX_BIND_POINTS; i++) {
       for (unsigned j = 0; j < MAX_SETS; j++) {
@@ -1638,8 +1646,6 @@ panvk_create_cmdbuf(struct vk_command_pool *vk_pool,
       return result;
    }
 
-   cmdbuf->device = device;
-
    panvk_pool_init(&cmdbuf->desc_pool, device, &pool->desc_bo_pool, 0,
                    64 * 1024, "Command buffer descriptor pool", true);
    panvk_pool_init(
@@ -1685,7 +1691,9 @@ panvk_per_arch(CmdDispatch)(VkCommandBuffer commandBuffer, uint32_t x,
 
    panvk_per_arch(cmd_close_batch)(cmdbuf);
    struct panvk_batch *batch = panvk_cmd_open_batch(cmdbuf);
-   struct panvk_device *dev = cmdbuf->device;
+   struct panvk_device *dev = panvk_cmd_get_device(cmdbuf);
+   struct panvk_physical_device *physical_device =
+      panvk_device_get_physical_device(dev);
 
    struct panvk_cmd_bind_point_state *bind_point_state =
       panvk_cmd_get_bind_point_state(cmdbuf, COMPUTE);
@@ -1750,8 +1758,7 @@ panvk_per_arch(CmdDispatch)(VkCommandBuffer commandBuffer, uint32_t x,
    if (batch->tlsinfo.wls.size) {
       unsigned core_id_range;
 
-      panfrost_query_core_count(&dev->physical_device->kmod.props,
-                                &core_id_range);
+      panfrost_query_core_count(&physical_device->kmod.props, &core_id_range);
       batch->wls_total_size = pan_wls_adjust_size(batch->tlsinfo.wls.size) *
                               pan_wls_instances(&dispatch.wg_count) *
                               core_id_range;
@@ -1767,14 +1774,17 @@ panvk_cmd_begin_rendering_init_fbinfo(struct panvk_cmd_buffer *cmdbuf,
                                       const VkRenderingInfo *pRenderingInfo)
 {
    struct pan_fb_info *fbinfo = &cmdbuf->state.fb.info;
+   struct panvk_device *dev = panvk_cmd_get_device(cmdbuf);
+   struct panvk_physical_device *physical_device =
+      panvk_device_get_physical_device(dev);
 
    cmdbuf->state.fb.bo_count = 0;
    memset(cmdbuf->state.fb.bos, 0, sizeof(cmdbuf->state.fb.bos));
    memset(cmdbuf->state.fb.crc_valid, 0, sizeof(cmdbuf->state.fb.crc_valid));
 
    *fbinfo = (struct pan_fb_info){
-      .tile_buf_budget = panfrost_query_optimal_tib_size(
-         cmdbuf->device->physical_device->model),
+      .tile_buf_budget =
+         panfrost_query_optimal_tib_size(physical_device->model),
       .width = pRenderingInfo->renderArea.offset.x +
                pRenderingInfo->renderArea.extent.width,
       .height = pRenderingInfo->renderArea.offset.y +
@@ -1812,7 +1822,7 @@ panvk_cmd_begin_rendering_init_fbinfo(struct panvk_cmd_buffer *cmdbuf,
             (union pipe_color_union *)&att->clearValue.color;
 
          fbinfo->rts[i].clear = true;
-         pan_pack_color(cmdbuf->device->physical_device->formats.blendable,
+         pan_pack_color(physical_device->formats.blendable,
                         fbinfo->rts[i].clear_value, col, fmt, false);
       } else if (att->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD) {
          fbinfo->rts[i].preload = true;
@@ -1831,8 +1841,7 @@ panvk_cmd_begin_rendering_init_fbinfo(struct panvk_cmd_buffer *cmdbuf,
 
       if (att->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR) {
          fbinfo->zs.clear.z = true;
-         fbinfo->zs.clear_value.depth =
-            att->clearValue.depthStencil.depth;
+         fbinfo->zs.clear_value.depth = att->clearValue.depthStencil.depth;
       } else if (att->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD) {
          fbinfo->zs.preload.z = true;
       }
@@ -1851,8 +1860,7 @@ panvk_cmd_begin_rendering_init_fbinfo(struct panvk_cmd_buffer *cmdbuf,
 
       if (iview && att->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR) {
          fbinfo->zs.clear.s = true;
-         fbinfo->zs.clear_value.stencil =
-            att->clearValue.depthStencil.stencil;
+         fbinfo->zs.clear_value.stencil = att->clearValue.depthStencil.stencil;
       } else if (att->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD) {
          fbinfo->zs.preload.s = true;
       }
@@ -1880,8 +1888,7 @@ panvk_per_arch(CmdEndRendering)(VkCommandBuffer commandBuffer)
 
 static struct panvk_push_descriptor_set *
 panvk_cmd_push_descriptors(struct panvk_cmd_buffer *cmdbuf,
-                           VkPipelineBindPoint bind_point,
-                           uint32_t set)
+                           VkPipelineBindPoint bind_point, uint32_t set)
 {
    struct panvk_cmd_bind_point_state *bind_point_state =
       &cmdbuf->bind_points[bind_point];
@@ -1937,7 +1944,8 @@ panvk_per_arch(CmdPushDescriptorSetWithTemplateKHR)(
    VkDescriptorUpdateTemplate descriptorUpdateTemplate, VkPipelineLayout layout,
    uint32_t set, const void *pData)
 {
-   VK_FROM_HANDLE(vk_descriptor_update_template, template, descriptorUpdateTemplate);
+   VK_FROM_HANDLE(vk_descriptor_update_template, template,
+                  descriptorUpdateTemplate);
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
    VK_FROM_HANDLE(panvk_pipeline_layout, playout, layout);
    const struct panvk_descriptor_set_layout *set_layout =

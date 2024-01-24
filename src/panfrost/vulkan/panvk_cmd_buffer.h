@@ -12,6 +12,7 @@
 
 #include "panvk_descriptor_set.h"
 #include "panvk_descriptor_set_layout.h"
+#include "panvk_device.h"
 #include "panvk_macros.h"
 #include "panvk_mempool.h"
 #include "panvk_pipeline.h"
@@ -166,8 +167,6 @@ struct panvk_cmd_bind_point_state {
 struct panvk_cmd_buffer {
    struct vk_command_buffer vk;
 
-   struct panvk_device *device;
-
    struct panvk_pool desc_pool;
    struct panvk_pool varying_pool;
    struct panvk_pool tls_pool;
@@ -186,6 +185,12 @@ struct panvk_cmd_buffer {
 
 VK_DEFINE_HANDLE_CASTS(panvk_cmd_buffer, vk.base, VkCommandBuffer,
                        VK_OBJECT_TYPE_COMMAND_BUFFER)
+
+static inline struct panvk_device *
+panvk_cmd_get_device(const struct panvk_cmd_buffer *cmdbuf)
+{
+   return container_of(cmdbuf->vk.base.device, struct panvk_device, vk);
+}
 
 #define panvk_cmd_get_bind_point_state(cmdbuf, bindpoint)                      \
    &(cmdbuf)->bind_points[VK_PIPELINE_BIND_POINT_##bindpoint]

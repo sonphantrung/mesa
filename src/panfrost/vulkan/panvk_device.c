@@ -102,7 +102,8 @@ VKAPI_ATTR void VKAPI_CALL
 panvk_DestroyDevice(VkDevice _device, const VkAllocationCallbacks *pAllocator)
 {
    VK_FROM_HANDLE(panvk_device, device, _device);
-   struct panvk_physical_device *physical_device = device->physical_device;
+   struct panvk_physical_device *physical_device =
+      panvk_device_get_physical_device(device);
    unsigned arch = pan_arch(physical_device->kmod.props.gpu_prod_id);
 
    panvk_arch_dispatch(arch, destroy_device, device, pAllocator);

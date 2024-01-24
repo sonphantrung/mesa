@@ -8,6 +8,8 @@
 
 #include <stdint.h>
 
+#include "panvk_instance.h"
+
 #include "vulkan/runtime/vk_physical_device.h"
 #include "vulkan/runtime/vk_sync.h"
 #include "vulkan/wsi/wsi_common.h"
@@ -33,8 +35,6 @@ struct panvk_physical_device {
       const struct panfrost_format *all;
    } formats;
 
-   struct panvk_instance *instance;
-
    char name[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
    uint8_t driver_uuid[VK_UUID_SIZE];
    uint8_t device_uuid[VK_UUID_SIZE];
@@ -50,6 +50,12 @@ struct panvk_physical_device {
 
 VK_DEFINE_HANDLE_CASTS(panvk_physical_device, vk.base, VkPhysicalDevice,
                        VK_OBJECT_TYPE_PHYSICAL_DEVICE)
+
+static inline struct panvk_instance *
+panvk_physical_device_get_instance(const struct panvk_physical_device *phys_dev)
+{
+   return container_of(phys_dev->vk.instance, struct panvk_instance, vk);
+}
 
 VkResult panvk_physical_device_init(struct panvk_physical_device *device,
                                     struct panvk_instance *instance,

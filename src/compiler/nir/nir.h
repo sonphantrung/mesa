@@ -4680,6 +4680,7 @@ void nir_def_rewrite_uses(nir_def *def, nir_def *new_ssa);
 void nir_def_rewrite_uses_src(nir_def *def, nir_src new_src);
 void nir_def_rewrite_uses_after(nir_def *def, nir_def *new_ssa,
                                 nir_instr *after_me);
+void nir_def_replace(nir_def *old, nir_def *replacement);
 
 nir_component_mask_t nir_src_components_read(const nir_src *src);
 nir_component_mask_t nir_def_components_read(const nir_def *def);

@@ -1535,6 +1535,13 @@ nir_def_rewrite_uses_src(nir_def *def, nir_src new_src)
    nir_def_rewrite_uses(def, new_src.ssa);
 }
 
+void
+nir_def_replace(nir_def *old, nir_def *replacement)
+{
+   nir_def_rewrite_uses(old, replacement);
+   nir_instr_remove(old->parent_instr);
+}
+
 static bool
 is_instr_between(nir_instr *start, nir_instr *end, nir_instr *between)
 {

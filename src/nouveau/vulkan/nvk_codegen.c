@@ -817,7 +817,7 @@ nvk_cg_compile_nir(struct nvk_physical_device *pdev, nir_shader *nir,
    info->optLevel = nvk_cg_get_prog_optimize();
    info->io.auxCBSlot = 1;
    info->io.uboInfoBase = 0;
-   info->io.drawInfoBase = nvk_root_descriptor_offset(draw.base_vertex);
+   info->io.drawInfoBase = nvk_root_descriptor_offset(draw.vs.base_vertex);
    if (nir->info.stage == MESA_SHADER_COMPUTE) {
       info->prop.cp.gridInfoBase = 0;
    } else {

@@ -1300,6 +1300,9 @@ nir_atomic_op_type(nir_atomic_op op)
    unreachable("Invalid nir_atomic_op");
 }
 
+nir_op
+nir_atomic_op_to_alu(nir_atomic_op op);
+
 /** Returns nir_op_vec<num_components> or nir_op_mov if num_components == 1
  *
  * This is subtly different from nir_op_is_vec() which returns false for
@@ -4683,6 +4686,7 @@ void nir_def_rewrite_uses(nir_def *def, nir_def *new_ssa);
 void nir_def_rewrite_uses_src(nir_def *def, nir_src new_src);
 void nir_def_rewrite_uses_after(nir_def *def, nir_def *new_ssa,
                                 nir_instr *after_me);
+void nir_def_replace(nir_def *old, nir_def *replacement);
 
 nir_component_mask_t nir_src_components_read(const nir_src *src);
 nir_component_mask_t nir_def_components_read(const nir_def *def);

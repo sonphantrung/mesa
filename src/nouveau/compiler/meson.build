@@ -26,6 +26,7 @@ libnak_c_files = files(
   'nak_nir_lower_tex.c',
   'nak_nir_lower_vtg_io.c',
   'nak_nir_lower_gs_intrinsics.c',
+  'nak_nir_lower_mesh_intrinsics.c',
 )
 
 _libbitview_rs = static_library(

@@ -667,7 +667,11 @@ nvk_CmdPushConstants(VkCommandBuffer commandBuffer,
 {
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
 
-   if (stageFlags & VK_SHADER_STAGE_ALL_GRAPHICS) {
+   const VkShaderStageFlags graphics_stage_flags = VK_SHADER_STAGE_ALL_GRAPHICS |
+                                                   VK_SHADER_STAGE_TASK_BIT_EXT |
+                                                   VK_SHADER_STAGE_MESH_BIT_EXT;
+
+   if (stageFlags & graphics_stage_flags) {
       struct nvk_descriptor_state *desc =
          nvk_get_descriptors_state(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS);
 

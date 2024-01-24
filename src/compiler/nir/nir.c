@@ -1535,6 +1535,13 @@ nir_def_rewrite_uses_src(nir_def *def, nir_src new_src)
    nir_def_rewrite_uses(def, new_src.ssa);
 }
 
+void
+nir_def_replace(nir_def *old, nir_def *replacement)
+{
+   nir_def_rewrite_uses(old, replacement);
+   nir_instr_remove(old->parent_instr);
+}
+
 static bool
 is_instr_between(nir_instr *start, nir_instr *end, nir_instr *between)
 {
@@ -3428,4 +3435,43 @@ nir_static_workgroup_size(const nir_shader *s)
 {
    return s->info.workgroup_size[0] * s->info.workgroup_size[1] *
           s->info.workgroup_size[2];
+}
+
+nir_op
+nir_atomic_op_to_alu(nir_atomic_op op)
+{
+   switch (op) {
+   case nir_atomic_op_iadd:
+      return nir_op_iadd;
+   case nir_atomic_op_imin:
+      return nir_op_imin;
+   case nir_atomic_op_umin:
+      return nir_op_umin;
+   case nir_atomic_op_imax:
+      return nir_op_imax;
+   case nir_atomic_op_umax:
+      return nir_op_umax;
+   case nir_atomic_op_iand:
+      return nir_op_iand;
+   case nir_atomic_op_ior:
+      return nir_op_ior;
+   case nir_atomic_op_ixor:
+      return nir_op_ixor;
+   case nir_atomic_op_fadd:
+      return nir_op_fadd;
+   case nir_atomic_op_fmin:
+      return nir_op_fmin;
+   case nir_atomic_op_fmax:
+      return nir_op_fmax;
+
+   /* We don't handle exchanges or wraps */
+   case nir_atomic_op_xchg:
+   case nir_atomic_op_cmpxchg:
+   case nir_atomic_op_fcmpxchg:
+   case nir_atomic_op_inc_wrap:
+   case nir_atomic_op_dec_wrap:
+      return nir_num_opcodes;
+   }
+
+   unreachable("Invalid nir_atomic_op");
 }

@@ -43,6 +43,7 @@ nvk_files = files(
   'nvk_mme.c',
   'nvk_mme.h',
   'nvk_nir_lower_descriptors.c',
+  'nvk_nir_lower_ms.c',
   'nvk_physical_device.c',
   'nvk_physical_device.h',
   'nvk_pipeline.c',

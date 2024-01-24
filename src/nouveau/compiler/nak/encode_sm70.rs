@@ -1901,7 +1901,52 @@ impl SM70Instr {
     fn encode_isberd(&mut self, op: &OpIsberd) {
         self.set_opcode(0x923);
         self.set_dst(op.dst);
-        self.set_reg_src(24..32, op.idx);
+        self.set_reg_src(24..32, op.offset);
+        self.set_field(
+            74..76,
+            match op.mem_type {
+                MemType::U8 => 0_u8,
+                MemType::U16 => 1_u8,
+                MemType::B32 => 2_u8,
+                _ => panic!("Invalid ISBERD mem type"),
+            },
+        );
+        self.set_field(
+            76..78,
+            match op.access_type {
+                IsbeAccessType::Map => 0_u8,
+                IsbeAccessType::Patch => 1_u8,
+                IsbeAccessType::Primitive => 2_u8,
+                IsbeAccessType::Attribute => 3_u8,
+            },
+        );
+        self.set_bit(78, op.skew);
+        self.set_bit(79, op.output);
+    }
+
+    fn encode_isbewr(&mut self, op: &OpIsbewr) {
+        self.set_opcode(0x927);
+        self.set_reg_src(24..32, op.offset);
+        self.set_reg_src(32..40, op.data);
+        self.set_field(
+            74..76,
+            match op.mem_type {
+                MemType::U8 => 0_u8,
+                MemType::U16 => 1_u8,
+                MemType::B32 => 2_u8,
+                _ => panic!("Invalid ISBERD mem type"),
+            },
+        );
+        self.set_field(
+            76..78,
+            match op.access_type {
+                IsbeAccessType::Map => 0_u8,
+                IsbeAccessType::Attribute => 3_u8,
+                _ => panic!("Invalid ISBEWR access type"),
+            },
+        );
+        self.set_bit(78, op.skew);
+        self.set_bit(79, op.output);
     }
 
     fn encode_kill(&mut self, _op: &OpKill) {
@@ -2061,6 +2106,7 @@ impl SM70Instr {
             Op::Bar(op) => si.encode_bar(&op),
             Op::CS2R(op) => si.encode_cs2r(&op),
             Op::Isberd(op) => si.encode_isberd(&op),
+            Op::Isbewr(op) => si.encode_isbewr(&op),
             Op::Kill(op) => si.encode_kill(&op),
             Op::Nop(op) => si.encode_nop(&op),
             Op::PixLd(op) => si.encode_pixld(&op),

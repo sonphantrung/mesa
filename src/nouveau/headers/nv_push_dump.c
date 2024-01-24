@@ -10,22 +10,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cl902d.h"
-#include "cla097.h"
-#include "clb097.h"
-#include "clc097.h"
-#include "clc397.h"
-#include "clc597.h"
-#include "clc697.h"
-#include "clc997.h"
+#include "nvidia/classes/cl902d.h"
+#include "nvidia/classes/cla097.h"
+#include "nvidia/classes/clb097.h"
+#include "nvidia/classes/clc097.h"
+#include "nvidia/classes/clc397.h"
+#include "nvidia/classes/clc597.h"
+#include "nvidia/classes/clc697.h"
+#include "nvidia/classes/clc997.h"
 
-#include "cla0c0.h"
-#include "clb0c0.h"
-#include "clc0c0.h"
-#include "clc3c0.h"
-#include "clc5c0.h"
-#include "clc6c0.h"
-#include "clc7c0.h"
+#include "nvidia/classes/cla0c0.h"
+#include "nvidia/classes/clb0c0.h"
+#include "nvidia/classes/clc0c0.h"
+#include "nvidia/classes/clc3c0.h"
+#include "nvidia/classes/clc5c0.h"
+#include "nvidia/classes/clc6c0.h"
+#include "nvidia/classes/clc7c0.h"
 
 #define KEPLER_DMA_COPY_A 0x0000a0b5
 #define MAXWELL_DMA_COPY_A 0x0000b0b5

@@ -26,6 +26,9 @@ enum nvk_mme {
    NVK_MME_XFB_DRAW_INDIRECT,
    NVK_MME_SET_PRIV_REG,
    NVK_MME_SET_WRITE_MASK,
+   NVK_MME_DRAW_MESH,
+   NVK_MME_DRAW_MESH_INDIRECT,
+   NVK_MME_DRAW_MESH_INDIRECT_COUNT,
    NVK_MME_COUNT,
 };
 
@@ -128,5 +131,8 @@ void nvk_mme_xfb_counter_load(struct mme_builder *b);
 void nvk_mme_xfb_draw_indirect(struct mme_builder *b);
 void nvk_mme_set_priv_reg(struct mme_builder *b);
 void nvk_mme_set_write_mask(struct mme_builder *b);
+void nvk_mme_draw_mesh(struct mme_builder *b);
+void nvk_mme_draw_mesh_indirect(struct mme_builder *b);
+void nvk_mme_draw_mesh_indirect_count(struct mme_builder *b);
 
 #endif /* NVK_MME_H */

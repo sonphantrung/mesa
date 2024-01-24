@@ -27,10 +27,10 @@
 #include "util/mesa-sha1.h"
 #include "util/u_debug.h"
 
-#include "cla097.h"
-#include "clb097.h"
-#include "clc397.h"
-#include "clc597.h"
+#include "nvidia/classes/cla097.h"
+#include "nvidia/classes/clb097.h"
+#include "nvidia/classes/clc397.h"
+#include "nvidia/classes/clc597.h"
 
 static void
 shared_var_info(const struct glsl_type *type, unsigned *size, unsigned *align)
@@ -51,7 +51,8 @@ nvk_nak_stages(const struct nv_device_info *info)
       VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
       VK_SHADER_STAGE_GEOMETRY_BIT |
       VK_SHADER_STAGE_FRAGMENT_BIT |
-      VK_SHADER_STAGE_COMPUTE_BIT;
+      VK_SHADER_STAGE_COMPUTE_BIT |
+      VK_SHADER_STAGE_MESH_BIT_EXT;
 
    const struct debug_control flags[] = {
       { "vs", BITFIELD64_BIT(MESA_SHADER_VERTEX) },
@@ -60,6 +61,8 @@ nvk_nak_stages(const struct nv_device_info *info)
       { "gs", BITFIELD64_BIT(MESA_SHADER_GEOMETRY) },
       { "fs", BITFIELD64_BIT(MESA_SHADER_FRAGMENT) },
       { "cs", BITFIELD64_BIT(MESA_SHADER_COMPUTE) },
+      { "task", BITFIELD64_BIT(MESA_SHADER_TASK) },
+      { "mesh", BITFIELD64_BIT(MESA_SHADER_MESH) },
       { "all", all },
       { NULL, 0 },
    };
@@ -131,6 +134,7 @@ nvk_physical_device_spirv_options(const struct nvk_physical_device *pdev,
          .int16 = true,
          .int64 = true,
          .int64_atomics = true,
+         .mesh_shading = true,
          .min_lod = true,
          .multiview = true,
          .physical_storage_buffer_address = true,
@@ -304,7 +308,8 @@ nvk_lower_nir(struct nvk_device *dev, nir_shader *nir,
               const struct vk_pipeline_robustness_state *rs,
               bool is_multiview,
               const struct vk_pipeline_layout *layout,
-              struct nvk_cbuf_map *cbuf_map_out)
+              struct nvk_cbuf_map *cbuf_map_out,
+              bool has_task_shader)
 {
    struct nvk_physical_device *pdev = nvk_device_physical(dev);
 
@@ -321,9 +326,21 @@ nvk_lower_nir(struct nvk_device *dev, nir_shader *nir,
    NIR_PASS(_, nir, nir_vk_lower_ycbcr_tex, lookup_ycbcr_conversion, layout);
 
    nir_lower_compute_system_values_options csv_options = {
-      .has_base_workgroup_id = true,
+      .has_base_workgroup_id = nir->info.stage == MESA_SHADER_COMPUTE,
+      .lower_local_invocation_index = nir->info.stage == MESA_SHADER_COMPUTE,
+      .lower_workgroup_id_to_index = nir->info.stage == MESA_SHADER_TASK || nir->info.stage == MESA_SHADER_MESH,
    };
    NIR_PASS(_, nir, nir_lower_compute_system_values, &csv_options);
+
+   if (nir->info.stage == MESA_SHADER_TASK) {
+      nir_lower_task_shader_options ts_opts = { 0 };
+      nir_lower_task_shader(nir, ts_opts);
+   }
+
+   if (nir->info.stage == MESA_SHADER_TASK ||
+       nir->info.stage == MESA_SHADER_MESH) {
+      NIR_PASS(_, nir, nvk_nir_lower_mesh);
+   }
 
    /* Lower push constants before lower_descriptors */
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_push_const,
@@ -377,7 +394,7 @@ nvk_lower_nir(struct nvk_device *dev, nir_shader *nir,
    }
 
    NIR_PASS(_, nir, nvk_nir_lower_descriptors, rs,
-            layout->set_count, layout->set_layouts, cbuf_map);
+            layout->set_count, layout->set_layouts, cbuf_map, has_task_shader);
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_global,
             nir_address_format_64bit_global);
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_ssbo,
@@ -387,11 +404,15 @@ nvk_lower_nir(struct nvk_device *dev, nir_shader *nir,
    NIR_PASS(_, nir, nir_shader_intrinsics_pass,
             lower_load_global_constant_offset_instr, nir_metadata_none, NULL);
 
+   nir_variable_mode var_modes = nir_var_mem_shared;
+   if (nir->info.stage == MESA_SHADER_TASK || nir->info.stage == MESA_SHADER_MESH)
+      var_modes |= nir_var_mem_task_payload;
+
    if (!nir->info.shared_memory_explicit_layout) {
       NIR_PASS(_, nir, nir_lower_vars_to_explicit_types,
-               nir_var_mem_shared, shared_var_info);
+               var_modes, shared_var_info);
    }
-   NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_shared,
+   NIR_PASS(_, nir, nir_lower_explicit_io, var_modes,
             nir_address_format_32bit_offset);
 
    if (nir->info.zero_initialize_shared_memory && nir->info.shared_size > 0) {
@@ -444,7 +465,7 @@ nvk_compile_nir_with_nak(struct nvk_physical_device *pdev,
    if (rs->storage_buffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT)
       robust2_modes |= nir_var_mem_ssbo;
 
-   shader->nak = nak_compile_shader(nir, dump_asm, pdev->nak, robust2_modes, fs_key);
+   shader->nak = nak_compile_shader(nir, dump_asm, pdev->nak, robust2_modes, fs_key, shader->has_task_shader);
    shader->info = shader->nak->info;
    shader->code_ptr = shader->nak->code;
    shader->code_size = shader->nak->code_size;
@@ -545,6 +566,17 @@ nvk_shader_upload(struct nvk_device *dev, struct nvk_shader *shader)
    assert(code_offset % alignment == 0);
    total_size += shader->code_size;
 
+   const bool has_mesh_gs_sph = shader->info.stage == MESA_SHADER_MESH &&
+                                shader->info.mesh.has_gs_sph;
+
+   uint32_t gs_hdr_offset = 0;
+
+   if (has_mesh_gs_sph) {
+      total_size = align(total_size, nvk_min_cbuf_alignment(&dev->pdev->info));
+      gs_hdr_offset = total_size;
+      total_size += hdr_size;
+   }
+
    uint32_t data_offset = 0;
    if (shader->data_size > 0) {
       total_size = align(total_size, nvk_min_cbuf_alignment(&dev->pdev->info));
@@ -559,6 +591,8 @@ nvk_shader_upload(struct nvk_device *dev, struct nvk_shader *shader)
    assert(hdr_size <= sizeof(shader->info.hdr));
    memcpy(data + hdr_offset, shader->info.hdr, hdr_size);
    memcpy(data + code_offset, shader->code_ptr, shader->code_size);
+   if (has_mesh_gs_sph)
+      memcpy(data + gs_hdr_offset, shader->info.mesh.gs_hdr, hdr_size);
    if (shader->data_size > 0)
       memcpy(data + data_offset, shader->data_ptr, shader->data_size);
 
@@ -572,6 +606,7 @@ nvk_shader_upload(struct nvk_device *dev, struct nvk_shader *shader)
    if (result == VK_SUCCESS) {
       shader->upload_size = total_size;
       shader->hdr_offset = hdr_offset;
+      shader->gs_hdr_offset = gs_hdr_offset;
       shader->data_offset = data_offset;
    }
    free(data);

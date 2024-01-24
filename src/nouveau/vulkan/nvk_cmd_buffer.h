@@ -36,12 +36,28 @@ struct nvk_root_descriptor_table {
 
    union {
       struct {
-         uint32_t base_vertex;
-         uint32_t base_instance;
+         union {
+            struct {
+               uint32_t base_vertex;
+               uint32_t base_instance;
+               uint32_t __padidng;
+            } vs;
+
+            struct {
+               uint32_t group_count[3];
+            } mesh;
+         };
+
          uint32_t draw_id;
          uint32_t view_index;
          struct nvk_sample_location sample_locations[8];
       } draw;
+      struct {
+         uint32_t group_count[3];
+         uint32_t draw_id;
+         uint32_t view_index;
+         struct nvk_sample_location sample_locations[8];
+      } mesh;
       struct {
          uint32_t base_group[3];
          uint32_t group_count[3];
@@ -61,7 +77,7 @@ struct nvk_root_descriptor_table {
    uint8_t set_dynamic_buffer_start[NVK_MAX_SETS];
 
    /* enfore alignment to 0x100 as needed pre pascal */
-   uint8_t __padding[0x18];
+   uint8_t __padding[0x10];
 };
 
 /* helper macro for computing root descriptor byte offsets */

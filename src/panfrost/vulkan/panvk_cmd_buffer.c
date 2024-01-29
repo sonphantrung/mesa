@@ -204,14 +204,14 @@ panvk_CmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout,
       struct panvk_descriptor_state *desc_state =
          panvk_cmd_get_desc_state(cmdbuf, GRAPHICS);
 
-      desc_state->push_constants = 0;
+      desc_state->push_uniforms = 0;
    }
 
    if (stageFlags & VK_SHADER_STAGE_COMPUTE_BIT) {
       struct panvk_descriptor_state *desc_state =
          panvk_cmd_get_desc_state(cmdbuf, COMPUTE);
 
-      desc_state->push_constants = 0;
+      desc_state->push_uniforms = 0;
    }
 }
 

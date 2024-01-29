@@ -343,23 +343,23 @@ panvk_cmd_prepare_sysvals(struct panvk_cmd_buffer *cmdbuf,
 }
 
 static void
-panvk_cmd_prepare_push_constants(
+panvk_cmd_prepare_push_uniforms(
    struct panvk_cmd_buffer *cmdbuf,
    struct panvk_cmd_bind_point_state *bind_point_state)
 {
    struct panvk_descriptor_state *desc_state = &bind_point_state->desc_state;
    const struct panvk_pipeline *pipeline = bind_point_state->pipeline;
 
-   if (!pipeline->layout->push_constants.size || desc_state->push_constants)
+   if (!pipeline->layout->push_constants.size || desc_state->push_uniforms)
       return;
 
-   struct panfrost_ptr push_constants = pan_pool_alloc_aligned(
+   struct panfrost_ptr push_uniforms = pan_pool_alloc_aligned(
       &cmdbuf->desc_pool.base,
       ALIGN_POT(pipeline->layout->push_constants.size, 16), 16);
 
-   memcpy(push_constants.cpu, cmdbuf->push_constants,
+   memcpy(push_uniforms.cpu, cmdbuf->push_constants,
           pipeline->layout->push_constants.size);
-   desc_state->push_constants = push_constants.gpu;
+   desc_state->push_uniforms = push_uniforms.gpu;
 }
 
 static void
@@ -1272,7 +1272,7 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *draw)
 
    panvk_cmd_prepare_draw_sysvals(cmdbuf, bind_point_state, draw);
    panvk_cmd_prepare_push_sets(cmdbuf, bind_point_state);
-   panvk_cmd_prepare_push_constants(cmdbuf, bind_point_state);
+   panvk_cmd_prepare_push_uniforms(cmdbuf, bind_point_state);
    panvk_cmd_prepare_ubos(cmdbuf, bind_point_state);
    panvk_cmd_prepare_textures(cmdbuf, bind_point_state);
    panvk_cmd_prepare_samplers(cmdbuf, bind_point_state);
@@ -1284,7 +1284,7 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *draw)
    draw->tls = batch->tls.gpu;
    draw->fb = batch->fb.desc.gpu;
    draw->ubos = desc_state->ubos;
-   draw->push_uniforms = desc_state->push_constants;
+   draw->push_uniforms = desc_state->push_uniforms;
    draw->textures = desc_state->textures;
    draw->samplers = desc_state->samplers;
 
@@ -1714,8 +1714,8 @@ panvk_per_arch(CmdDispatch)(VkCommandBuffer commandBuffer, uint32_t x,
    panvk_cmd_prepare_ubos(cmdbuf, bind_point_state);
    dispatch.ubos = desc_state->ubos;
 
-   panvk_cmd_prepare_push_constants(cmdbuf, bind_point_state);
-   dispatch.push_uniforms = desc_state->push_constants;
+   panvk_cmd_prepare_push_uniforms(cmdbuf, bind_point_state);
+   dispatch.push_uniforms = desc_state->push_uniforms;
 
    panvk_cmd_prepare_textures(cmdbuf, bind_point_state);
    dispatch.textures = desc_state->textures;

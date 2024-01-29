@@ -428,7 +428,6 @@ panvk_cmd_prepare_ubos(struct panvk_cmd_buffer *cmdbuf,
       return;
 
    panvk_cmd_prepare_sysvals(cmdbuf, bind_point_state);
-   panvk_cmd_prepare_push_constants(cmdbuf, bind_point_state);
 
    struct panfrost_ptr ubos = pan_pool_alloc_desc_array(
       &cmdbuf->desc_pool.base, pipeline->num_ubos, UNIFORM_BUFFER);
@@ -1273,6 +1272,7 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *draw)
 
    panvk_cmd_prepare_draw_sysvals(cmdbuf, bind_point_state, draw);
    panvk_cmd_prepare_push_sets(cmdbuf, bind_point_state);
+   panvk_cmd_prepare_push_constants(cmdbuf, bind_point_state);
    panvk_cmd_prepare_ubos(cmdbuf, bind_point_state);
    panvk_cmd_prepare_textures(cmdbuf, bind_point_state);
    panvk_cmd_prepare_samplers(cmdbuf, bind_point_state);
@@ -1714,6 +1714,7 @@ panvk_per_arch(CmdDispatch)(VkCommandBuffer commandBuffer, uint32_t x,
    panvk_cmd_prepare_ubos(cmdbuf, bind_point_state);
    dispatch.ubos = desc_state->ubos;
 
+   panvk_cmd_prepare_push_constants(cmdbuf, bind_point_state);
    dispatch.push_uniforms = desc_state->push_constants;
 
    panvk_cmd_prepare_textures(cmdbuf, bind_point_state);

@@ -70,10 +70,6 @@ struct panvk_pipeline {
 
    unsigned num_ubos;
 
-   struct {
-      unsigned ubo_idx;
-   } sysvals[MESA_SHADER_STAGES];
-
    unsigned tls_size;
    unsigned wls_size;
 

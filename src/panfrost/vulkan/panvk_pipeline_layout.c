@@ -10,14 +10,10 @@ unsigned
 panvk_pipeline_layout_ubo_start(const struct panvk_pipeline_layout *layout,
                                 unsigned set, bool is_dynamic)
 {
-   unsigned offset = PANVK_NUM_BUILTIN_UBOS;
-
    if (is_dynamic)
-      offset += layout->num_ubos + layout->sets[set].dyn_ubo_offset;
-   else
-      offset += layout->sets[set].ubo_offset;
+      return layout->num_ubos + layout->sets[set].dyn_ubo_offset;
 
-   return offset;
+   return layout->sets[set].ubo_offset;
 }
 
 unsigned
@@ -42,20 +38,20 @@ panvk_pipeline_layout_ubo_index(const struct panvk_pipeline_layout *layout,
 unsigned
 panvk_pipeline_layout_dyn_ubos_offset(const struct panvk_pipeline_layout *layout)
 {
-   return PANVK_NUM_BUILTIN_UBOS + layout->num_ubos;
+   return layout->num_ubos;
 }
 
 unsigned
 panvk_pipeline_layout_dyn_desc_ubo_index(
    const struct panvk_pipeline_layout *layout)
 {
-   return PANVK_NUM_BUILTIN_UBOS + layout->num_ubos + layout->num_dyn_ubos;
+   return layout->num_ubos + layout->num_dyn_ubos;
 }
 
 unsigned
 panvk_pipeline_layout_total_ubo_count(
    const struct panvk_pipeline_layout *layout)
 {
-   return PANVK_NUM_BUILTIN_UBOS + layout->num_ubos + layout->num_dyn_ubos +
+   return layout->num_ubos + layout->num_dyn_ubos +
           (layout->num_dyn_ssbos ? 1 : 0);
 }

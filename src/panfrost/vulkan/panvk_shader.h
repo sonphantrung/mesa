@@ -16,9 +16,6 @@
 #include "panvk_macros.h"
 #include "panvk_pipeline_layout.h"
 
-#define PANVK_SYSVAL_UBO_INDEX     0
-#define PANVK_NUM_BUILTIN_UBOS     1
-
 struct nir_shader;
 struct pan_blend_state;
 struct panvk_device;
@@ -52,18 +49,9 @@ struct panvk_sysvals {
 struct panvk_shader {
    struct pan_shader_info info;
    struct util_dynarray binary;
-   unsigned sysval_ubo;
    struct pan_compute_dim local_size;
    bool has_img_access;
 };
-
-struct panvk_shader *
-panvk_shader_create(struct panvk_device *dev, gl_shader_stage stage,
-                    const VkPipelineShaderStageCreateInfo *stage_info,
-                    const struct panvk_pipeline_layout *layout,
-                    unsigned sysval_ubo, struct pan_blend_state *blend_state,
-                    bool static_blend_constants,
-                    const VkAllocationCallbacks *alloc);
 
 void panvk_shader_destroy(struct panvk_device *dev, struct panvk_shader *shader,
                           const VkAllocationCallbacks *alloc);
@@ -76,7 +64,7 @@ bool panvk_per_arch(blend_needs_lowering)(const struct panvk_device *dev,
 struct panvk_shader *panvk_per_arch(shader_create)(
    struct panvk_device *dev, gl_shader_stage stage,
    const VkPipelineShaderStageCreateInfo *stage_info,
-   const struct panvk_pipeline_layout *layout, unsigned sysval_ubo,
+   const struct panvk_pipeline_layout *layout,
    struct pan_blend_state *blend_state, bool static_blend_constants,
    const VkAllocationCallbacks *alloc);
 

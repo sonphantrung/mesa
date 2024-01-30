@@ -418,6 +418,34 @@ panvk_cmd_unprepare_push_sets(
 }
 
 static void
+panvk_cmd_prepare_dyn_ssbos(struct panvk_cmd_buffer *cmdbuf,
+                            struct panvk_cmd_bind_point_state *bind_point_state)
+{
+   struct panvk_descriptor_state *desc_state = &bind_point_state->desc_state;
+   const struct panvk_pipeline *pipeline = bind_point_state->pipeline;
+
+   if (!pipeline->layout->num_dyn_ssbos || desc_state->dyn_desc_ubo)
+      return;
+
+   struct panfrost_ptr ssbo_descs = pan_pool_alloc_aligned(
+      &cmdbuf->desc_pool.base,
+      pipeline->layout->num_dyn_ssbos * sizeof(struct panvk_ssbo_addr), 16);
+
+   struct panvk_ssbo_addr *ssbos = ssbo_descs.cpu;
+
+   for (uint32_t i = 0; i < pipeline->layout->num_dyn_ssbos; i++) {
+      const struct panvk_buffer_desc *bdesc = &desc_state->dyn.ssbos[i];
+
+      ssbos[i] = (struct panvk_ssbo_addr){
+         .base_addr = panvk_buffer_gpu_ptr(bdesc->buffer, bdesc->offset),
+         .size = panvk_buffer_range(bdesc->buffer, bdesc->offset, bdesc->size),
+      };
+   }
+
+   desc_state->dyn_desc_ubo = ssbo_descs.gpu;
+}
+
+static void
 panvk_cmd_prepare_ubos(struct panvk_cmd_buffer *cmdbuf,
                        struct panvk_cmd_bind_point_state *bind_point_state)
 {
@@ -428,6 +456,7 @@ panvk_cmd_prepare_ubos(struct panvk_cmd_buffer *cmdbuf,
       return;
 
    panvk_cmd_prepare_sysvals(cmdbuf, bind_point_state);
+   panvk_cmd_prepare_dyn_ssbos(cmdbuf, bind_point_state);
 
    struct panfrost_ptr ubos = pan_pool_alloc_desc_array(
       &cmdbuf->desc_pool.base, pipeline->num_ubos, UNIFORM_BUFFER);
@@ -475,6 +504,17 @@ panvk_cmd_prepare_ubos(struct panvk_cmd_buffer *cmdbuf,
                memset(&ubo_descs[dyn_ubo_start + i], 0, sizeof(*ubo_descs));
             }
          }
+      }
+   }
+
+   if (pipeline->layout->num_dyn_ssbos) {
+      unsigned dyn_desc_ubo =
+         panvk_pipeline_layout_dyn_desc_ubo_index(pipeline->layout);
+
+      pan_pack(&ubo_descs[dyn_desc_ubo], UNIFORM_BUFFER, cfg) {
+         cfg.pointer = desc_state->dyn_desc_ubo;
+         cfg.entries =
+            pipeline->layout->num_dyn_ssbos * sizeof(struct panvk_ssbo_addr);
       }
    }
 

@@ -496,8 +496,7 @@ panvk_pipeline_builder_init_shaders(struct panvk_pipeline_builder *builder,
       }
    }
 
-   pipeline->num_ubos = PANVK_NUM_BUILTIN_UBOS + builder->layout->num_ubos +
-                        builder->layout->num_dyn_ubos;
+   pipeline->num_ubos = panvk_pipeline_layout_total_ubo_count(builder->layout);
 }
 
 static void

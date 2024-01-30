@@ -41,6 +41,7 @@ struct panvk_pipeline_layout {
       unsigned dyn_ubo_offset;
       unsigned dyn_ssbo_offset;
       unsigned img_offset;
+      unsigned dyn_desc_ubo_offset;
    } sets[MAX_SETS];
 };
 
@@ -55,5 +56,13 @@ unsigned
 panvk_pipeline_layout_ubo_index(const struct panvk_pipeline_layout *layout,
                                 unsigned set, unsigned binding,
                                 unsigned array_index);
+
+unsigned
+panvk_pipeline_layout_dyn_desc_ubo_index(
+   const struct panvk_pipeline_layout *layout);
+
+unsigned
+panvk_pipeline_layout_total_ubo_count(
+   const struct panvk_pipeline_layout *layout);
 
 #endif

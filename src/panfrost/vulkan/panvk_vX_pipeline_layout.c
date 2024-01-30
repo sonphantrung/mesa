@@ -10,6 +10,7 @@
 
 #include "panvk_entrypoints.h"
 #include "panvk_device.h"
+#include "panvk_descriptor_set.h"
 #include "panvk_macros.h"
 #include "panvk_pipeline_layout.h"
 #include "panvk_sampler.h"
@@ -39,6 +40,7 @@ panvk_per_arch(CreatePipelineLayout)(
 
    unsigned sampler_idx = 0, tex_idx = 0, ubo_idx = 0;
    unsigned dyn_ubo_idx = 0, dyn_ssbo_idx = 0, img_idx = 0;
+   unsigned dyn_desc_ubo_offset = 0;
    for (unsigned set = 0; set < pCreateInfo->setLayoutCount; set++) {
       const struct panvk_descriptor_set_layout *set_layout =
          vk_to_panvk_descriptor_set_layout(layout->vk.set_layouts[set]);
@@ -49,12 +51,15 @@ panvk_per_arch(CreatePipelineLayout)(
       layout->sets[set].dyn_ubo_offset = dyn_ubo_idx;
       layout->sets[set].dyn_ssbo_offset = dyn_ssbo_idx;
       layout->sets[set].img_offset = img_idx;
+      layout->sets[set].dyn_desc_ubo_offset = dyn_desc_ubo_offset;
       sampler_idx += set_layout->num_samplers;
       tex_idx += set_layout->num_textures;
       ubo_idx += set_layout->num_ubos;
       dyn_ubo_idx += set_layout->num_dyn_ubos;
       dyn_ssbo_idx += set_layout->num_dyn_ssbos;
       img_idx += set_layout->num_imgs;
+      dyn_desc_ubo_offset +=
+         set_layout->num_dyn_ssbos * sizeof(struct panvk_ssbo_addr);
 
       for (unsigned b = 0; b < set_layout->binding_count; b++) {
          const struct panvk_descriptor_set_binding_layout *binding_layout =

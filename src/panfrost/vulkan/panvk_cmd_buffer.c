@@ -94,26 +94,6 @@ panvk_CmdBindIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer,
    }
 }
 
-static void
-panvk_set_dyn_ssbo_pointers(struct panvk_descriptor_state *desc_state,
-                            unsigned dyn_ssbo_offset,
-                            struct panvk_descriptor_set *set)
-{
-   struct panvk_sysvals *sysvals = &desc_state->sysvals;
-
-   for (unsigned i = 0; i < set->layout->num_dyn_ssbos; i++) {
-      const struct panvk_buffer_desc *ssbo =
-         &desc_state->dyn.ssbos[dyn_ssbo_offset + i];
-
-      sysvals->dyn_ssbos[dyn_ssbo_offset + i] = (struct panvk_ssbo_addr){
-         .base_addr = panvk_buffer_gpu_ptr(ssbo->buffer, ssbo->offset),
-         .size = panvk_buffer_range(ssbo->buffer, ssbo->offset, ssbo->size),
-      };
-   }
-
-   desc_state->sysvals_ptr = 0;
-}
-
 VKAPI_ATTR void VKAPI_CALL
 panvk_CmdBindDescriptorSets(VkCommandBuffer commandBuffer,
                             VkPipelineBindPoint pipelineBindPoint,
@@ -162,11 +142,6 @@ panvk_CmdBindDescriptorSets(VkCommandBuffer commandBuffer,
             }
          }
       }
-
-      if (set->layout->num_dyn_ssbos) {
-         panvk_set_dyn_ssbo_pointers(descriptors_state,
-                                     playout->sets[idx].dyn_ssbo_offset, set);
-      }
    }
 
    /* Unconditionally reset all previously emitted descriptors tables.
@@ -177,6 +152,7 @@ panvk_CmdBindDescriptorSets(VkCommandBuffer commandBuffer,
    descriptors_state->ubos = 0;
    descriptors_state->textures = 0;
    descriptors_state->samplers = 0;
+   descriptors_state->dyn_desc_ubo = 0;
    descriptors_state->vs_attrib_bufs = 0;
    descriptors_state->non_vs_attrib_bufs = 0;
    descriptors_state->vs_attribs = 0;

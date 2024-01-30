@@ -38,3 +38,18 @@ panvk_pipeline_layout_ubo_index(const struct panvk_pipeline_layout *layout,
    return panvk_pipeline_layout_ubo_start(layout, set, is_dynamic) + ubo_idx +
           array_index;
 }
+
+unsigned
+panvk_pipeline_layout_dyn_desc_ubo_index(
+   const struct panvk_pipeline_layout *layout)
+{
+   return PANVK_NUM_BUILTIN_UBOS + layout->num_ubos + layout->num_dyn_ubos;
+}
+
+unsigned
+panvk_pipeline_layout_total_ubo_count(
+   const struct panvk_pipeline_layout *layout)
+{
+   return PANVK_NUM_BUILTIN_UBOS + layout->num_ubos + layout->num_dyn_ubos +
+          (layout->num_dyn_ssbos ? 1 : 0);
+}

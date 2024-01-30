@@ -168,9 +168,6 @@ panvk_CmdBindDescriptorSets(VkCommandBuffer commandBuffer,
                                      playout->sets[idx].dyn_ssbo_offset, set);
       }
 
-      if (set->layout->num_dyn_ssbos)
-         descriptors_state->dirty |= PANVK_DYNAMIC_SSBO;
-
       if (set->layout->num_ubos || set->layout->num_dyn_ubos ||
           set->layout->num_dyn_ssbos || set->layout->desc_ubo_size)
          descriptors_state->ubos = 0;

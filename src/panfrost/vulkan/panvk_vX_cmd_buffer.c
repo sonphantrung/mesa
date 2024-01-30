@@ -1312,7 +1312,7 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *draw)
    }
 
    /* Clear the dirty flags all at once */
-   desc_state->dirty = cmdbuf->state.dirty = 0;
+   cmdbuf->state.dirty = 0;
    panvk_cmd_unprepare_push_sets(cmdbuf, bind_point_state);
 }
 
@@ -1760,7 +1760,6 @@ panvk_per_arch(CmdDispatch)(VkCommandBuffer commandBuffer, uint32_t x,
    }
 
    panvk_per_arch(cmd_close_batch)(cmdbuf);
-   desc_state->dirty = 0;
    panvk_cmd_unprepare_push_sets(cmdbuf, bind_point_state);
 }
 

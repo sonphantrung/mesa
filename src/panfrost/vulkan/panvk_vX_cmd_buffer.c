@@ -788,6 +788,7 @@ panvk_draw_prepare_varyings(struct panvk_cmd_buffer *cmdbuf,
             cfg.offset = varyings->varying[loc].offset;
             cfg.format =
                panvk_varying_hw_format(s, loc, varyings->varying[loc].format);
+            cfg.offset_enable = false;
          }
       }
    }
@@ -819,6 +820,7 @@ panvk_fill_non_vs_attribs(struct panvk_cmd_buffer *cmdbuf,
          pan_pack(attribs + offset, ATTRIBUTE, cfg) {
             cfg.buffer_index = first_buf + (img_idx + i) * 2;
             cfg.format = desc_state->sets[s]->img_fmts[i];
+            cfg.offset_enable = false;
          }
          offset += pan_size(ATTRIBUTE);
       }
@@ -925,6 +927,7 @@ panvk_draw_emit_attrib(const struct panvk_draw_info *draw,
    pan_pack(desc, ATTRIBUTE, cfg) {
       cfg.buffer_index = buf_idx * 2;
       cfg.offset = attrib_info->offset + (buf->address & 63);
+      cfg.offset_enable = true;
 
       if (buf_info->per_instance)
          cfg.offset += draw->first_instance * buf_info->stride;

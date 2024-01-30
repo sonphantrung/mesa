@@ -167,23 +167,20 @@ panvk_CmdBindDescriptorSets(VkCommandBuffer commandBuffer,
          panvk_set_dyn_ssbo_pointers(descriptors_state,
                                      playout->sets[idx].dyn_ssbo_offset, set);
       }
-
-      if (set->layout->num_ubos || set->layout->num_dyn_ubos ||
-          set->layout->num_dyn_ssbos || set->layout->desc_ubo_size)
-         descriptors_state->ubos = 0;
-
-      if (set->layout->num_textures)
-         descriptors_state->textures = 0;
-
-      if (set->layout->num_samplers)
-         descriptors_state->samplers = 0;
-
-      if (set->layout->num_imgs) {
-         descriptors_state->vs_attrib_bufs =
-            descriptors_state->non_vs_attrib_bufs = 0;
-         descriptors_state->vs_attribs = descriptors_state->non_vs_attribs = 0;
-      }
    }
+
+   /* Unconditionally reset all previously emitted descriptors tables.
+    * TODO: we could be smarter by checking which part of the pipeline layout
+    * are compatible with the previouly bound descriptor sets.
+    */
+   descriptors_state->sysvals_ptr = 0;
+   descriptors_state->ubos = 0;
+   descriptors_state->textures = 0;
+   descriptors_state->samplers = 0;
+   descriptors_state->vs_attrib_bufs = 0;
+   descriptors_state->non_vs_attrib_bufs = 0;
+   descriptors_state->vs_attribs = 0;
+   descriptors_state->non_vs_attribs = 0;
 
    assert(dynoffset_idx == dynamicOffsetCount);
 }

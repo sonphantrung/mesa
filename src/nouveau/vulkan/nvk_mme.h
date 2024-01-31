@@ -39,6 +39,11 @@ enum nvk_mme_scratch {
    NVK_MME_SCRATCH_VIEW_MASK,
    NVK_MME_SCRATCH_WRITE_MASK_DYN,
    NVK_MME_SCRATCH_WRITE_MASK_PIPELINE,
+   NVK_MME_SCRATCH_UMUL_X,
+   NVK_MME_SCRATCH_UMUL_Y_HI,
+   NVK_MME_SCRATCH_UMUL_Y_LO,
+   NVK_MME_SCRATCH_STORE_ADDR_HI,
+   NVK_MME_SCRATCH_STORE_ADDR_LO,
 
    /* Must be at the end */
    NVK_MME_NUM_SCRATCH,
@@ -50,6 +55,8 @@ _nvk_mme_load_scratch_to(struct mme_builder *b, struct mme_value val,
 {
    mme_state_to(b, val, 0x3400 + scratch * 4);
 }
+#define nvk_mme_load_scratch_to(b, v, S) \
+   _nvk_mme_load_scratch_to(b, v, NVK_MME_SCRATCH_##S)
 
 static inline struct mme_value
 _nvk_mme_load_scratch(struct mme_builder *b, enum nvk_mme_scratch scratch)

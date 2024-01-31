@@ -5,9 +5,10 @@
 
 #include "genxml/gen_macros.h"
 
-#include "panvk_cs.h"
 #include "panvk_private.h"
 #include "panvk_sampler.h"
+
+#include "pan_encoder.h"
 
 static enum mali_mipmap_mode
 panvk_translate_sampler_mipmap_mode(VkSamplerMipmapMode mode)
@@ -39,6 +40,15 @@ panvk_translate_sampler_address_mode(VkSamplerAddressMode mode)
    default:
       unreachable("Invalid wrap");
    }
+}
+
+static enum mali_func
+panvk_translate_sampler_compare_func(const VkSamplerCreateInfo *pCreateInfo)
+{
+   if (!pCreateInfo->compareEnable)
+      return MALI_FUNC_NEVER;
+
+   return panfrost_flip_compare_func((enum mali_func)pCreateInfo->compareOp);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -79,7 +89,7 @@ panvk_per_arch(CreateSampler)(VkDevice _device,
       cfg.wrap_mode_r =
          panvk_translate_sampler_address_mode(pCreateInfo->addressModeW);
       cfg.compare_function =
-         panvk_per_arch(translate_sampler_compare_func)(pCreateInfo);
+         panvk_translate_sampler_compare_func(pCreateInfo);
       cfg.border_color_r = border_color.uint32[0];
       cfg.border_color_g = border_color.uint32[1];
       cfg.border_color_b = border_color.uint32[2];

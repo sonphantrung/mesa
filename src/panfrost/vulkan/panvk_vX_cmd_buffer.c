@@ -428,19 +428,9 @@ panvk_cmd_prepare_dyn_ssbos(struct panvk_cmd_buffer *cmdbuf,
       return;
 
    struct panfrost_ptr ssbo_descs = pan_pool_alloc_aligned(
-      &cmdbuf->desc_pool.base,
-      pipeline->layout->num_dyn_ssbos * sizeof(struct panvk_ssbo_addr), 16);
+      &cmdbuf->desc_pool.base, sizeof(desc_state->dyn.ssbos), 16);
 
-   struct panvk_ssbo_addr *ssbos = ssbo_descs.cpu;
-
-   for (uint32_t i = 0; i < pipeline->layout->num_dyn_ssbos; i++) {
-      const struct panvk_buffer_desc *bdesc = &desc_state->dyn.ssbos[i];
-
-      ssbos[i] = (struct panvk_ssbo_addr){
-         .base_addr = panvk_buffer_gpu_ptr(bdesc->buffer, bdesc->offset),
-         .size = panvk_buffer_range(bdesc->buffer, bdesc->offset, bdesc->size),
-      };
-   }
+   memcpy(ssbo_descs.cpu, desc_state->dyn.ssbos, sizeof(desc_state->dyn.ssbos));
 
    desc_state->dyn_desc_ubo = ssbo_descs.gpu;
 }
@@ -481,31 +471,14 @@ panvk_cmd_prepare_ubos(struct panvk_cmd_buffer *cmdbuf,
       } else {
          memcpy(&ubo_descs[ubo_start], set->ubos,
                 set_layout->num_ubos * sizeof(*ubo_descs));
-
-         unsigned dyn_ubo_start =
-            panvk_pipeline_layout_ubo_start(pipeline->layout, s, true);
-
-         for (unsigned i = 0; i < set_layout->num_dyn_ubos; i++) {
-            const unsigned ubo_idx =
-               pipeline->layout->sets[s].dyn_ubo_offset + i;
-            const struct panvk_buffer_desc *bdesc =
-               &desc_state->dyn.ubos[ubo_idx];
-
-            mali_ptr address =
-               panvk_buffer_gpu_ptr(bdesc->buffer, bdesc->offset);
-            size_t size =
-               panvk_buffer_range(bdesc->buffer, bdesc->offset, bdesc->size);
-            if (size) {
-               pan_pack(&ubo_descs[dyn_ubo_start + i], UNIFORM_BUFFER, cfg) {
-                  cfg.pointer = address;
-                  cfg.entries = DIV_ROUND_UP(size, 16);
-               }
-            } else {
-               memset(&ubo_descs[dyn_ubo_start + i], 0, sizeof(*ubo_descs));
-            }
-         }
       }
    }
+
+   unsigned dyn_ubos_offset =
+      panvk_pipeline_layout_dyn_ubos_offset(pipeline->layout);
+
+   memcpy(&ubo_descs[dyn_ubos_offset], desc_state->dyn.ubos,
+          pipeline->layout->num_dyn_ubos * sizeof(*ubo_descs));
 
    if (pipeline->layout->num_dyn_ssbos) {
       unsigned dyn_desc_ubo =
@@ -1991,6 +1964,121 @@ panvk_cmd_push_descriptors(struct panvk_cmd_buffer *cmdbuf,
    desc_state->vs_attrib_bufs = desc_state->non_vs_attrib_bufs = 0;
    desc_state->vs_attribs = desc_state->non_vs_attribs = 0;
    return desc_state->push_sets[set];
+}
+
+static void
+panvk_emit_dyn_ubo(struct panvk_descriptor_state *desc_state,
+                   const struct panvk_descriptor_set *desc_set,
+                   unsigned binding, unsigned array_idx, uint32_t dyn_offset,
+                   unsigned dyn_ubo_slot)
+{
+   struct mali_uniform_buffer_packed *ubo = &desc_state->dyn.ubos[dyn_ubo_slot];
+   const struct panvk_descriptor_set_layout *slayout = desc_set->layout;
+   VkDescriptorType type = slayout->bindings[binding].type;
+
+   assert(type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
+   assert(dyn_ubo_slot < ARRAY_SIZE(desc_state->dyn.ubos));
+
+   const unsigned dyn_ubo_idx = slayout->bindings[binding].dyn_ubo_idx;
+   const struct panvk_buffer_desc *bdesc =
+      &desc_set->dyn_ubos[dyn_ubo_idx + array_idx];
+   mali_ptr address =
+      panvk_buffer_gpu_ptr(bdesc->buffer, bdesc->offset + dyn_offset);
+   size_t size = panvk_buffer_range(bdesc->buffer,
+                                    bdesc->offset + dyn_offset, bdesc->size);
+
+   if (size) {
+      pan_pack(ubo, UNIFORM_BUFFER, cfg) {
+         cfg.pointer = address;
+         cfg.entries = DIV_ROUND_UP(size, 16);
+      }
+   } else {
+      memset(ubo, 0, sizeof(*ubo));
+   }
+}
+
+static void
+panvk_emit_dyn_ssbo(struct panvk_descriptor_state *desc_state,
+                    const struct panvk_descriptor_set *desc_set,
+                    unsigned binding, unsigned array_idx, uint32_t dyn_offset,
+                    unsigned dyn_ssbo_slot)
+{
+   struct panvk_ssbo_addr *ssbo = &desc_state->dyn.ssbos[dyn_ssbo_slot];
+   const struct panvk_descriptor_set_layout *slayout = desc_set->layout;
+   VkDescriptorType type = slayout->bindings[binding].type;
+
+   assert(type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC);
+   assert(dyn_ssbo_slot < ARRAY_SIZE(desc_state->dyn.ssbos));
+
+   const unsigned dyn_ssbo_idx = slayout->bindings[binding].dyn_ssbo_idx;
+   const struct panvk_buffer_desc *bdesc =
+      &desc_set->dyn_ssbos[dyn_ssbo_idx + array_idx];
+
+   *ssbo = (struct panvk_ssbo_addr) {
+      .base_addr =
+         panvk_buffer_gpu_ptr(bdesc->buffer, bdesc->offset + dyn_offset),
+      .size = panvk_buffer_range(bdesc->buffer, bdesc->offset + dyn_offset,
+                                 bdesc->size),
+   };
+}
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(CmdBindDescriptorSets)(
+   VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
+   VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount,
+   const VkDescriptorSet *pDescriptorSets, uint32_t dynamicOffsetCount,
+   const uint32_t *pDynamicOffsets)
+{
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+   VK_FROM_HANDLE(panvk_pipeline_layout, playout, layout);
+
+   struct panvk_descriptor_state *descriptors_state =
+      &cmdbuf->bind_points[pipelineBindPoint].desc_state;
+
+   unsigned dynoffset_idx = 0;
+   for (unsigned i = 0; i < descriptorSetCount; ++i) {
+      unsigned idx = i + firstSet;
+      VK_FROM_HANDLE(panvk_descriptor_set, set, pDescriptorSets[i]);
+
+      descriptors_state->sets[idx] = set;
+
+      if (set->layout->num_dyn_ssbos || set->layout->num_dyn_ubos) {
+         unsigned dyn_ubo_slot = playout->sets[idx].dyn_ubo_offset;
+         unsigned dyn_ssbo_slot = playout->sets[idx].dyn_ssbo_offset;
+
+         for (unsigned b = 0; b < set->layout->binding_count; b++) {
+            for (unsigned e = 0; e < set->layout->bindings[b].array_size; e++) {
+               VkDescriptorType type = set->layout->bindings[b].type;
+
+               if (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) {
+                  panvk_emit_dyn_ubo(descriptors_state, set, b, e,
+                                     pDynamicOffsets[dynoffset_idx++],
+                                     dyn_ubo_slot++);
+               } else if (type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) {
+                  panvk_emit_dyn_ssbo(descriptors_state, set, b, e,
+                                      pDynamicOffsets[dynoffset_idx++],
+                                      dyn_ssbo_slot++);
+               }
+            }
+         }
+      }
+   }
+
+   /* Unconditionally reset all previously emitted descriptors tables.
+    * TODO: we could be smarter by checking which part of the pipeline layout
+    * are compatible with the previouly bound descriptor sets.
+    */
+   descriptors_state->sysvals_ptr = 0;
+   descriptors_state->ubos = 0;
+   descriptors_state->textures = 0;
+   descriptors_state->samplers = 0;
+   descriptors_state->dyn_desc_ubo = 0;
+   descriptors_state->vs_attrib_bufs = 0;
+   descriptors_state->non_vs_attrib_bufs = 0;
+   descriptors_state->vs_attribs = 0;
+   descriptors_state->non_vs_attribs = 0;
+
+   assert(dynoffset_idx == dynamicOffsetCount);
 }
 
 VKAPI_ATTR void VKAPI_CALL

@@ -61,6 +61,9 @@ unsigned
 panvk_pipeline_layout_dyn_desc_ubo_index(
    const struct panvk_pipeline_layout *layout);
 
+unsigned panvk_pipeline_layout_dyn_ubos_offset(
+   const struct panvk_pipeline_layout *layout);
+
 unsigned
 panvk_pipeline_layout_total_ubo_count(
    const struct panvk_pipeline_layout *layout);

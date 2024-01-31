@@ -30,7 +30,6 @@
 
 #include "decode.h"
 
-#include "panvk_cs.h"
 #include "panvk_event.h"
 #include "panvk_private.h"
 

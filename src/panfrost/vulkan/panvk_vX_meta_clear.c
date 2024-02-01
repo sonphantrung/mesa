@@ -368,7 +368,7 @@ panvk_meta_clear_color_img(struct panvk_cmd_buffer *cmdbuf,
       for (unsigned layer = range->baseArrayLayer;
            layer < range->baseArrayLayer + layer_count; layer++) {
          view.first_layer = view.last_layer = layer;
-         panvk_cmd_open_batch(cmdbuf);
+         panvk_per_arch(cmd_open_batch)(cmdbuf);
          panvk_per_arch(cmd_alloc_fb_desc)(cmdbuf);
          panvk_per_arch(cmd_close_batch)(cmdbuf);
       }
@@ -448,7 +448,7 @@ panvk_meta_clear_zs_img(struct panvk_cmd_buffer *cmdbuf,
       for (unsigned layer = range->baseArrayLayer;
            layer < range->baseArrayLayer + layer_count; layer++) {
          view.first_layer = view.last_layer = layer;
-         panvk_cmd_open_batch(cmdbuf);
+         panvk_per_arch(cmd_open_batch)(cmdbuf);
          panvk_per_arch(cmd_alloc_fb_desc)(cmdbuf);
          panvk_per_arch(cmd_close_batch)(cmdbuf);
       }

@@ -6,6 +6,10 @@
 #ifndef PANVK_CMD_BUFFER_H
 #define PANVK_CMD_BUFFER_H
 
+#ifndef PAN_ARCH
+#error "panvk_cmd_buffer.h requires a PAN_ARCH definition"
+#endif
+
 #include <stdint.h>
 
 #include "vulkan/runtime/vk_command_buffer.h"
@@ -21,6 +25,8 @@
 #include "pan_jc.h"
 
 #include "util/list.h"
+
+#include "genxml/gen_macros.h"
 
 #define MAX_BIND_POINTS             2 /* compute + graphics */
 #define MAX_VBS                     16
@@ -197,12 +203,9 @@ panvk_cmd_get_device(const struct panvk_cmd_buffer *cmdbuf)
 #define panvk_cmd_get_desc_state(cmdbuf, bindpoint)                            \
    &(cmdbuf)->bind_points[VK_PIPELINE_BIND_POINT_##bindpoint].desc_state
 
-struct panvk_batch *panvk_cmd_open_batch(struct panvk_cmd_buffer *cmdbuf);
-
-void panvk_cmd_preload_fb_after_batch_split(struct panvk_cmd_buffer *cmdbuf);
-
-#if PAN_ARCH
 extern const struct vk_command_buffer_ops panvk_per_arch(cmd_buffer_ops);
+
+struct panvk_batch *panvk_per_arch(cmd_open_batch)(struct panvk_cmd_buffer *cmdbuf);
 
 void panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf);
 
@@ -218,6 +221,5 @@ void panvk_per_arch(cmd_prepare_tiler_context)(struct panvk_cmd_buffer *cmdbuf);
 
 void panvk_per_arch(emit_viewport)(const VkViewport *viewport,
                                    const VkRect2D *scissor, void *vpd);
-#endif
 
 #endif

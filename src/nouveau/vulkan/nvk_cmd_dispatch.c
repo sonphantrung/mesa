@@ -13,22 +13,20 @@
 
 #include "nouveau_context.h"
 
-#include "cla0b5.h"
-#include "cla1c0.h"
-#include "clc0c0.h"
-#include "clc5c0.h"
 #include "nvk_cl9097.h"
 #include "nvk_cla0c0.h"
 #include "nvk_clb1c0.h"
+#include "nvk_clc0c0.h"
 #include "nvk_clc3c0.h"
 #include "nvk_clc597.h"
+#include "nvk_clc5c0.h"
 #include "nvk_clc6c0.h"
 
 #include "drf.h"
-#include "cla0c0qmd.h"
-#include "clc0c0qmd.h"
-#include "clc3c0qmd.h"
-#include "clc6c0qmd.h"
+#include "nvidia/classes/cla0c0qmd.h"
+#include "nvidia/classes/clc0c0qmd.h"
+#include "nvidia/classes/clc3c0qmd.h"
+#include "nvidia/classes/clc6c0qmd.h"
 
 #define NVA0C0_QMDV00_06_VAL_SET(p,a...) NVVAL_MW_SET((p), NVA0C0, QMDV00_06, ##a)
 #define NVA0C0_QMDV00_06_DEF_SET(p,a...) NVDEF_MW_SET((p), NVA0C0, QMDV00_06, ##a)

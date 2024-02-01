@@ -17,9 +17,9 @@
 #include <fcntl.h>
 #include <xf86drm.h>
 
-#include "cl9097.h"
-#include "clb097.h"
-#include "clc397.h"
+#include "nvidia/classes/cl9097.h"
+#include "nvidia/classes/clb097.h"
+#include "nvidia/classes/clc397.h"
 
 static void
 nvk_slm_area_init(struct nvk_slm_area *area)

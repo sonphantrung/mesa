@@ -8,8 +8,8 @@
 
 #include "nouveau_device.h"
 
-#include "cl9097.h"
-#include "clc597.h"
+#include "nvidia/classes/cl9097.h"
+#include "nvidia/classes/clc597.h"
 
 static struct nil_extent4d
 nil_minify_extent4d(struct nil_extent4d extent, uint32_t level)

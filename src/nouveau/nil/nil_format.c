@@ -6,11 +6,11 @@
 
 #include "nouveau_device.h"
 
-#include "cl9097.h"
-#include "cl9097tex.h"
-#include "cla297.h"
-#include "clb097.h"
-#include "clb097tex.h"
+#include "nvidia/classes/cl9097.h"
+#include "nvidia/classes/cl9097tex.h"
+#include "nvidia/classes/cla297.h"
+#include "nvidia/classes/clb097.h"
+#include "nvidia/classes/clb097tex.h"
 
 enum nil_format_support_flags {
    NIL_FORMAT_SUPPORTS_TEXTURE_BIT        = BITFIELD_BIT(0),

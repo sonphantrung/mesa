@@ -25,22 +25,23 @@
 #include <sys/sysmacros.h>
 #include <xf86drm.h>
 
-#include "cl90c0.h"
-#include "cl91c0.h"
-#include "cla097.h"
-#include "cla0c0.h"
-#include "cla1c0.h"
-#include "clb097.h"
-#include "clb0c0.h"
-#include "clb197.h"
-#include "clb1c0.h"
-#include "clc0c0.h"
-#include "clc1c0.h"
-#include "clc397.h"
-#include "clc3c0.h"
-#include "clc597.h"
-#include "clc5c0.h"
-#include "clc997.h"
+#include "nvidia/classes/cl90c0.h"
+#include "nvidia/classes/cl91c0.h"
+#include "nvidia/classes/cla097.h"
+#include "nvidia/classes/cla0c0.h"
+#include "nvidia/classes/cla1c0.h"
+#include "nvidia/classes/clb097.h"
+#include "nvidia/classes/clb0c0.h"
+#include "nvidia/classes/clb197.h"
+#include "nvidia/classes/clb1c0.h"
+#include "nvidia/classes/clc097.h"
+#include "nvidia/classes/clc0c0.h"
+#include "nvidia/classes/clc1c0.h"
+#include "nvidia/classes/clc397.h"
+#include "nvidia/classes/clc3c0.h"
+#include "nvidia/classes/clc597.h"
+#include "nvidia/classes/clc5c0.h"
+#include "nvidia/classes/clc997.h"
 
 static bool
 nvk_use_nak(const struct nv_device_info *info)
@@ -156,6 +157,7 @@ nvk_get_device_extensions(const struct nvk_instance *instance,
       .EXT_border_color_swizzle = true,
       .EXT_buffer_device_address = true,
       .EXT_conditional_rendering = true,
+      .EXT_conservative_rasterization = info->cls_eng3d >= MAXWELL_B,
       .EXT_color_write_enable = true,
       .EXT_custom_border_color = true,
       .EXT_depth_bias_control = true,
@@ -775,6 +777,18 @@ nvk_get_device_properties(const struct nvk_instance *instance,
 
       /* VK_KHR_push_descriptor */
       .maxPushDescriptors = NVK_MAX_PUSH_DESCRIPTORS,
+
+      /* VK_EXT_conservative_rasterization */
+      /* TODO: test on volta */
+      .primitiveOverestimationSize = 0.0,
+      .maxExtraPrimitiveOverestimationSize = 0.75,
+      .extraPrimitiveOverestimationSizeGranularity = 0.25,
+      .primitiveUnderestimation = info->cls_eng3d >= VOLTA_A,
+      .conservativePointAndLineRasterization = true,
+      .degenerateLinesRasterized = info->cls_eng3d >= VOLTA_A,
+      .degenerateTrianglesRasterized = info->cls_eng3d >= PASCAL_A,
+      .fullyCoveredFragmentShaderInputVariable = false,
+      .conservativeRasterizationPostDepthCoverage = true,
 
       /* VK_EXT_custom_border_color */
       .maxCustomBorderColorSamplers = 4000,

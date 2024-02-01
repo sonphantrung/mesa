@@ -13,8 +13,8 @@
 #include "nil_format.h"
 #include "vulkan/util/vk_format.h"
 
-#include "clb097.h"
-#include "clb197.h"
+#include "nvidia/classes/clb097.h"
+#include "nvidia/classes/clb197.h"
 
 static VkFormatFeatureFlags2
 nvk_get_image_plane_format_features(struct nvk_physical_device *pdev,

@@ -18,14 +18,16 @@
 #include "compiler/spirv/nir_spirv.h"
 
 #include "drf.h"
-#include "cla0c0.h"
-#include "cla0c0qmd.h"
-#include "clc0c0.h"
-#include "clc0c0qmd.h"
-#include "clc3c0.h"
-#include "clc3c0qmd.h"
-#include "clc6c0.h"
-#include "clc6c0qmd.h"
+
+#include "nvidia/classes/cla0c0.h"
+#include "nvidia/classes/cla0c0qmd.h"
+#include "nvidia/classes/clc0c0.h"
+#include "nvidia/classes/clc0c0qmd.h"
+#include "nvidia/classes/clc3c0.h"
+#include "nvidia/classes/clc3c0qmd.h"
+#include "nvidia/classes/clc6c0.h"
+#include "nvidia/classes/clc6c0qmd.h"
+
 #define NVA0C0_QMDV00_06_VAL_SET(p,a...) NVVAL_MW_SET((p), NVA0C0, QMDV00_06, ##a)
 #define NVA0C0_QMDV00_06_DEF_SET(p,a...) NVDEF_MW_SET((p), NVA0C0, QMDV00_06, ##a)
 #define NVC0C0_QMDV02_01_VAL_SET(p,a...) NVVAL_MW_SET((p), NVC0C0, QMDV02_01, ##a)

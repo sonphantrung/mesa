@@ -294,7 +294,7 @@ add_color_format_variants(const struct stw_pf_color_info *color_formats,
 
          for (db = 0; db < ARRAY_SIZE(stw_pf_doublebuffer); db++) {
             unsigned doublebuffer = stw_pf_doublebuffer[db];
-
+               
             for (ds = 0; ds < ARRAY_SIZE(stw_pf_depth_stencil); ds++) {
                const struct stw_pf_depth_info *depth = &stw_pf_depth_stencil[ds];
 
@@ -305,16 +305,12 @@ add_color_format_variants(const struct stw_pf_color_info *color_formats,
                   continue;
                }
 
-               for (f = 0; f < ARRAY_SIZE(stw_pf_flag); f++) {
-                  stw_pfd_flag flag = stw_pf_flag[f];
-                  if (!(supported_flags & flag) || (flag == stw_pfd_double_buffer && !doublebuffer))
-                     continue;
-                  for (acc = 0; acc < 2; acc++) {
-                     stw_pixelformat_add(stw_dev, extended, &color_formats[cfmt],
-                                         depth, acc * 16, doublebuffer,
-                                         (flag == stw_pfd_gdi_support), samples);
-                     num_added++;
-                  }
+               bool gdi_support = (supported_flags & stw_pfd_gdi_support) && !doublebuffer;
+               for (acc = 0; acc < 2; acc++) {
+                  stw_pixelformat_add(stw_dev, extended, &color_formats[cfmt],
+                                       depth, acc * 16, doublebuffer,
+                                       gdi_support, samples);
+                  num_added++;
                }
             }
          }

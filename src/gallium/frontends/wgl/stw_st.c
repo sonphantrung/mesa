@@ -170,7 +170,8 @@ stw_st_framebuffer_validate_locked(struct st_context *st,
     * For MSAA, we just need to make sure that the back buffer also
     * exists, so we can blt to it during flush_frontbuffer. */
    if (mask & ST_ATTACHMENT_FRONT_LEFT_MASK &&
-       stwfb->fb->winsys_framebuffer) {
+       stwfb->fb->winsys_framebuffer && 
+       stwfb->fb->winsys_framebuffer->needs_fake_front) {
       if (stwfb->stvis.samples <= 1)
          stwfb->needs_fake_front = true;
       else

@@ -1,5 +1,4 @@
-# Copyright © 2021 VMware, Inc
-# Copyright © 2018 Intel Corporation
+# Copyright © 2017 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -19,41 +18,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-d3d10_sw_def = custom_target(
-  'd3d10_sw.def',
-  input: 'd3d10_sw.def.in',
-  output : 'd3d10_sw.def',
-  command : gen_vs_module_defs_normal_command,
+libvirglgdi = static_library(
+  'virglgdi',
+  'virgl_gdi_winsys.c',
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_gallium_drivers, inc_virtio],
+  dependencies : [dep_libdrm, dep_libvirglcommon, idep_mesautil, idep_nir_headers],
+  gnu_symbol_visibility : 'hidden',
 )
 
-libd3d10sw = shared_library(
-  'd3d10sw',
-  ['d3d10_gdi.c'],
-  vs_module_defs : d3d10_sw_def,
-  include_directories : [
-    inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_d3d10umd, inc_gallium_winsys, inc_gallium_winsys_sw, inc_gallium_drivers, inc_winddk
-  ],
-  link_whole : [libd3d10umd],
-  link_with : [
-    libgallium, libwsgdi
-  ],
-  dependencies : [
-    dep_ws2_32, idep_nir, driver_swrast
-  ],
-  name_prefix : '',  # otherwise mingw will create libd3d10sw.dll
-  install : true,
+winsys_virgl_gdi = declare_dependency(
+  link_with : [libvirglgdi],
 )
-
-if with_tests
-  test(
-    'd3d10sw',
-    executable(
-      'test_d3d10sw',
-      files('tests/tri.cpp'),
-      cpp_args : [cpp_msvc_compat_args],
-      dependencies : [cpp.find_library('d3d11')],
-      link_with : [libd3d10sw],
-    ),
-    suite : ['d3d10sw'],
-  )
-endif

@@ -1,4 +1,5 @@
-# Copyright © 2017 Intel Corporation
+# Copyright © 2021 VMware, Inc
+# Copyright © 2018 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -18,43 +19,42 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-files_libvirgl = files(
-  'virgl_buffer.c',
-  'virgl_context.c',
-  'virgl_encode.c',
-  'virgl_query.c',
-  'virgl_resource.c',
-  'virgl_screen.c',
-  'virgl_staging_mgr.c',
-  'virgl_streamout.c',
-  'virgl_transfer_queue.c',
-  'virgl_texture.c',
-  'virgl_tgsi.c',
-  'virgl_video.c',
+libgallium_d3d10_def = custom_target(
+  'd3d10.def',
+  input: 'd3d10.def.in',
+  output : 'd3d10.def',
+  command : gen_vs_module_defs_normal_command,
 )
 
-libvirgl = static_library(
-  'virgl',
-  [ files_libvirgl ],
-  gnu_symbol_visibility : 'hidden',
-  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_virtio],
-  dependencies : [dep_libdrm, idep_mesautil, idep_xmlconfig, idep_nir],
-)
-
-virgl_deps = [libvirgl]
-if not with_platform_windows
-  virgl_deps += libvirgldrm
-  virgl_deps += libvirglvtest
-else 
-  virgl_deps += libvirglgdi
-endif
-
-
-driver_virgl = declare_dependency(
-  compile_args : '-DGALLIUM_VIRGL',
-  link_with : virgl_deps,
+gallium_d3d10_name = get_option('gallium-d3d10-dll-name')
+libgallium_d3d10 = shared_library(
+  gallium_d3d10_name,
+  ['d3d10_gdi.c'],
+  vs_module_defs : libgallium_d3d10_def,
+  include_directories : [
+    inc_include, inc_src, inc_mesa, inc_gallium, inc_gallium_aux, inc_d3d10umd, inc_gallium_winsys, inc_gallium_winsys_sw, inc_gallium_drivers, inc_winddk
+  ],
+  link_whole : [libd3d10umd],
+  link_with : [
+    libgallium, libgalliumvl, libwsgdi
+  ],
+  dependencies : [
+    dep_ws2_32, idep_nir, driver_virgl, driver_swrast
+  ],
+  name_prefix: '',
+  install : true,
 )
 
 if with_tests
-  subdir('tests')
+  test(
+    'd3d10',
+    executable(
+      'test_d3d10',
+      files('tests/tri.cpp'),
+      cpp_args : [cpp_msvc_compat_args],
+      dependencies : [cpp.find_library('d3d11')],
+      link_with : [libgallium_d3d10],
+    ),
+    suite : ['d3d10'],
+  )
 endif

@@ -26,8 +26,10 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include "panvk_cs.h"
-#include "panvk_private.h"
+#include "panvk_device.h"
+#include "panvk_entrypoints.h"
+#include "panvk_pipeline.h"
+#include "panvk_priv_bo.h"
 
 #include "nir/nir.h"
 #include "nir/nir_builder.h"
@@ -38,7 +40,7 @@
 #include "vk_format.h"
 #include "vk_util.h"
 
-void
+VKAPI_ATTR void VKAPI_CALL
 panvk_DestroyPipeline(VkDevice _device, VkPipeline _pipeline,
                       const VkAllocationCallbacks *pAllocator)
 {

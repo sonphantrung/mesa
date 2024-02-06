@@ -72,6 +72,7 @@ static const struct {
    { "rpl", 0xa780 },
    { "dg2", 0x5690 },
    { "mtl", 0x7d60 },
+   { "lnl", 0x64a0 },
 };
 
 /**
@@ -1195,6 +1196,19 @@ static const struct intel_device_info intel_device_info_mtl_u = {
 static const struct intel_device_info intel_device_info_mtl_h = {
    MTL_FEATURES,
    .platform = INTEL_PLATFORM_MTL_H,
+};
+
+#define XE2_FEATURES                                            \
+   /* Draft/placeholder */                                      \
+   XEHP_FEATURES(0, 1, 0),                                      \
+   .ver = 20,                                                   \
+   .verx10 = 200
+
+static const struct intel_device_info intel_device_info_lnl = {
+   XE2_FEATURES,
+   .platform = INTEL_PLATFORM_LNL,
+   .has_local_mem = false,
+   .apply_hwconfig = true,
 };
 
 void

@@ -3032,7 +3032,7 @@ panfrost_launch_grid_on_batch(struct pipe_context *pipe,
 {
    struct panfrost_context *ctx = pan_context(pipe);
 
-   if (info->indirect && !PAN_GPU_INDIRECTS) {
+   if (info->indirect && !PAN_GPU_SUPPORTS_DISPATCH_INDIRECT) {
       struct pipe_transfer *transfer;
       uint32_t *params =
          pipe_buffer_map_range(pipe, info->indirect, info->indirect_offset,
@@ -3792,7 +3792,7 @@ GENX(panfrost_cmdstream_screen_init)(struct panfrost_screen *screen)
    (&dev->blitter, panfrost_device_gpu_id(dev), &dev->blend_shaders,
     &screen->blitter.bin_pool.base, &screen->blitter.desc_pool.base);
 
-#if PAN_GPU_INDIRECTS
+#if PAN_GPU_SUPPORTS_DISPATCH_INDIRECT
    pan_indirect_dispatch_meta_init(
       &dev->indirect_dispatch, panfrost_device_gpu_id(dev),
       &screen->blitter.bin_pool.base, &screen->blitter.desc_pool.base);

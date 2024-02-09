@@ -917,6 +917,9 @@ radv_amdgpu_get_bo_list(struct radv_amdgpu_winsys *ws, struct radeon_cmdbuf **cs
    unsigned num_handles = 0;
 
    if (ws->debug_all_bos) {
+#if HAVE_AMDGPU_VIRTIO
+      assert(!ws->info.is_virtio);
+#endif
       handles = malloc(sizeof(handles[0]) * ws->global_bo_list.count);
       if (!handles)
          return VK_ERROR_OUT_OF_HOST_MEMORY;

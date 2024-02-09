@@ -1842,7 +1842,8 @@ radv_queue_init(struct radv_device *device, struct radv_queue *queue, int idx,
 
    if (queue->state.qf == RADV_QUEUE_SPARSE) {
       queue->vk.driver_submit = radv_queue_sparse_submit;
-      vk_queue_enable_submit_thread(&queue->vk);
+      if (vk_device_supports_threaded_submit(&device->vk))
+         vk_queue_enable_submit_thread(&queue->vk);
    } else {
       queue->vk.driver_submit = radv_queue_submit;
    }

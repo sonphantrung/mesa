@@ -481,8 +481,20 @@ radv_amdgpu_winsys_bo_create(struct radeon_winsys *_ws, uint64_t size, unsigned 
       request.flags |= AMDGPU_GEM_CREATE_EXPLICIT_SYNC;
    if ((initial_domain & RADEON_DOMAIN_VRAM_GTT) && (flags & RADEON_FLAG_NO_INTERPROCESS_SHARING) &&
        ((ws->perftest & RADV_PERFTEST_LOCAL_BOS) || (flags & RADEON_FLAG_PREFER_LOCAL_BO))) {
-      bo->base.is_local = true;
-      request.flags |= AMDGPU_GEM_CREATE_VM_ALWAYS_VALID;
+
+      /* virtio needs to be able to create a dmabuf is CPU access is required, so disable
+       * VM_ALWAYS_VALID in this case.
+       */
+      if (!ws->info.is_virtio || (request.flags & AMDGPU_GEM_CREATE_NO_CPU_ACCESS)) {
+         bo->base.is_local = true;
+         request.flags |= AMDGPU_GEM_CREATE_VM_ALWAYS_VALID;
+      }
+   }
+
+   if (ws->info.is_virtio && (flags & RADEON_FLAG_NO_INTERPROCESS_SHARING)) {
+      /* Disable suballocation for the user fence BO. */
+      if (priority != RADV_BO_PRIORITY_CS || alignment != 8)
+         request.flags |= 1llu << 63;
    }
 
    if (initial_domain & RADEON_DOMAIN_VRAM) {
@@ -563,12 +575,25 @@ radv_amdgpu_winsys_bo_map(struct radeon_winsys *_ws, struct radeon_winsys_bo *_b
 {
    struct radv_amdgpu_winsys *ws = radv_amdgpu_winsys(_ws);
    struct radv_amdgpu_winsys_bo *bo = radv_amdgpu_winsys_bo(_bo);
+   void *data;
 
    /* Safeguard for the Quantic Dream layer skipping unmaps. */
    if (bo->cpu_map && !use_fixed_addr)
       return bo->cpu_map;
 
    assert(!bo->cpu_map);
+
+#if HAVE_AMDGPU_VIRTIO
+   if (ws->info.is_virtio) {
+      data = NULL;
+      if (use_fixed_addr)
+         data = fixed_addr;
+
+      if (ws->libdrm_amdgpu->bo_cpu_map(bo->bo, &data))
+         return NULL;
+      return data;
+   }
+#endif
 
    union drm_amdgpu_gem_mmap args;
    memset(&args, 0, sizeof(args));
@@ -579,8 +604,8 @@ radv_amdgpu_winsys_bo_map(struct radeon_winsys *_ws, struct radeon_winsys_bo *_b
    if (ret)
       return NULL;
 
-   void *data = mmap(fixed_addr, bo->base.size, PROT_READ | PROT_WRITE, MAP_SHARED | (use_fixed_addr ? MAP_FIXED : 0),
-                     ws->libdrm_amdgpu->device_get_fd(radv_amdgpu_winsys(_ws)->dev), args.out.addr_ptr);
+   data = mmap(fixed_addr, bo->base.size, PROT_READ | PROT_WRITE, MAP_SHARED | (use_fixed_addr ? MAP_FIXED : 0),
+               ws->libdrm_amdgpu->device_get_fd(radv_amdgpu_winsys(_ws)->dev), args.out.addr_ptr);
    if (data == MAP_FAILED)
       return NULL;
 

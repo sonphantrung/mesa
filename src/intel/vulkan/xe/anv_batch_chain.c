@@ -30,7 +30,7 @@
 
 VkResult
 xe_execute_simple_batch(struct anv_queue *queue,
-                        struct anv_bo *batch_bo,
+                        struct anv_shared_bo *batch_bo,
                         uint32_t batch_bo_size,
                         bool is_companion_rcs_batch)
 {
@@ -53,7 +53,7 @@ xe_execute_simple_batch(struct anv_queue *queue,
    struct drm_xe_exec exec = {
       .exec_queue_id = exec_queue_id,
       .num_batch_buffer = 1,
-      .address = batch_bo->offset,
+      .address = anv_address_physical(batch_bo->address),
       .num_syncs = 1,
       .syncs = (uintptr_t)&sync,
    };
@@ -216,7 +216,7 @@ xe_execute_trtt_batch(struct anv_sparse_submission *submit,
       .exec_queue_id = queue->exec_queue_id,
       .num_syncs = xe_syncs_count,
       .syncs = (uintptr_t)xe_syncs,
-      .address = trtt_bbo->bo->offset,
+      .address = anv_shared_bo_address_u64(trtt_bbo->bo),
       .num_batch_buffer = 1,
    };
 
@@ -247,19 +247,19 @@ xe_queue_exec_utrace_locked(struct anv_queue *queue,
 #ifdef SUPPORT_INTEL_INTEGRATED_GPUS
    if (device->physical->memory.need_flush &&
        anv_bo_needs_host_cache_flush(device->utrace_bo_pool.bo_alloc_flags)) {
-      util_dynarray_foreach(&utrace_submit->batch_bos, struct anv_bo *, bo)
-         intel_flush_range((*bo)->map, (*bo)->size);
+      util_dynarray_foreach(&utrace_submit->batch_bos, struct anv_shared_bo *, bo)
+         intel_flush_range(anv_shared_bo_map((*bo)), (*bo)->size);
    }
 #endif
 
-   struct anv_bo *batch_bo =
-      *util_dynarray_element(&utrace_submit->batch_bos, struct anv_bo *, 0);
+   struct anv_shared_bo *batch_bo =
+      *util_dynarray_element(&utrace_submit->batch_bos, struct anv_shared_bo *, 0);
    struct drm_xe_exec exec = {
       .exec_queue_id = queue->exec_queue_id,
       .num_batch_buffer = 1,
       .syncs = (uintptr_t)&xe_sync,
       .num_syncs = 1,
-      .address = batch_bo->offset,
+      .address = anv_address_physical(anv_shared_bo_address(batch_bo)),
    };
    if (likely(!device->info->no_hw)) {
       if (intel_ioctl(device->fd, DRM_IOCTL_XE_EXEC, &exec))
@@ -304,7 +304,7 @@ xe_companion_rcs_queue_exec_locked(struct anv_queue *queue,
    struct anv_batch_bo *batch_bo =
       list_first_entry(&companion_rcs_cmd_buffer->batch_bos,
                        struct anv_batch_bo, link);
-   exec.address = batch_bo->bo->offset;
+   exec.address = anv_address_physical(anv_shared_bo_address(batch_bo->bo));
 
    anv_measure_submit(companion_rcs_cmd_buffer);
    xe_exec_print_debug(queue, 1, &companion_rcs_cmd_buffer, NULL, 0, &exec);
@@ -374,7 +374,7 @@ xe_queue_exec_locked(struct anv_queue *queue,
       struct anv_cmd_buffer *first_cmd_buffer = cmd_buffers[0];
       struct anv_batch_bo *first_batch_bo = list_first_entry(&first_cmd_buffer->batch_bos,
                                                              struct anv_batch_bo, link);
-      exec.address = first_batch_bo->bo->offset;
+      exec.address = anv_address_physical(anv_shared_bo_address(first_batch_bo->bo));
    } else {
       exec.address = device->trivial_batch_bo->offset;
    }

@@ -37,6 +37,7 @@ struct anv_cmd_buffer;
 struct anv_device;
 struct anv_queue;
 struct anv_query_pool;
+struct anv_shared_bo;
 struct anv_utrace_submit;
 struct anv_sparse_submission;
 struct anv_trtt_batch_bo;
@@ -76,7 +77,7 @@ struct anv_kmd_backend {
    int (*vm_bind_bo)(struct anv_device *device, struct anv_bo *bo);
    int (*vm_unbind_bo)(struct anv_device *device, struct anv_bo *bo);
    VkResult (*execute_simple_batch)(struct anv_queue *queue,
-                                    struct anv_bo *batch_bo,
+                                    struct anv_shared_bo *batch_bo,
                                     uint32_t batch_bo_size,
                                     bool is_companion_rcs_batch);
    VkResult (*execute_trtt_batch)(struct anv_sparse_submission *submit,

@@ -34,6 +34,7 @@ struct anv_queue;
 struct anv_bo;
 struct anv_cmd_buffer;
 struct anv_query_pool;
+struct anv_shared_bo;
 struct anv_utrace_submit;
 struct anv_sparse_submission;
 struct anv_trtt_batch_bo;
@@ -42,7 +43,8 @@ VkResult
 i915_queue_exec_trace(struct anv_queue *queue,
                       struct anv_utrace_submit *submit);
 VkResult
-i915_execute_simple_batch(struct anv_queue *queue, struct anv_bo *batch_bo,
+i915_execute_simple_batch(struct anv_queue *queue,
+                          struct anv_shared_bo *batch_bo,
                           uint32_t batch_bo_size, bool is_companion_rcs_batch);
 
 VkResult

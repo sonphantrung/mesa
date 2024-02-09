@@ -231,7 +231,7 @@ anv_create_sync_for_memory(struct vk_device *device,
    bo_sync->sync.type = &anv_bo_sync_type;
    bo_sync->state = signal_memory ? ANV_BO_SYNC_STATE_RESET :
                                     ANV_BO_SYNC_STATE_SUBMITTED;
-   bo_sync->bo = anv_bo_ref(mem->bo);
+   bo_sync->bo = anv_bo_ref(anv_shared_bo_bo(mem->bo));
 
    *sync_out = &bo_sync->sync;
 

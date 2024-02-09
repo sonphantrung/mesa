@@ -288,15 +288,17 @@ setup_execbuf_for_cmd_buffer(struct anv_execbuf *execbuf,
    struct anv_batch_bo **bbo;
    u_vector_foreach(bbo, &cmd_buffer->seen_bbos) {
       result = anv_execbuf_add_bo(cmd_buffer->device, execbuf,
-                                  (*bbo)->bo, &(*bbo)->relocs, 0);
+                                  anv_shared_bo_bo((*bbo)->bo),
+                                  &(*bbo)->relocs, 0);
       if (result != VK_SUCCESS)
          return result;
    }
 
-   struct anv_bo **bo_entry;
+   struct anv_shared_bo **bo_entry;
    u_vector_foreach(bo_entry, &cmd_buffer->dynamic_bos) {
       result = anv_execbuf_add_bo(cmd_buffer->device, execbuf,
-                                  *bo_entry, NULL, 0);
+                                  anv_shared_bo_bo(*bo_entry),
+                                  NULL, 0);
       if (result != VK_SUCCESS)
          return result;
    }
@@ -431,7 +433,7 @@ setup_execbuf_for_cmd_buffers(struct anv_execbuf *execbuf,
     */
    list_for_each_entry(struct anv_device_memory, mem,
                        &device->memory_objects, link) {
-      result = anv_execbuf_add_bo(device, execbuf, mem->bo, NULL, 0);
+      result = anv_execbuf_add_bo(device, execbuf, anv_shared_bo_bo(mem->bo), NULL, 0);
       if (result != VK_SUCCESS)
          return result;
    }
@@ -461,20 +463,21 @@ setup_execbuf_for_cmd_buffers(struct anv_execbuf *execbuf,
     * corresponding to the first batch_bo in the chain with the last
     * element in the list.
     */
-   if (first_batch_bo->bo->exec_obj_index != execbuf->bo_count - 1) {
-      uint32_t idx = first_batch_bo->bo->exec_obj_index;
+   if (anv_shared_bo_bo(first_batch_bo->bo)->exec_obj_index != execbuf->bo_count - 1) {
+      struct anv_bo *bo = anv_shared_bo_bo(first_batch_bo->bo);
+      uint32_t idx = bo->exec_obj_index;
       uint32_t last_idx = execbuf->bo_count - 1;
 
       struct drm_i915_gem_exec_object2 tmp_obj = execbuf->objects[idx];
-      assert(execbuf->bos[idx] == first_batch_bo->bo);
+      assert(execbuf->bos[idx] == bo);
 
       execbuf->objects[idx] = execbuf->objects[last_idx];
       execbuf->bos[idx] = execbuf->bos[last_idx];
       execbuf->bos[idx]->exec_obj_index = idx;
 
       execbuf->objects[last_idx] = tmp_obj;
-      execbuf->bos[last_idx] = first_batch_bo->bo;
-      first_batch_bo->bo->exec_obj_index = last_idx;
+      execbuf->bos[last_idx] = bo;
+      bo->exec_obj_index = last_idx;
    }
 
 #ifdef SUPPORT_INTEL_INTEGRATED_GPUS
@@ -492,7 +495,7 @@ setup_execbuf_for_cmd_buffers(struct anv_execbuf *execbuf,
    execbuf->execbuf = (struct drm_i915_gem_execbuffer2) {
       .buffers_ptr = (uintptr_t) execbuf->objects,
       .buffer_count = execbuf->bo_count,
-      .batch_start_offset = 0,
+      .batch_start_offset = first_batch_bo->bo->address.offset,
       .batch_len = 0,
       .cliprects_ptr = 0,
       .num_cliprects = 0,
@@ -550,18 +553,19 @@ setup_utrace_execbuf(struct anv_execbuf *execbuf, struct anv_queue *queue,
    if (result != VK_SUCCESS)
       return result;
 
-   util_dynarray_foreach(&submit->batch_bos, struct anv_bo *, _bo) {
-      struct anv_bo *bo = *_bo;
+   util_dynarray_foreach(&submit->batch_bos, struct anv_shared_bo *, _bo) {
+      struct anv_shared_bo *bo = *_bo;
 
-      result = anv_execbuf_add_bo(device, execbuf, bo,
+      result = anv_execbuf_add_bo(device, execbuf,
+                                  anv_shared_bo_bo(bo),
                                   &submit->relocs, 0);
       if (result != VK_SUCCESS)
          return result;
 
 #ifdef SUPPORT_INTEL_INTEGRATED_GPUS
       if (device->physical->memory.need_flush &&
-          anv_bo_needs_host_cache_flush(bo->alloc_flags))
-         intel_flush_range(bo->map, bo->size);
+          anv_bo_needs_host_cache_flush(anv_shared_bo_bo(bo)->alloc_flags))
+         intel_flush_range(anv_shared_bo_map(bo), bo->size);
 #endif
    }
 
@@ -570,8 +574,9 @@ setup_utrace_execbuf(struct anv_execbuf *execbuf, struct anv_queue *queue,
    if (result != VK_SUCCESS)
       return result;
 
-   struct anv_bo *batch_bo =
-      *util_dynarray_element(&submit->batch_bos, struct anv_bo *, 0);
+   struct anv_shared_bo *batch =
+      *util_dynarray_element(&submit->batch_bos, struct anv_shared_bo *, 0);
+   struct anv_bo *batch_bo = anv_shared_bo_bo(batch);
    if (batch_bo->exec_obj_index != execbuf->bo_count - 1) {
       uint32_t idx = batch_bo->exec_obj_index;
       uint32_t last_idx = execbuf->bo_count - 1;
@@ -595,7 +600,7 @@ setup_utrace_execbuf(struct anv_execbuf *execbuf, struct anv_queue *queue,
    execbuf->execbuf = (struct drm_i915_gem_execbuffer2) {
       .buffers_ptr = (uintptr_t) execbuf->objects,
       .buffer_count = execbuf->bo_count,
-      .batch_start_offset = 0,
+      .batch_start_offset = batch->address.offset,
       .batch_len = submit->batch.next - submit->batch.start,
       .flags = I915_EXEC_NO_RELOC |
                I915_EXEC_HANDLE_LUT |
@@ -935,7 +940,8 @@ i915_queue_exec_locked(struct anv_queue *queue,
 }
 
 VkResult
-i915_execute_simple_batch(struct anv_queue *queue, struct anv_bo *batch_bo,
+i915_execute_simple_batch(struct anv_queue *queue,
+                          struct anv_shared_bo *batch_bo,
                           uint32_t batch_bo_size, bool is_companion_rcs_batch)
 {
    struct anv_device *device = queue->device;
@@ -944,7 +950,9 @@ i915_execute_simple_batch(struct anv_queue *queue, struct anv_bo *batch_bo,
       .alloc_scope = VK_SYSTEM_ALLOCATION_SCOPE_DEVICE,
    };
 
-   VkResult result = anv_execbuf_add_bo(device, &execbuf, batch_bo, NULL, 0);
+   VkResult result = anv_execbuf_add_bo(device, &execbuf,
+                                        anv_shared_bo_bo(batch_bo),
+                                        NULL, 0);
    if (result != VK_SUCCESS)
       goto fail;
 
@@ -957,7 +965,7 @@ i915_execute_simple_batch(struct anv_queue *queue, struct anv_bo *batch_bo,
    execbuf.execbuf = (struct drm_i915_gem_execbuffer2) {
       .buffers_ptr = (uintptr_t) execbuf.objects,
       .buffer_count = execbuf.bo_count,
-      .batch_start_offset = 0,
+      .batch_start_offset = batch_bo->address.offset,
       .batch_len = batch_bo_size,
       .flags = I915_EXEC_HANDLE_LUT | exec_flags | I915_EXEC_NO_RELOC,
       .rsvd1 = context_id,
@@ -971,7 +979,7 @@ i915_execute_simple_batch(struct anv_queue *queue, struct anv_bo *batch_bo,
       goto fail;
    }
 
-   result = anv_device_wait(device, batch_bo, INT64_MAX);
+   result = anv_device_wait(device, anv_shared_bo_bo(batch_bo), INT64_MAX);
    if (result != VK_SUCCESS)
       result = vk_device_set_lost(&device->vk,
                                   "anv_device_wait failed: %m");
@@ -1037,7 +1045,8 @@ i915_execute_trtt_batch(struct anv_sparse_submission *submit,
          goto out;
    }
 
-   result = anv_execbuf_add_bo(device, &execbuf, trtt_bbo->bo, NULL, 0);
+   result = anv_execbuf_add_bo(device, &execbuf,
+                               anv_shared_bo_bo(trtt_bbo->bo), NULL, 0);
    if (result != VK_SUCCESS)
       goto out;
 
@@ -1051,7 +1060,7 @@ i915_execute_trtt_batch(struct anv_sparse_submission *submit,
    execbuf.execbuf = (struct drm_i915_gem_execbuffer2) {
       .buffers_ptr = (uintptr_t) execbuf.objects,
       .buffer_count = execbuf.bo_count,
-      .batch_start_offset = 0,
+      .batch_start_offset = trtt_bbo->bo->address.offset,
       .batch_len = trtt_bbo->size,
       .flags = I915_EXEC_HANDLE_LUT | I915_EXEC_NO_RELOC | exec_flags,
       .rsvd1 = context_id,

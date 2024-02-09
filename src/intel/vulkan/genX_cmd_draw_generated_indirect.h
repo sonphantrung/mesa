@@ -401,25 +401,27 @@ genX(cmd_buffer_emit_indirect_generated_draws_inring)(struct anv_cmd_buffer *cmd
     *   --------------------------------------------------
     */
 
-   struct anv_address draw_id_addr = (struct anv_address) {
-      .bo     = cmd_buffer->generation.ring_bo,
-      .offset = ring_count * draw_cmd_stride +
-                GENX(MI_BATCH_BUFFER_START_length) * 4,
-   };
+   struct anv_address draw_id_addr = anv_address_add(
+      anv_shared_bo_address(cmd_buffer->generation.ring_bo),
+      ring_count * draw_cmd_stride +
+      GENX(MI_BATCH_BUFFER_START_length) * 4);
 
-   struct anv_address draw_cmds_addr = (struct anv_address) {
-      .bo = cmd_buffer->generation.ring_bo,
+   struct anv_address draw_cmds_addr = anv_address_add(
+      anv_shared_bo_address(cmd_buffer->generation.ring_bo),
 #if GFX_VER >= 12
-      .offset = GENX(MI_ARB_CHECK_length) * 4,
+      GENX(MI_ARB_CHECK_length) * 4
+#else
+      0
 #endif
-   };
+      );
 
 #if GFX_VER >= 12
    struct GENX(MI_ARB_CHECK) resume_prefetch = {
       .PreParserDisableMask = true,
       .PreParserDisable = false,
    };
-   GENX(MI_ARB_CHECK_pack)(NULL, cmd_buffer->generation.ring_bo->map,
+   GENX(MI_ARB_CHECK_pack)(NULL,
+                           anv_shared_bo_map(cmd_buffer->generation.ring_bo),
                            &resume_prefetch);
 #endif
 
@@ -430,9 +432,7 @@ genX(cmd_buffer_emit_indirect_generated_draws_inring)(struct anv_cmd_buffer *cmd
     */
    genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(
       cmd_buffer, 0,
-      (struct anv_address) {
-         .bo = cmd_buffer->generation.ring_bo,
-      },
+      anv_shared_bo_address(cmd_buffer->generation.ring_bo),
       cmd_buffer->generation.ring_bo->size);
 
    struct anv_graphics_pipeline *pipeline =
@@ -530,9 +530,8 @@ genX(cmd_buffer_emit_indirect_generated_draws_inring)(struct anv_cmd_buffer *cmd
       /* Jump into the ring buffer. */
       anv_batch_emit(&cmd_buffer->batch, GENX(MI_BATCH_BUFFER_START), bbs) {
          bbs.AddressSpaceIndicator = ASI_PPGTT;
-         bbs.BatchBufferStartAddress = (struct anv_address) {
-            .bo = cmd_buffer->generation.ring_bo,
-         };
+         bbs.BatchBufferStartAddress = anv_shared_bo_address(
+            cmd_buffer->generation.ring_bo);
       }
 
       /***

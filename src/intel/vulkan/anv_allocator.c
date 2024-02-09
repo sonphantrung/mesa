@@ -644,7 +644,8 @@ anv_state_pool_init(struct anv_state_pool *pool,
                     struct anv_device *device,
                     const struct anv_state_pool_params *params)
 {
-   uint32_t initial_size = MAX2(params->block_size * 16,
+   uint32_t initial_size = MAX3(params->initial_size,
+                                params->block_size * 16,
                                 device->info->mem_alignment);
 
    VkResult result = anv_block_pool_init(&pool->block_pool, device,
@@ -1112,11 +1113,8 @@ anv_bo_pool_init(struct anv_bo_pool *pool, struct anv_device *device,
    pool->device = device;
    pool->bo_alloc_flags = alloc_flags;
 
-   for (unsigned i = 0; i < ARRAY_SIZE(pool->free_list); i++) {
-      util_sparse_array_free_list_init(&pool->free_list[i],
-                                       &device->bo_cache.bo_map, 0,
-                                       offsetof(struct anv_bo, free_index));
-   }
+   for (unsigned i = 0; i < ARRAY_SIZE(pool->free_list); i++)
+      p_atomic_set(&pool->free_list[i], NULL);
 
    VG(VALGRIND_CREATE_MEMPOOL(pool, 0, false));
 }
@@ -1125,15 +1123,14 @@ void
 anv_bo_pool_finish(struct anv_bo_pool *pool)
 {
    for (unsigned i = 0; i < ARRAY_SIZE(pool->free_list); i++) {
-      while (1) {
-         struct anv_bo *bo =
-            util_sparse_array_free_list_pop_elem(&pool->free_list[i]);
-         if (bo == NULL)
-            break;
-
+      struct anv_shared_bo *bo = p_atomic_read(&pool->free_list[i]);
+      while (bo) {
+         struct anv_shared_bo *next_bo = bo->next;
          /* anv_device_release_bo is going to "free" it */
-         VG(VALGRIND_MALLOCLIKE_BLOCK(bo->map, bo->size, 0, 1));
-         anv_device_release_bo(pool->device, bo);
+         VG(VALGRIND_MEMPOOL_ALLOC(&pool->device->shared_bo_pool,
+                                   anv_shared_bo_map(bo), bo->size));
+         anv_shared_bo_pool_release(&pool->device->shared_bo_pool, bo);
+         bo = next_bo;
       }
    }
 
@@ -1142,33 +1139,40 @@ anv_bo_pool_finish(struct anv_bo_pool *pool)
 
 VkResult
 anv_bo_pool_alloc(struct anv_bo_pool *pool, uint32_t size,
-                  struct anv_bo **bo_out)
+                  struct anv_shared_bo **bo_out)
 {
    const unsigned size_log2 = size < 4096 ? 12 : util_logbase2_ceil(size);
    const unsigned pow2_size = 1 << size_log2;
    const unsigned bucket = size_log2 - 12;
    assert(bucket < ARRAY_SIZE(pool->free_list));
+   struct anv_shared_bo *bo, *next_bo;
 
-   struct anv_bo *bo =
-      util_sparse_array_free_list_pop_elem(&pool->free_list[bucket]);
-   if (bo != NULL) {
-      VG(VALGRIND_MEMPOOL_ALLOC(pool, bo->map, size));
-      *bo_out = bo;
-      return VK_SUCCESS;
+   do {
+      bo = p_atomic_read(&pool->free_list[bucket]);
+      next_bo = p_atomic_cmpxchg(&pool->free_list[bucket], bo, bo ? bo->next : NULL);
+   } while (bo && bo != next_bo);
+
+   if (bo == NULL) {
+      VkResult result = anv_shared_bo_pool_alloc(&pool->device->shared_bo_pool,
+                                                 "batch", pow2_size, 64,
+                                                 pool->bo_alloc_flags,
+                                                 0 /* explicit_address */,
+                                                 &bo);
+      if (result != VK_SUCCESS)
+         return result;
+
+      if (pool->bo_alloc_flags & ANV_BO_ALLOC_MAPPED) {
+         VG(VALGRIND_MEMPOOL_FREE(&pool->device->shared_bo_pool,
+                                  anv_shared_bo_map(bo)));
+      }
    }
 
-   VkResult result = anv_device_alloc_bo(pool->device,
-                                         pool->name,
-                                         pow2_size,
-                                         pool->bo_alloc_flags,
-                                         0 /* explicit_address */,
-                                         &bo);
-   if (result != VK_SUCCESS)
-      return result;
-
    /* We want it to look like it came from this pool */
-   VG(VALGRIND_FREELIKE_BLOCK(bo->map, 0));
-   VG(VALGRIND_MEMPOOL_ALLOC(pool, bo->map, size));
+   if (pool->bo_alloc_flags & ANV_BO_ALLOC_MAPPED) {
+      VG(VALGRIND_MEMPOOL_ALLOC(pool,
+                                anv_shared_bo_map(bo),
+                                bo->size));
+   }
 
    *bo_out = bo;
 
@@ -1176,19 +1180,23 @@ anv_bo_pool_alloc(struct anv_bo_pool *pool, uint32_t size,
 }
 
 void
-anv_bo_pool_free(struct anv_bo_pool *pool, struct anv_bo *bo)
+anv_bo_pool_free(struct anv_bo_pool *pool, struct anv_shared_bo *bo)
 {
-   VG(VALGRIND_MEMPOOL_FREE(pool, bo->map));
+   if (pool->bo_alloc_flags & ANV_BO_ALLOC_MAPPED)
+      VG(VALGRIND_MEMPOOL_FREE(pool, anv_shared_bo_map(bo)));
 
    assert(util_is_power_of_two_or_zero(bo->size));
    const unsigned size_log2 = util_logbase2_ceil(bo->size);
    const unsigned bucket = size_log2 - 12;
    assert(bucket < ARRAY_SIZE(pool->free_list));
+   struct anv_shared_bo *cur_bo, *old_bo;
 
-   assert(util_sparse_array_get(&pool->device->bo_cache.bo_map,
-                                bo->gem_handle) == bo);
-   util_sparse_array_free_list_push(&pool->free_list[bucket],
-                                    &bo->gem_handle, 1);
+   old_bo = p_atomic_read(&pool->free_list[bucket]);
+   do {
+      cur_bo = old_bo;
+      bo->next = cur_bo;
+      old_bo = p_atomic_cmpxchg(&pool->free_list[bucket], cur_bo, bo);
+   } while (cur_bo != old_bo);
 }
 
 // Scratch pool
@@ -1533,6 +1541,7 @@ anv_device_alloc_bo(struct anv_device *device,
       .offset = -1,
       .size = size,
       .actual_size = actual_size,
+      .alloc_flags = alloc_flags,
       .flags = bo_flags,
       .alloc_flags = alloc_flags,
    };
@@ -1938,4 +1947,434 @@ anv_device_release_bo(struct anv_device *device,
     * again between mutex unlock and closing the GEM handle.
     */
    pthread_mutex_unlock(&cache->mutex);
+}
+
+/**
+ * Shared BO pool.
+ *
+ * Helps limiting GEM allocations and tries to get contiguous chunks of
+ * physical memory so that PPGTT tables can use fast paths in PDEs/PTEs during
+ * the page walks.
+ */
+
+/* Return the power of two size of a slab entry matching the input size. */
+static uint64_t
+anv_get_slab_pot_entry_size(struct anv_shared_bo_pool *pool, uint64_t size)
+{
+   uint64_t entry_size = util_next_power_of_two64(size);
+
+   return MAX2(entry_size, 1 << pool->min_order);
+}
+
+/* Return the slab entry alignment. */
+static uint64_t
+anv_get_slab_entry_alignment(struct anv_shared_bo_pool *pool, uint64_t size)
+{
+   uint64_t entry_size = anv_get_slab_pot_entry_size(pool, size);
+
+   if (size <= entry_size * 3 / 4)
+      return entry_size / 4;
+
+   return entry_size;
+}
+
+void
+anv_shared_bo_pool_init(struct anv_shared_bo_pool *pool,
+                        struct anv_device *device,
+                        uint64_t slab_size)
+{
+   memset(pool, 0, sizeof(*pool));
+
+   pool->device = device;
+   pool->min_order = 8;  /* 256 B */
+   pool->max_order = 20; /* 1  MB */
+   pool->slab_size = slab_size;
+   simple_mtx_init(&pool->mutex, mtx_plain);
+   for (uint32_t i = 0; i < ARRAY_SIZE(pool->slabs); i++)
+      list_inithead(&pool->slabs[i]);
+
+   VG(VALGRIND_CREATE_MEMPOOL(pool, 0, false));
+}
+
+static VkResult
+anv_shared_bo_pool_alloc_locked(struct anv_shared_bo_pool *pool,
+                                uint64_t size,
+                                enum anv_bo_alloc_flags alloc_flags,
+                                struct anv_shared_bo **bo_out);
+static void
+anv_shared_bo_pool_release_locked(struct anv_shared_bo_pool *pool,
+                                  struct anv_shared_bo *bo);
+
+void
+anv_shared_bo_pool_fini(struct anv_shared_bo_pool *pool)
+{
+   for (uint32_t i = 0; i < ARRAY_SIZE(pool->slabs); i++) {
+      /* Release internal slabs first */
+      list_for_each_entry_safe(struct anv_shared_slab, slab,
+                               &pool->slabs[i], link) {
+         if (slab->slab_bo == NULL)
+            continue;
+
+         list_del(&slab->link);
+         vk_free(&pool->device->vk.alloc, slab);
+      }
+      /* Finally free the backing BOs */
+      list_for_each_entry_safe(struct anv_shared_slab, slab,
+                               &pool->slabs[i], link) {
+         list_del(&slab->link);
+         if (slab->bo->alloc_flags & ANV_BO_ALLOC_MAPPED)
+            VG(VALGRIND_MALLOCLIKE_BLOCK(slab->bo->map, slab->bo->size, 0, 1));
+         anv_device_release_bo(pool->device, slab->bo);
+         vk_free(&pool->device->vk.alloc, slab);
+      }
+   }
+
+   simple_mtx_destroy(&pool->mutex);
+
+   VG(VALGRIND_DESTROY_MEMPOOL(pool));
+}
+
+static VkResult
+anv_shared_bo_pool_from_external(struct anv_shared_bo_pool *pool,
+                                 struct anv_bo *wrapped_bo,
+                                 struct anv_shared_bo **bo_out)
+{
+   VK_MULTIALLOC(ma);
+   VK_MULTIALLOC_DECL(&ma, struct anv_shared_slab, slab, 1);
+   VK_MULTIALLOC_DECL(&ma, struct anv_shared_bo, bo, 1);
+
+   if (!vk_multialloc_zalloc2(&ma, &pool->device->vk.alloc, NULL,
+                              VK_SYSTEM_ALLOCATION_SCOPE_DEVICE)) {
+      return vk_error(pool->device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   }
+
+   slab->external = true;
+   slab->bo       = wrapped_bo;
+
+   bo->slab        = slab;
+   bo->address     = (struct anv_address) { .bo = slab->bo };
+   bo->size        = wrapped_bo->size;
+
+   *bo_out = bo;
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+anv_shared_bo_pool_standalone_bo(struct anv_shared_bo_pool *pool,
+                                 const char *name,
+                                 uint64_t size,
+                                 enum anv_bo_alloc_flags alloc_flags,
+                                 uint64_t explicit_address,
+                                 struct anv_shared_bo **bo_out)
+{
+   struct anv_bo *bo;
+   VkResult result = anv_device_alloc_bo(pool->device,
+                                         name,
+                                         size,
+                                         alloc_flags,
+                                         explicit_address,
+                                         &bo);
+   if (result != VK_SUCCESS)
+      return result;
+
+   result = anv_shared_bo_pool_from_external(pool, bo, bo_out);
+   if (result != VK_SUCCESS)
+      anv_device_release_bo(pool->device, bo);
+
+   return result;
+}
+
+static struct anv_shared_bo *
+anv_shared_bo_pool_find_bo(struct anv_shared_bo_pool *pool,
+                           uint64_t size,
+                           enum anv_bo_alloc_flags alloc_flags)
+{
+   unsigned order = MAX2(util_logbase2_ceil64(1ull << pool->min_order),
+                         util_logbase2_ceil64(size));
+   uint64_t entry_pot_size = 1ull << order;
+   uint64_t entry_size = entry_pot_size;
+   unsigned bucket = order - pool->min_order;
+
+   if (size <= (entry_size * 3 / 4)) {
+      entry_size = entry_size * 3 / 4;
+      bucket += pool->max_order - pool->min_order + 1;
+   }
+
+   list_for_each_entry_safe(struct anv_shared_slab, slab,
+                            &pool->slabs[bucket], link) {
+      assert(slab->free_count > 0);
+      assert(slab->free_bos != NULL);
+
+      struct anv_shared_bo *bo = NULL;
+      if (slab->alloc_flags != alloc_flags)
+         continue;
+
+      bo = slab->free_bos;
+      slab->free_bos = bo->next;
+      if (--slab->free_count == 0)
+         list_del(&slab->link);
+
+      return bo;
+   }
+
+   return NULL;
+}
+
+static VkResult
+anv_shared_bo_pool_alloc_slab(struct anv_shared_bo_pool *pool,
+                              uint64_t size,
+                              enum anv_bo_alloc_flags alloc_flags)
+{
+   unsigned order = MAX2(util_logbase2_ceil64(1ull << pool->min_order),
+                         util_logbase2_ceil64(size));
+   uint64_t entry_pot_size = 1ull << order;
+   uint64_t entry_size = entry_pot_size;
+   unsigned bucket = order - pool->min_order;
+
+   assert(bucket <= ARRAY_SIZE(pool->slabs) / 2);
+   if (size <= (entry_size * 3 / 4)) {
+      entry_size = entry_size * 3 / 4;
+      bucket += pool->max_order - pool->min_order + 1;
+   }
+   assert(bucket <= ARRAY_SIZE(pool->slabs));
+   assert(entry_size >= size);
+
+   uint64_t slab_size = 2 * entry_pot_size;
+   assert(slab_size <= 2 * (1 << pool->max_order));
+   unsigned count = slab_size / entry_size;
+
+   VK_MULTIALLOC(ma);
+   VK_MULTIALLOC_DECL(&ma, struct anv_shared_slab, slab, 1);
+   VK_MULTIALLOC_DECL(&ma, struct anv_shared_bo, bos, count);
+
+   if (!vk_multialloc_zalloc2(&ma, &pool->device->vk.alloc, NULL,
+                              VK_SYSTEM_ALLOCATION_SCOPE_DEVICE))
+      return vk_error(pool->device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   VkResult result;
+   if (slab_size == 2 * (1ull << pool->max_order)) {
+      result =
+         anv_device_alloc_bo(pool->device, "shared bo",
+                             slab_size,
+                             alloc_flags, 0,
+                             &slab->bo);
+      if (alloc_flags & ANV_BO_ALLOC_MAPPED)
+         VG(VALGRIND_FREELIKE_BLOCK(slab->bo->map, 0));
+   } else {
+      result =
+         anv_shared_bo_pool_alloc_locked(pool,
+                                         slab_size,
+                                         alloc_flags,
+                                         &slab->slab_bo);
+   }
+   if (result != VK_SUCCESS) {
+      vk_free(&pool->device->vk.alloc, slab);
+      return result;
+   }
+
+   slab->size = slab_size;
+   slab->free_count = count;
+   slab->alloc_flags = alloc_flags;
+   slab->bucket = bucket;
+
+   for (unsigned i = 0; i < count; i++) {
+      bos[i].slab        = slab;
+      bos[i].size        = entry_size;
+      bos[i].next        = slab->free_bos;
+
+      if (slab->slab_bo) {
+         bos[i].address  = anv_address_add(slab->slab_bo->address,
+                                           i * entry_size);
+      } else {
+         bos[i].address  = (struct anv_address) {
+            .bo     = slab->bo,
+            .offset = i * entry_size,
+         };
+      }
+
+      slab->free_bos = &bos[i];
+   }
+
+   list_add(&slab->link, &pool->slabs[bucket]);
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+anv_shared_bo_pool_alloc_locked(struct anv_shared_bo_pool *pool,
+                                uint64_t size,
+                                enum anv_bo_alloc_flags alloc_flags,
+                                struct anv_shared_bo **bo_out)
+{
+   VkResult result = VK_SUCCESS;
+   struct anv_shared_bo *bo =
+      anv_shared_bo_pool_find_bo(pool, size, alloc_flags);
+   if (bo == NULL) {
+      result = anv_shared_bo_pool_alloc_slab(pool, size, alloc_flags);
+      if (result == VK_SUCCESS) {
+         bo = anv_shared_bo_pool_find_bo(pool, size, alloc_flags);
+         assert(bo != NULL);
+         *bo_out = bo;
+      }
+   } else {
+      *bo_out = bo;
+   }
+
+   return result;
+}
+
+VkResult
+anv_shared_bo_pool_alloc(struct anv_shared_bo_pool *pool,
+                         const char *name,
+                         uint64_t size,
+                         uint64_t alignment,
+                         enum anv_bo_alloc_flags alloc_flags,
+                         uint64_t explicit_address,
+                         struct anv_shared_bo **bo_out)
+{
+   VkResult result;
+
+   uint64_t alloc_size = size;
+   uint64_t slab_entry_size = anv_get_slab_entry_alignment(pool, alloc_size);
+   uint64_t pot_size = anv_get_slab_pot_entry_size(pool, alloc_size);
+
+   if (alloc_flags & ANV_BO_ALLOC_DEDICATED) {
+      alignment = MAX2(alignment,
+                       pool->device->info->has_aux_map ?
+                       intel_aux_map_get_alignment(pool->device->aux_map_ctx) :
+                       pool->device->info->mem_alignment);
+   }
+
+   /* For ANV_BO_ALLOC_IMPLICIT_SYNC & ANV_BO_ALLOC_IMPLICIT_WRITE we will
+    * need a standalone BO, as the allocation is also used for implicit
+    * synchronization and we don't want to over synchronize.
+    *
+    * External allocations have to be exportable, we don't want to mix that
+    * with other data.
+    *
+    * Client visible & fixed addresses have to placed at a particular location
+    * in VMA so we can't use the slabs.
+    */
+   if ((alloc_flags & (ANV_BO_ALLOC_EXTERNAL |
+                       ANV_BO_ALLOC_FIXED_ADDRESS |
+                       ANV_BO_ALLOC_IMPLICIT_SYNC |
+                       ANV_BO_ALLOC_IMPLICIT_WRITE |
+                       ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS)) == 0 &&
+       pot_size <= (1ull << pool->max_order) && alignment <= pot_size) {
+      if (alignment > slab_entry_size)
+         alloc_size = pot_size;
+
+      simple_mtx_lock(&pool->mutex);
+      result =
+         anv_shared_bo_pool_alloc_locked(pool, alloc_size,
+                                         alloc_flags, bo_out);
+      simple_mtx_unlock(&pool->mutex);
+
+      if (result == VK_SUCCESS && (alloc_flags & ANV_BO_ALLOC_MAPPED))
+         VG(VALGRIND_MEMPOOL_ALLOC(pool, anv_shared_bo_map(*bo_out), (*bo_out)->size));
+   } else {
+      result =
+         anv_shared_bo_pool_standalone_bo(pool, name, size,
+                                          alloc_flags, explicit_address,
+                                          bo_out);
+   }
+
+   return result;
+}
+
+static void
+anv_shared_bo_pool_release_locked(struct anv_shared_bo_pool *pool,
+                                  struct anv_shared_bo *bo)
+{
+   struct anv_shared_slab *slab = bo->slab;
+
+   if (slab->external) {
+      assert(slab->slab_bo == NULL);
+      anv_device_release_bo(pool->device, slab->bo);
+      vk_free(&pool->device->vk.alloc, slab);
+      return;
+   }
+
+   bo->next = slab->free_bos;
+   slab->free_bos = bo;
+   if (slab->free_count++ == 0) {
+      list_add(&slab->link, &pool->slabs[slab->bucket]);
+   }
+
+   bool release_slab = false;
+   if (slab->free_count == (slab->size / bo->size)) {
+      list_del(&slab->link);
+      release_slab = true;
+   }
+
+   if (release_slab) {
+      if (slab->slab_bo) {
+         anv_shared_bo_pool_release_locked(pool, slab->slab_bo);
+      } else {
+         /* Let the unmap release the valgrind block */
+         if (slab->bo->alloc_flags & ANV_BO_ALLOC_MAPPED)
+            VG(VALGRIND_MALLOCLIKE_BLOCK(slab->bo->map, slab->bo->size, 0, 1));
+         anv_device_release_bo(pool->device, slab->bo);
+      }
+      vk_free(&pool->device->vk.alloc, slab);
+   }
+}
+
+void
+anv_shared_bo_pool_release(struct anv_shared_bo_pool *pool,
+                           struct anv_shared_bo *bo)
+{
+   if (bo->address.bo->alloc_flags & ANV_BO_ALLOC_MAPPED)
+      VG(VALGRIND_MEMPOOL_FREE(pool, anv_shared_bo_map(bo)));
+
+   simple_mtx_lock(&pool->mutex);
+
+   anv_shared_bo_pool_release_locked(pool, bo);
+
+   simple_mtx_unlock(&pool->mutex);
+}
+
+VkResult
+anv_shared_bo_pool_from_host_ptr(struct anv_shared_bo_pool *pool,
+                                 void *host_ptr, uint32_t size,
+                                 enum anv_bo_alloc_flags alloc_flags,
+                                 uint64_t client_address,
+                                 struct anv_shared_bo **bo_out)
+{
+   struct anv_bo *bo;
+
+   VkResult result = anv_device_import_bo_from_host_ptr(pool->device,
+                                                        host_ptr, size,
+                                                        alloc_flags,
+                                                        client_address,
+                                                        &bo);
+   if (result != VK_SUCCESS)
+      return result;
+
+   result = anv_shared_bo_pool_from_external(pool, bo, bo_out);
+   if (result != VK_SUCCESS)
+      anv_device_release_bo(pool->device, bo);
+
+   return result;
+}
+
+VkResult
+anv_shared_bo_pool_from_fd(struct anv_shared_bo_pool *pool, int fd,
+                           enum anv_bo_alloc_flags alloc_flags,
+                           uint64_t client_address,
+                           struct anv_shared_bo **bo_out)
+{
+   struct anv_bo *bo;
+
+   VkResult result = anv_device_import_bo(pool->device, fd, alloc_flags,
+                                          client_address, &bo);
+   if (result != VK_SUCCESS)
+      return result;
+
+   result = anv_shared_bo_pool_from_external(pool, bo, bo_out);
+   if (result != VK_SUCCESS)
+      anv_device_release_bo(pool->device, bo);
+
+   return result;
 }

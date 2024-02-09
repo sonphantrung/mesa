@@ -677,7 +677,7 @@ add_aux_state_tracking_buffer(struct anv_device *device,
     * lack of testing.  And MI_LOAD/STORE operations require dword-alignment.
     */
    return image_binding_grow(device, image, binding,
-                             state_offset, state_size, 4096,
+                             state_offset, state_size, 256,
                              &image->planes[plane].fast_clear_memory_range);
 }
 
@@ -1168,7 +1168,7 @@ check_memory_bindings(const struct anv_device *device,
           * due to lack of testing.  And MI_LOAD/STORE operations require
           * dword-alignment.
           */
-         assert(plane->fast_clear_memory_range.alignment == 4096);
+         assert(plane->fast_clear_memory_range.alignment == 256);
          check_memory_range(accum_ranges,
                             .test_range = &plane->fast_clear_memory_range,
                             .expect_binding = binding);
@@ -1524,10 +1524,15 @@ alloc_private_binding(struct anv_device *device,
       return VK_SUCCESS;
    }
 
-   VkResult result = anv_device_alloc_bo(device, "image-binding-private",
-                                         binding->memory_range.size, 0, 0,
-                                         &binding->address.bo);
+   VkResult result = anv_shared_bo_pool_alloc(&device->shared_bo_pool,
+                                              "private image",
+                                              binding->memory_range.size,
+                                              binding->memory_range.alignment,
+                                              0 /* alloc_flags */,
+                                              0 /* explicit_address */,
+                                              &image->private_bo);
    if (result == VK_SUCCESS) {
+      binding->address = anv_shared_bo_address(image->private_bo);
       pthread_mutex_lock(&device->mutex);
       list_addtail(&image->link, &device->image_private_objects);
       pthread_mutex_unlock(&device->mutex);
@@ -1792,12 +1797,12 @@ anv_image_finish(struct anv_image *image)
       anv_device_release_bo(device, image->bindings[ANV_IMAGE_MEMORY_BINDING_MAIN].address.bo);
    }
 
-   struct anv_bo *private_bo = image->bindings[ANV_IMAGE_MEMORY_BINDING_PRIVATE].address.bo;
+   struct anv_shared_bo *private_bo = image->private_bo;
    if (private_bo) {
       pthread_mutex_lock(&device->mutex);
       list_del(&image->link);
       pthread_mutex_unlock(&device->mutex);
-      anv_device_release_bo(device, private_bo);
+      anv_shared_bo_pool_release(&device->shared_bo_pool, private_bo);
    }
 
    vk_image_finish(&image->vk);
@@ -2323,10 +2328,8 @@ anv_bind_image_memory(struct anv_device *device,
          struct anv_image_binding *binding =
             anv_image_aspect_to_binding(image, plane_info->planeAspect);
 
-         binding->address = (struct anv_address) {
-            .bo = mem->bo,
-            .offset = bind_info->memoryOffset,
-         };
+         binding->address = anv_address_add(
+            anv_shared_bo_address(mem->bo), bind_info->memoryOffset);
 
          ANV_RMV(image_bind, device, image,
                  binding - image->bindings);
@@ -2389,10 +2392,8 @@ anv_bind_image_memory(struct anv_device *device,
       assert(!image->disjoint);
 
       image->bindings[ANV_IMAGE_MEMORY_BINDING_MAIN].address =
-         (struct anv_address) {
-         .bo = mem->bo,
-         .offset = bind_info->memoryOffset,
-      };
+         anv_address_add(anv_shared_bo_address(mem->bo),
+                         bind_info->memoryOffset);
 
       ANV_RMV(image_bind, device, image,
               ANV_IMAGE_MEMORY_BINDING_MAIN);

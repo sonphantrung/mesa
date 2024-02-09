@@ -498,6 +498,7 @@ struct anv_bo {
    /** Flags to pass to the kernel through drm_i915_exec_object2::flags */
    uint32_t flags;
 
+   /** Original allocation flags for this BO in anv_device_alloc_bo(). */
    enum anv_bo_alloc_flags alloc_flags;
 
    /** True if this BO wraps a host pointer */
@@ -806,6 +807,7 @@ struct anv_state_pool_params {
    int64_t     start_offset;
    uint32_t    block_size;
    uint32_t    max_size;
+   uint32_t    initial_size;
 };
 
 VkResult anv_state_pool_init(struct anv_state_pool *pool,
@@ -859,6 +861,112 @@ anv_state_table_get(struct anv_state_table *table, uint32_t idx)
 {
    return &table->map[idx].state;
 }
+
+/**
+ * Implements a pool of BOs that can be shared down to a 64byte granularity.
+ *
+ * This helps reducing the number of small BOs that need to be allocated
+ * especially for things like UBOs. Working with bigger chunks also allows to
+ * use the PDE/PTE fast path in the page tables.
+ */
+struct anv_shared_slab;
+
+struct anv_shared_bo {
+   /* Shared BO this slab belongs to */
+   struct anv_shared_slab *slab;
+   /* Address of the BO (with correct anv_bo + offset) */
+   struct anv_address      address;
+   /* Size of this BO */
+   uint64_t                size;
+   /* Next chunk in the free list */
+   struct anv_shared_bo   *next;
+};
+
+struct anv_shared_slab {
+   struct list_head        link;
+   /* BO shared by multiple allocations */
+   struct anv_shared_bo   *slab_bo;
+   /* BO shared by multiple allocations */
+   struct anv_bo          *bo;
+   /* Size of the entire slab allocation */
+   uint64_t                size;
+   unsigned                bucket;
+   /* Allocation flags */
+   enum anv_bo_alloc_flags alloc_flags;
+   /* Chunks of this BO */
+   struct anv_shared_bo   *free_bos;
+   /* Number of items in the free list */
+   uint32_t                free_count;
+   /* */
+   bool                    external;
+};
+
+struct anv_shared_bo_pool {
+   struct anv_device *device;
+   uint64_t slab_size;
+
+   simple_mtx_t mutex;
+
+   /* Minimum power of 2 size */
+   unsigned min_order;
+   /* Maximum power of 2 size */
+   unsigned max_order;
+
+   struct list_head slabs[13 * 2];
+};
+
+static inline struct anv_address
+anv_shared_bo_address(const struct anv_shared_bo *bo)
+{
+   return bo ? bo->address : ANV_NULL_ADDRESS;
+}
+
+static inline uint64_t
+anv_shared_bo_address_u64(const struct anv_shared_bo *bo)
+{
+   return anv_address_physical(bo->address);
+}
+
+static inline void *
+anv_shared_bo_map(const struct anv_shared_bo *bo)
+{
+   if (bo->address.bo->map == NULL)
+      return NULL;
+   return bo->address.bo->map + bo->address.offset;
+}
+
+static inline struct anv_bo *
+anv_shared_bo_bo(const struct anv_shared_bo *bo)
+{
+   return bo->address.bo;
+}
+
+void anv_shared_bo_pool_init(struct anv_shared_bo_pool *pool,
+                             struct anv_device *device,
+                             uint64_t slab_size);
+void anv_shared_bo_pool_fini(struct anv_shared_bo_pool *pool);
+
+VkResult anv_shared_bo_pool_alloc(struct anv_shared_bo_pool *pool,
+                                  const char *name,
+                                  uint64_t size,
+                                  uint64_t alignment,
+                                  enum anv_bo_alloc_flags alloc_flags,
+                                  uint64_t explicit_address,
+                                  struct anv_shared_bo **bo_out);
+void anv_shared_bo_pool_release(struct anv_shared_bo_pool *pool,
+                                struct anv_shared_bo *bo);
+
+VkResult anv_shared_bo_pool_from_host_ptr(struct anv_shared_bo_pool *pool,
+                                          void *host_ptr, uint32_t size,
+                                          enum anv_bo_alloc_flags alloc_flags,
+                                          uint64_t client_address,
+                                          struct anv_shared_bo **bo_out);
+
+VkResult anv_shared_bo_pool_from_fd(struct anv_shared_bo_pool *pool, int fd,
+                                    enum anv_bo_alloc_flags alloc_flags,
+                                    uint64_t client_address,
+                                    struct anv_shared_bo **bo_out);
+
 /**
  * Implements a pool of re-usable BOs.  The interface is identical to that
  * of block_pool except that each block is its own BO.
@@ -870,15 +978,15 @@ struct anv_bo_pool {
 
    enum anv_bo_alloc_flags bo_alloc_flags;
 
-   struct util_sparse_array_free_list free_list[16];
+   struct anv_shared_bo *free_list[16];
 };
 
 void anv_bo_pool_init(struct anv_bo_pool *pool, struct anv_device *device,
                       const char *name, enum anv_bo_alloc_flags alloc_flags);
 void anv_bo_pool_finish(struct anv_bo_pool *pool);
 VkResult anv_bo_pool_alloc(struct anv_bo_pool *pool, uint32_t size,
-                           struct anv_bo **bo_out);
-void anv_bo_pool_free(struct anv_bo_pool *pool, struct anv_bo *bo);
+                           struct anv_shared_bo **bo_out);
+void anv_bo_pool_free(struct anv_bo_pool *pool, struct anv_shared_bo *bo);
 
 struct anv_scratch_pool {
    /* Indexed by Per-Thread Scratch Space number (the hardware value) and stage */
@@ -1633,7 +1741,7 @@ struct anv_device_astc_emu {
 };
 
 struct anv_trtt_batch_bo {
-   struct anv_bo *bo;
+   struct anv_shared_bo *bo;
    uint32_t size;
 
    /* Once device->trtt.timeline_handle signals timeline_val as complete we
@@ -1679,6 +1787,8 @@ struct anv_device {
     struct anv_bo_pool                          bvh_bo_pool;
 
     struct anv_bo_cache                         bo_cache;
+
+    struct anv_shared_bo_pool                   shared_bo_pool;
 
     struct anv_state_pool                       general_state_pool;
     struct anv_state_pool                       dynamic_state_pool;
@@ -1873,6 +1983,10 @@ struct anv_device {
     bool                                         using_sparse;
 
     struct anv_device_astc_emu                   astc_emu;
+
+    struct {
+       uint32_t trash;
+    } debug;
 };
 
 static inline uint32_t
@@ -2074,7 +2188,7 @@ struct anv_batch_bo {
    /* Link in the anv_cmd_buffer.owned_batch_bos list */
    struct list_head                             link;
 
-   struct anv_bo *                              bo;
+   struct anv_shared_bo                        *bo;
 
    /* Bytes actually consumed in this batch BO */
    uint32_t                                     length;
@@ -2264,7 +2378,7 @@ struct anv_device_memory {
 
    struct list_head                             link;
 
-   struct anv_bo *                              bo;
+   struct anv_shared_bo *                       bo;
    const struct anv_memory_type *               type;
 
    void *                                       map;
@@ -2273,6 +2387,12 @@ struct anv_device_memory {
    /* The map, from the user PoV is map + map_delta */
    uint64_t                                     map_delta;
 };
+
+static inline struct anv_address
+anv_device_memory_address(const struct anv_device_memory *mem)
+{
+   return anv_shared_bo_address(mem->bo);
+}
 
 /**
  * Header for Vertex URB Entry (VUE)
@@ -2652,7 +2772,7 @@ anv_descriptor_set_address(struct anv_descriptor_set *set)
 
 struct anv_descriptor_pool_heap {
    /* BO allocated to back the pool (unused for host pools) */
-   struct anv_bo        *bo;
+   struct anv_shared_bo *bo;
 
    /* Host memory allocated to back a host pool */
    void                 *host_mem;
@@ -3585,7 +3705,7 @@ struct anv_cmd_state {
 };
 
 #define ANV_MIN_CMD_BUFFER_BATCH_SIZE 8192
-#define ANV_MAX_CMD_BUFFER_BATCH_SIZE (16 * 1024 * 1024)
+#define ANV_MAX_CMD_BUFFER_BATCH_SIZE (1 * 1024 * 1024)
 
 enum anv_cmd_buffer_exec_mode {
    ANV_CMD_BUFFER_EXEC_MODE_PRIMARY,
@@ -3707,7 +3827,7 @@ struct anv_cmd_buffer {
        * When generating draws in ring mode, this buffer will hold generated
        * 3DPRIMITIVE commands.
        */
-      struct anv_bo                            *ring_bo;
+      struct anv_shared_bo                     *ring_bo;
 
       /**
        * State tracking of the generation shader (only used for the non-ring
@@ -4794,6 +4914,8 @@ struct anv_image {
       struct anv_sparse_binding_data sparse_data;
    } bindings[ANV_IMAGE_MEMORY_BINDING_END];
 
+   struct anv_shared_bo *private_bo;
+
    /**
     * Image subsurfaces
     *
@@ -5559,6 +5681,12 @@ struct anv_vid_mem {
    VkDeviceSize       size;
 };
 
+static inline struct anv_address
+anv_vid_mem_address(const struct anv_vid_mem *mem)
+{
+   return anv_address_add(anv_device_memory_address(mem->mem), mem->offset);
+}
+
 #define ANV_VIDEO_MEM_REQS_H264 4
 #define ANV_VIDEO_MEM_REQS_H265 9
 #define ANV_MB_WIDTH 16
@@ -5676,7 +5804,11 @@ struct anv_utrace_submit {
     */
    struct anv_reloc_list relocs;
    struct anv_batch batch;
+
+   /* List of anv_shared_bo */
    struct util_dynarray batch_bos;
+
+   struct anv_shared_bo *batch_bo;
 
    /* Stream for temporary allocations */
    struct anv_state_stream dynamic_state_stream;
@@ -5689,7 +5821,7 @@ struct anv_utrace_submit {
    struct anv_queue *queue;
 
    /* Buffer of 64bits timestamps (only used for timestamp copies) */
-   struct anv_bo *trace_bo;
+   struct anv_shared_bo *trace_bo;
 
    /* Last fully read 64bit timestamp (used to rebuild the upper bits of 32bit
     * timestamps)

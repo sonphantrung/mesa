@@ -132,6 +132,20 @@ log_resource_bind_locked(struct anv_device *device, uint64_t resource_id,
 }
 
 static void
+log_resource_bind_shared_locked(struct anv_device *device, uint64_t resource_id,
+                                struct anv_shared_bo *bo)
+{
+   struct vk_rmv_resource_bind_token token = {
+      .resource_id      = resource_id,
+      .is_system_memory = anv_shared_bo_bo(bo)->alloc_flags & ANV_BO_ALLOC_NO_LOCAL_MEM,
+      .address          = anv_address_physical(anv_shared_bo_address(bo)),
+      .size             = bo->size,
+   };
+
+   vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_RESOURCE_BIND, &token);
+}
+
+static void
 log_state_pool_bind_locked(struct anv_device *device, uint64_t resource_id,
                            struct anv_state_pool *pool, struct anv_state *state)
 {
@@ -320,7 +334,7 @@ anv_rmv_log_heap_create(struct anv_device *device,
    };
 
    vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_RESOURCE_CREATE, &token);
-   log_resource_bind_locked(device, token.resource_id, memory->bo, 0, memory->vk.size);
+   log_resource_bind_shared_locked(device, token.resource_id, memory->bo);
    simple_mtx_unlock(&device->vk.memory_trace_data.token_mtx);
 }
 
@@ -584,7 +598,7 @@ anv_rmv_log_cmd_buffer_create(struct anv_device *device,
    struct vk_rmv_resource_create_token create_token = {
       .type               = VK_RMV_RESOURCE_TYPE_COMMAND_ALLOCATOR,
       .resource_id        = resource_id_locked(device, cmd_buffer),
-      .is_driver_internal = true,
+      .is_driver_internal = false,
       .command_buffer     = {
          .preferred_domain                 = VK_RMV_KERNEL_MEMORY_DOMAIN_GTT /* TODO */,
          .executable_size                  = executable_size,
@@ -600,8 +614,7 @@ anv_rmv_log_cmd_buffer_create(struct anv_device *device,
                      VK_RMV_TOKEN_TYPE_RESOURCE_CREATE,
                      &create_token);
    list_for_each_entry(struct anv_batch_bo, bbo, &cmd_buffer->batch_bos, link) {
-      log_resource_bind_locked(device, create_token.resource_id,
-                               bbo->bo, 0, bbo->length);
+      log_resource_bind_shared_locked(device, create_token.resource_id, bbo->bo);
    }
    bind_cmd_buffer_state_stream_locked(device, create_token.resource_id,
                                        &cmd_buffer->surface_state_stream);
@@ -695,27 +708,17 @@ anv_rmv_log_descriptor_pool_create(struct anv_device *device,
    simple_mtx_unlock(&device->vk.memory_trace_data.token_mtx);
 
    if (pool->surfaces.bo) {
-      struct vk_rmv_resource_bind_token bind_token = {
-         .resource_id      = create_token.resource_id,
-         .is_system_memory = false,
-         .address          = pool->surfaces.bo->offset,
-         .size             = pool->surfaces.bo->size,
-      };
-
       simple_mtx_lock(&device->vk.memory_trace_data.token_mtx);
-      vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_RESOURCE_BIND, &bind_token);
+      log_resource_bind_shared_locked(device,
+                                      create_token.resource_id,
+                                      pool->surfaces.bo);
       simple_mtx_unlock(&device->vk.memory_trace_data.token_mtx);
    }
    if (pool->samplers.bo) {
-      struct vk_rmv_resource_bind_token bind_token = {
-         .resource_id      = create_token.resource_id,
-         .is_system_memory = false,
-         .address          = pool->samplers.bo->offset,
-         .size             = pool->samplers.bo->size,
-      };
-
       simple_mtx_lock(&device->vk.memory_trace_data.token_mtx);
-      vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_RESOURCE_BIND, &bind_token);
+      log_resource_bind_shared_locked(device,
+                                      create_token.resource_id,
+                                      pool->samplers.bo);
       simple_mtx_unlock(&device->vk.memory_trace_data.token_mtx);
    }
 }

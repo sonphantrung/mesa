@@ -69,16 +69,18 @@ dump_vk_sparse_memory_bind(const VkSparseMemoryBind *bind)
    if (!INTEL_DEBUG(DEBUG_SPARSE))
       return;
 
+   struct anv_shared_bo *bo = NULL;
    if (bind->memory != VK_NULL_HANDLE) {
-      struct anv_bo *bo = anv_device_memory_from_handle(bind->memory)->bo;
-      sparse_debug("bo:%04u ", bo->gem_handle);
+      bo = anv_device_memory_from_handle(bind->memory)->bo;
+      sparse_debug("bo:%04u ", anv_shared_bo_bo(bo)->gem_handle);
    } else {
       sparse_debug("bo:---- ");
    }
 
    sparse_debug("res_offset:%08"PRIx64" size:%08"PRIx64" "
                 "mem_offset:%08"PRIx64" flags:0x%08x\n",
-                bind->resourceOffset, bind->size, bind->memoryOffset,
+                (bo ? bo->address.offset : 0) + bind->resourceOffset,
+                bind->size, bind->memoryOffset,
                 bind->flags);
 }
 
@@ -983,8 +985,10 @@ vk_bind_to_anv_vm_bind(struct anv_sparse_binding_data *sparse,
    assert(vk_bind->resourceOffset + vk_bind->size <= sparse->size);
 
    if (vk_bind->memory != VK_NULL_HANDLE) {
-      anv_bind.bo = anv_device_memory_from_handle(vk_bind->memory)->bo;
-      anv_bind.bo_offset = vk_bind->memoryOffset,
+      struct anv_shared_bo *bo =
+         anv_device_memory_from_handle(vk_bind->memory)->bo;
+      anv_bind.bo = anv_shared_bo_bo(bo);
+      anv_bind.bo_offset = bo->address.offset + vk_bind->memoryOffset,
       assert(vk_bind->memoryOffset + vk_bind->size <= anv_bind.bo->size);
    }
 

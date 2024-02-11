@@ -291,13 +291,15 @@ update_map(struct i915_context *i915, uint32_t unit,
    unsigned max_lod = num_levels * 4;
    bool is_npot = (!util_is_power_of_two_or_zero(pt->width0) ||
                    !util_is_power_of_two_or_zero(pt->height0));
+   bool is_2048 = ((pt->width0 == 2048) && (pt->height0 == 2048));
    uint32_t format, pitch;
 
    /*
     * This is a bit messy. i915 doesn't support NPOT with mipmaps, but we can
     * still texture from a single level. This is useful to make u_blitter work.
+    * Textures with size 2048x2048 are not supported.
     */
-   if (is_npot) {
+   if (is_npot || is_2048) {
       width = u_minify(width, first_level);
       height = u_minify(height, first_level);
       max_lod = 1;

@@ -428,6 +428,7 @@ typedef enum {
    TYPE_U32 = 3,
    TYPE_S16 = 4,
    TYPE_S32 = 5,
+   TYPE_ATOMIC_U64 = 6, // Only valid for a7xx atomics
    TYPE_U8 = 6,
    TYPE_S8 = 7, // XXX I assume?
 } type_t;

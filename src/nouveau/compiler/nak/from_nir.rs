@@ -2271,7 +2271,7 @@ impl<'a> ShaderFromNir<'a> {
 
                 b.push_op(OpFSOut { srcs: srcs });
             }
-            nir_intrinsic_demote | nir_intrinsic_discard => {
+            nir_intrinsic_demote => {
                 if let ShaderIoInfo::Fragment(info) = &mut self.info.io {
                     info.uses_kill = true;
                 } else {
@@ -2279,7 +2279,7 @@ impl<'a> ShaderFromNir<'a> {
                 }
                 b.push_op(OpKill {});
             }
-            nir_intrinsic_demote_if | nir_intrinsic_discard_if => {
+            nir_intrinsic_demote_if => {
                 if let ShaderIoInfo::Fragment(info) = &mut self.info.io {
                     info.uses_kill = true;
                 } else {

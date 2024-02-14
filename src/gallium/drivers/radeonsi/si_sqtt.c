@@ -357,7 +357,8 @@ bool si_init_sqtt(struct si_context *sctx)
 
    sctx->sqtt->pipeline_bos = _mesa_hash_table_u64_create(NULL);
 
-   sctx->sqtt->options.instructions_timing = false;
+   sctx->sqtt->options.instructions_timing =
+      debug_get_bool_option("AMD_THREAD_TRACE_INSTRUCTION_TIMING", true);
 
    ac_sqtt_init(sctx->sqtt);
 

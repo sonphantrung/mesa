@@ -681,7 +681,7 @@ SOFTWARE.
 	<pattern low="54" high="58">11101</pattern>  <!-- OPC -->
 </bitset>
 
-<bitset name="#instruction-cat6-a3xx-atomic" extends="#instruction-cat6-a3xx">
+<bitset name="#instruction-cat6-a3xx-atomic" extends="#instruction-cat6">
 	<doc>
 		Base for atomic instructions (I think mostly a4xx+, as
 		a3xx didn't have real image/ssbo.. it was all just global).
@@ -711,6 +711,7 @@ SOFTWARE.
 	</field>
 	<field   low="32" high="39" name="DST" type="#reg-gpr"/>
 	<pattern pos="40"          >x</pattern>
+	<field   low="49" high="51" name="TYPE" type="#type-atomic"/>
 	<encode>
 		<map name="TYPED">src</map>
 		<map name="D_MINUS_ONE">src->cat6.d - 1</map>
@@ -952,7 +953,14 @@ SOFTWARE.
 	<pattern low="54" high="58">10001</pattern>  <!-- OPC -->
 </bitset>
 
+<expr name="#cat6-64b-type-encoding">
+	{TYPE}
+</expr>
+
 <bitset name="atomic.g.xchg" extends="#instruction-cat6-a6xx-atomic-global">
+	<override expr="#cat6-64b-type-encoding">
+		<field   low="49" high="51" name="TYPE" type="#type-atomic"/>
+	</override>
 	<pattern low="54" high="58">10010</pattern>  <!-- OPC -->
 </bitset>
 
@@ -965,6 +973,9 @@ SOFTWARE.
 </bitset>
 
 <bitset name="atomic.g.cmpxchg" extends="#instruction-cat6-a6xx-atomic-global">
+	<override expr="#cat6-64b-type-encoding">
+		<field   low="49" high="51" name="TYPE" type="#type-atomic"/>
+	</override>
 	<pattern low="54" high="58">10101</pattern>  <!-- OPC -->
 </bitset>
 
@@ -1233,57 +1244,69 @@ SOFTWARE.
 	</encode>
 </bitset>
 
-<bitset name="atomic.b.add" extends="#instruction-cat6-a6xx-ibo">
+<bitset name="#instruction-cat6-a6xx-ibo-atomic" extends="#instruction-cat6-a6xx-ibo">
+	<display>
+		{SY}{JP}{NAME}.{TYPED}.{D}d.{TYPE}.{TYPE_SIZE}.{MODE}{BASE} {SRC1}, {SRC2}, {SSBO}
+	</display>
+</bitset>
+
+<bitset name="atomic.b.add" extends="#instruction-cat6-a6xx-ibo-atomic">
 	<pattern pos="0"           >x</pattern>
 	<pattern low="14" high="19">010000</pattern>   <!-- OPC -->
 	<pattern low="52" high="53">11</pattern>
 </bitset>
 
-<bitset name="atomic.b.sub" extends="#instruction-cat6-a6xx-ibo">
+<bitset name="atomic.b.sub" extends="#instruction-cat6-a6xx-ibo-atomic">
 	<pattern pos="0"           >x</pattern>
 	<pattern low="14" high="19">010001</pattern>   <!-- OPC -->
 	<pattern low="52" high="53">11</pattern>
 </bitset>
 
-<bitset name="atomic.b.xchg" extends="#instruction-cat6-a6xx-ibo">
+<bitset name="atomic.b.xchg" extends="#instruction-cat6-a6xx-ibo-atomic">
 	<pattern pos="0"           >x</pattern>
 	<pattern low="14" high="19">010010</pattern>   <!-- OPC -->
+	<override expr="#cat6-64b-type-encoding">
+		<field   low="49" high="51" name="TYPE" type="#type-atomic"/>
+	</override>
 	<pattern low="52" high="53">11</pattern>
 </bitset>
 
 <!-- inc/dec? -->
 
-<bitset name="atomic.b.cmpxchg" extends="#instruction-cat6-a6xx-ibo">
+<bitset name="atomic.b.cmpxchg" extends="#instruction-cat6-a6xx-ibo-atomic">
 	<pattern pos="0"           >x</pattern>
 	<pattern low="14" high="19">010101</pattern>   <!-- OPC -->
+	<override expr="#cat6-64b-type-encoding">
+		<field   low="49" high="51" name="TYPE" type="#type-atomic"/>
+	</override>
 	<pattern low="52" high="53">11</pattern>
 </bitset>
 
-<bitset name="atomic.b.min" extends="#instruction-cat6-a6xx-ibo">
+<bitset name="atomic.b.min" extends="#instruction-cat6-a6xx-ibo-atomic">
 	<pattern pos="0"           >x</pattern>
 	<pattern low="14" high="19">010110</pattern>   <!-- OPC -->
 	<pattern low="52" high="53">11</pattern>
 </bitset>
 
-<bitset name="atomic.b.max" extends="#instruction-cat6-a6xx-ibo">
+<bitset name="atomic.b.max" extends="#instruction-cat6-a6xx-ibo-atomic">
 	<pattern pos="0"           >x</pattern>
 	<pattern low="14" high="19">010111</pattern>   <!-- OPC -->
 	<pattern low="52" high="53">11</pattern>
 </bitset>
 
-<bitset name="atomic.b.and" extends="#instruction-cat6-a6xx-ibo">
+<bitset name="atomic.b.and" extends="#instruction-cat6-a6xx-ibo-atomic">
 	<pattern pos="0"           >x</pattern>
 	<pattern low="14" high="19">011000</pattern>   <!-- OPC -->
 	<pattern low="52" high="53">11</pattern>
 </bitset>
 
-<bitset name="atomic.b.or" extends="#instruction-cat6-a6xx-ibo">
+<bitset name="atomic.b.or" extends="#instruction-cat6-a6xx-ibo-atomic">
 	<pattern pos="0"           >x</pattern>
 	<pattern low="14" high="19">011001</pattern>   <!-- OPC -->
 	<pattern low="52" high="53">11</pattern>
 </bitset>
 
-<bitset name="atomic.b.xor" extends="#instruction-cat6-a6xx-ibo">
+<bitset name="atomic.b.xor" extends="#instruction-cat6-a6xx-ibo-atomic">
 	<pattern pos="0"           >x</pattern>
 	<pattern low="14" high="19">011010</pattern>   <!-- OPC -->
 	<pattern low="52" high="53">11</pattern>

@@ -376,6 +376,23 @@ validate_instr(struct ir3_validate_ctx *ctx, struct ir3_instruction *instr)
          validate_assert(ctx, !(instr->srcs[0]->flags & IR3_REG_HALF));
          validate_assert(ctx, !(instr->srcs[1]->flags & IR3_REG_HALF));
          break;
+      case OPC_ATOMIC_G_CMPXCHG:
+      case OPC_ATOMIC_G_XCHG:
+      case OPC_ATOMIC_B_XCHG:
+      case OPC_ATOMIC_B_CMPXCHG:
+         // 64-bit atomic
+         if (instr->dsts[0]->wrmask & 0b11) {
+            validate_assert(ctx, !(instr->dsts[0]->flags & IR3_REG_HALF));
+            validate_assert(ctx, !(instr->srcs[0]->flags & IR3_REG_HALF));
+            if (instr->srcs_count > 1)
+               validate_assert(ctx, !(instr->srcs[1]->flags & IR3_REG_HALF));
+         } else {
+            validate_reg_size(ctx, instr->dsts[0], instr->cat6.type);
+            validate_assert(ctx, !(instr->srcs[0]->flags & IR3_REG_HALF));
+            if (instr->srcs_count > 1)
+               validate_assert(ctx, !(instr->srcs[1]->flags & IR3_REG_HALF));
+         }
+         break;
       default:
          validate_reg_size(ctx, instr->dsts[0], instr->cat6.type);
          validate_assert(ctx, !(instr->srcs[0]->flags & IR3_REG_HALF));

@@ -129,6 +129,7 @@ static const struct debug_named_value test_options[] = {
    {"testgds", DBG(TEST_GDS), "Test GDS."},
    {"testgdsmm", DBG(TEST_GDS_MM), "Test GDS memory management."},
    {"testgdsoamm", DBG(TEST_GDS_OA_MM), "Test GDS OA memory management."},
+   {"testmemperf", DBG(TEST_MEM_PERF), "Test map + memcpy perf using the winsys."},
 
    DEBUG_NAMED_VALUE_END /* must be last */
 };
@@ -1523,6 +1524,9 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
    if (test_flags & DBG(TEST_DMA_PERF)) {
       si_test_dma_perf(sscreen);
    }
+
+   if (test_flags & DBG(TEST_MEM_PERF))
+      si_test_mem_perf(sscreen);
 
    if (test_flags & (DBG(TEST_VMFAULT_CP) | DBG(TEST_VMFAULT_SHADER)))
       si_test_vmfault(sscreen, test_flags);

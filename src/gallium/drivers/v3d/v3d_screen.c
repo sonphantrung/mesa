@@ -153,6 +153,10 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_TEXTURE_BARRIER:
                 return 1;
 
+        /* TODO: needed for nine and OpenCL */
+        case PIPE_CAP_TEXTURE_SAMPLER_INDEPENDENT:
+                return 0;
+
         case PIPE_CAP_POLYGON_OFFSET_CLAMP:
                 return screen->devinfo.ver >= 42;
 

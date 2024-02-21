@@ -9,7 +9,7 @@ libvulkan_lvp = shared_library(
   link_with : [libpipe_loader_static, libgallium, libwsw, libswdri, libws_null, libswkmsdri ],
   gnu_symbol_visibility : 'hidden',
   link_args : [ld_args_bsymbolic, ld_args_gc_sections],
-  dependencies : driver_swrast,
+  dependencies : driver_llvmpipe,
   name_prefix : host_machine.system() == 'windows' ? '' : [],
   install : true,
 )

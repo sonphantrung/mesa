@@ -61,12 +61,26 @@ if with_platform_haiku
 endif
 if with_gallium_softpipe
   subdir('drivers/softpipe')
-  if draw_with_llvm
-    subdir('drivers/llvmpipe')
+else
+  driver_softpipe = declare_dependency()
+endif
+if with_any_llvmpipe
+  subdir('drivers/llvmpipe')
+else
+  driver_llvmpipe = declare_dependency()
+endif
+if with_gallium_swrast
+  if with_gallium_llvmpipe
+    driver_swrast = declare_dependency(
+      dependencies : [ driver_softpipe, driver_llvmpipe ],
+    )
+  else
+    driver_swrast = driver_softpipe
   endif
 else
   driver_swrast = declare_dependency()
 endif
+
 if with_gallium_asahi
   subdir('winsys/asahi/drm')
   subdir('drivers/asahi')

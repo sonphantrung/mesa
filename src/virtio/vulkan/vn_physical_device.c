@@ -345,43 +345,40 @@ vn_physical_device_init_features(struct vn_physical_device *physical_dev)
 static void
 vn_physical_device_init_uuids(struct vn_physical_device *physical_dev)
 {
-   struct vn_physical_device_properties *props = &physical_dev->properties;
-   struct VkPhysicalDeviceProperties *vk10_props = &props->vulkan_1_0;
-   struct VkPhysicalDeviceVulkan11Properties *vk11_props = &props->vulkan_1_1;
-   struct VkPhysicalDeviceVulkan12Properties *vk12_props = &props->vulkan_1_2;
+   struct vk_properties *props = &physical_dev->base.base.properties;
    struct mesa_sha1 sha1_ctx;
    uint8_t sha1[SHA1_DIGEST_LENGTH];
 
    static_assert(VK_UUID_SIZE <= SHA1_DIGEST_LENGTH, "");
 
    _mesa_sha1_init(&sha1_ctx);
-   _mesa_sha1_update(&sha1_ctx, &vk10_props->pipelineCacheUUID,
-                     sizeof(vk10_props->pipelineCacheUUID));
+   _mesa_sha1_update(&sha1_ctx, &props->pipelineCacheUUID,
+                     sizeof(props->pipelineCacheUUID));
    _mesa_sha1_final(&sha1_ctx, sha1);
 
-   memcpy(vk10_props->pipelineCacheUUID, sha1, VK_UUID_SIZE);
+   memcpy(props->pipelineCacheUUID, sha1, VK_UUID_SIZE);
 
    _mesa_sha1_init(&sha1_ctx);
-   _mesa_sha1_update(&sha1_ctx, &vk10_props->vendorID,
-                     sizeof(vk10_props->vendorID));
-   _mesa_sha1_update(&sha1_ctx, &vk10_props->deviceID,
-                     sizeof(vk10_props->deviceID));
+   _mesa_sha1_update(&sha1_ctx, &props->vendorID,
+                     sizeof(props->vendorID));
+   _mesa_sha1_update(&sha1_ctx, &props->deviceID,
+                     sizeof(props->deviceID));
    _mesa_sha1_final(&sha1_ctx, sha1);
 
-   memcpy(vk11_props->deviceUUID, sha1, VK_UUID_SIZE);
+   memcpy(props->deviceUUID, sha1, VK_UUID_SIZE);
 
    _mesa_sha1_init(&sha1_ctx);
-   _mesa_sha1_update(&sha1_ctx, vk12_props->driverName,
-                     strlen(vk12_props->driverName));
-   _mesa_sha1_update(&sha1_ctx, vk12_props->driverInfo,
-                     strlen(vk12_props->driverInfo));
+   _mesa_sha1_update(&sha1_ctx, props->driverName,
+                     strlen(props->driverName));
+   _mesa_sha1_update(&sha1_ctx, props->driverInfo,
+                     strlen(props->driverInfo));
    _mesa_sha1_final(&sha1_ctx, sha1);
 
-   memcpy(vk11_props->driverUUID, sha1, VK_UUID_SIZE);
+   memcpy(props->driverUUID, sha1, VK_UUID_SIZE);
 
-   memset(vk11_props->deviceLUID, 0, VK_LUID_SIZE);
-   vk11_props->deviceNodeMask = 0;
-   vk11_props->deviceLUIDValid = false;
+   memset(props->deviceLUID, 0, VK_LUID_SIZE);
+   props->deviceNodeMask = 0;
+   props->deviceLUIDValid = false;
 }
 
 static void
@@ -389,7 +386,7 @@ vn_physical_device_init_properties(struct vn_physical_device *physical_dev)
 {
    const uint32_t renderer_version = physical_dev->renderer_version;
    struct vn_instance *instance = physical_dev->instance;
-   struct vn_physical_device_properties *props = &physical_dev->properties;
+   struct vk_properties *props = &physical_dev->base.base.properties;
    const struct vk_device_extension_table *exts =
       &physical_dev->renderer_extensions;
    VkPhysicalDeviceProperties2 props2 = {
@@ -397,6 +394,7 @@ vn_physical_device_init_properties(struct vn_physical_device *physical_dev)
    };
    struct {
       /* Vulkan 1.1 */
+      VkPhysicalDeviceVulkan11Properties vulkan_1_1;
       VkPhysicalDeviceIDProperties id;
       VkPhysicalDeviceSubgroupProperties subgroup;
       VkPhysicalDevicePointClippingProperties point_clipping;
@@ -405,6 +403,7 @@ vn_physical_device_init_properties(struct vn_physical_device *physical_dev)
       VkPhysicalDeviceMaintenance3Properties maintenance_3;
 
       /* Vulkan 1.2 */
+      VkPhysicalDeviceVulkan12Properties vulkan_1_2;
       VkPhysicalDeviceDriverProperties driver;
       VkPhysicalDeviceFloatControlsProperties float_controls;
       VkPhysicalDeviceDescriptorIndexingProperties descriptor_indexing;
@@ -413,12 +412,33 @@ vn_physical_device_init_properties(struct vn_physical_device *physical_dev)
       VkPhysicalDeviceTimelineSemaphoreProperties timeline_semaphore;
 
       /* Vulkan 1.3 */
+      VkPhysicalDeviceVulkan13Properties vulkan_1_3;
       VkPhysicalDeviceInlineUniformBlockProperties inline_uniform_block;
       VkPhysicalDeviceMaintenance4Properties maintenance4;
       VkPhysicalDeviceShaderIntegerDotProductProperties
          shader_integer_dot_product;
       VkPhysicalDeviceSubgroupSizeControlProperties subgroup_size_control;
       VkPhysicalDeviceTexelBufferAlignmentProperties texel_buffer_alignment;
+
+      /* KHR */
+      VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor;
+      VkPhysicalDeviceFragmentShadingRatePropertiesKHR fragment_shading_rate;
+
+      /* EXT */
+      VkPhysicalDeviceConservativeRasterizationPropertiesEXT
+         conservative_rasterization;
+      VkPhysicalDeviceCustomBorderColorPropertiesEXT custom_border_color;
+      VkPhysicalDeviceExtendedDynamicState3PropertiesEXT extended_dynamic_state_3;
+      VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT
+         graphics_pipeline_library;
+      VkPhysicalDeviceLineRasterizationPropertiesEXT line_rasterization;
+      VkPhysicalDeviceMultiDrawPropertiesEXT multi_draw;
+      VkPhysicalDevicePCIBusInfoPropertiesEXT pci_bus_info;
+      VkPhysicalDeviceProvokingVertexPropertiesEXT provoking_vertex;
+      VkPhysicalDeviceRobustness2PropertiesEXT robustness_2;
+      VkPhysicalDeviceTransformFeedbackPropertiesEXT transform_feedback;
+      VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT
+         vertex_attribute_divisor;
    } local_props;
 
    /* Clear the structs so all unqueried properties will be well-defined. */
@@ -428,10 +448,9 @@ vn_physical_device_init_properties(struct vn_physical_device *physical_dev)
    assert(renderer_version >= VK_API_VERSION_1_1);
 
    /* clang-format off */
-
    if (renderer_version >= VK_API_VERSION_1_2) {
-      VN_ADD_PNEXT(props2, VULKAN_1_1_PROPERTIES, props->vulkan_1_1);
-      VN_ADD_PNEXT(props2, VULKAN_1_2_PROPERTIES, props->vulkan_1_2);
+      VN_ADD_PNEXT(props2, VULKAN_1_1_PROPERTIES, local_props.vulkan_1_1);
+      VN_ADD_PNEXT(props2, VULKAN_1_2_PROPERTIES, local_props.vulkan_1_2);
    } else {
       /* Vulkan 1.1 */
       VN_ADD_PNEXT(props2, ID_PROPERTIES, local_props.id);
@@ -448,10 +467,11 @@ vn_physical_device_init_properties(struct vn_physical_device *physical_dev)
       VN_ADD_PNEXT_EXT(props2, FLOAT_CONTROLS_PROPERTIES, local_props.float_controls, exts->KHR_shader_float_controls);
       VN_ADD_PNEXT_EXT(props2, SAMPLER_FILTER_MINMAX_PROPERTIES, local_props.sampler_filter_minmax, exts->EXT_sampler_filter_minmax);
       VN_ADD_PNEXT_EXT(props2, TIMELINE_SEMAPHORE_PROPERTIES, local_props.timeline_semaphore, exts->KHR_timeline_semaphore);
+
    }
 
    if (renderer_version >= VK_API_VERSION_1_3) {
-      VN_ADD_PNEXT(props2, VULKAN_1_3_PROPERTIES, props->vulkan_1_3);
+      VN_ADD_PNEXT(props2, VULKAN_1_3_PROPERTIES, local_props.vulkan_1_3);
    } else {
       VN_ADD_PNEXT_EXT(props2, INLINE_UNIFORM_BLOCK_PROPERTIES, local_props.inline_uniform_block, exts->EXT_inline_uniform_block);
       VN_ADD_PNEXT_EXT(props2, MAINTENANCE_4_PROPERTIES, local_props.maintenance4, exts->KHR_maintenance4);
@@ -461,21 +481,21 @@ vn_physical_device_init_properties(struct vn_physical_device *physical_dev)
    }
 
    /* KHR */
-   VN_ADD_PNEXT_EXT(props2, FRAGMENT_SHADING_RATE_PROPERTIES_KHR, props->fragment_shading_rate, exts->KHR_fragment_shading_rate);
-   VN_ADD_PNEXT_EXT(props2, PUSH_DESCRIPTOR_PROPERTIES_KHR, props->push_descriptor, exts->KHR_push_descriptor);
+   VN_ADD_PNEXT_EXT(props2, FRAGMENT_SHADING_RATE_PROPERTIES_KHR, local_props.fragment_shading_rate, exts->KHR_fragment_shading_rate);
+   VN_ADD_PNEXT_EXT(props2, PUSH_DESCRIPTOR_PROPERTIES_KHR, local_props.push_descriptor, exts->KHR_push_descriptor);
 
    /* EXT */
-   VN_ADD_PNEXT_EXT(props2, CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT, props->conservative_rasterization, exts->EXT_conservative_rasterization);
-   VN_ADD_PNEXT_EXT(props2, CUSTOM_BORDER_COLOR_PROPERTIES_EXT, props->custom_border_color, exts->EXT_custom_border_color);
-   VN_ADD_PNEXT_EXT(props2, EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT, props->extended_dynamic_state_3, exts->EXT_extended_dynamic_state3);
-   VN_ADD_PNEXT_EXT(props2, GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT, props->graphics_pipeline_library, exts->EXT_graphics_pipeline_library);
-   VN_ADD_PNEXT_EXT(props2, LINE_RASTERIZATION_PROPERTIES_EXT, props->line_rasterization, exts->EXT_line_rasterization);
-   VN_ADD_PNEXT_EXT(props2, MULTI_DRAW_PROPERTIES_EXT, props->multi_draw, exts->EXT_multi_draw);
-   VN_ADD_PNEXT_EXT(props2, PCI_BUS_INFO_PROPERTIES_EXT, props->pci_bus_info, exts->EXT_pci_bus_info);
-   VN_ADD_PNEXT_EXT(props2, PROVOKING_VERTEX_PROPERTIES_EXT, props->provoking_vertex, exts->EXT_provoking_vertex);
-   VN_ADD_PNEXT_EXT(props2, ROBUSTNESS_2_PROPERTIES_EXT, props->robustness_2, exts->EXT_robustness2);
-   VN_ADD_PNEXT_EXT(props2, TRANSFORM_FEEDBACK_PROPERTIES_EXT, props->transform_feedback, exts->EXT_transform_feedback);
-   VN_ADD_PNEXT_EXT(props2, VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT, props->vertex_attribute_divisor, exts->EXT_vertex_attribute_divisor);
+   VN_ADD_PNEXT_EXT(props2, CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT, local_props.conservative_rasterization, exts->EXT_conservative_rasterization);
+   VN_ADD_PNEXT_EXT(props2, CUSTOM_BORDER_COLOR_PROPERTIES_EXT, local_props.custom_border_color, exts->EXT_custom_border_color);
+   VN_ADD_PNEXT_EXT(props2, EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT, local_props.extended_dynamic_state_3, exts->EXT_extended_dynamic_state3);
+   VN_ADD_PNEXT_EXT(props2, GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT, local_props.graphics_pipeline_library, exts->EXT_graphics_pipeline_library);
+   VN_ADD_PNEXT_EXT(props2, LINE_RASTERIZATION_PROPERTIES_EXT, local_props.line_rasterization, exts->EXT_line_rasterization);
+   VN_ADD_PNEXT_EXT(props2, MULTI_DRAW_PROPERTIES_EXT, local_props.multi_draw, exts->EXT_multi_draw);
+   VN_ADD_PNEXT_EXT(props2, PCI_BUS_INFO_PROPERTIES_EXT, local_props.pci_bus_info, exts->EXT_pci_bus_info);
+   VN_ADD_PNEXT_EXT(props2, PROVOKING_VERTEX_PROPERTIES_EXT, local_props.provoking_vertex, exts->EXT_provoking_vertex);
+   VN_ADD_PNEXT_EXT(props2, ROBUSTNESS_2_PROPERTIES_EXT, local_props.robustness_2, exts->EXT_robustness2);
+   VN_ADD_PNEXT_EXT(props2, TRANSFORM_FEEDBACK_PROPERTIES_EXT, local_props.transform_feedback, exts->EXT_transform_feedback);
+   VN_ADD_PNEXT_EXT(props2, VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT, local_props.vertex_attribute_divisor, exts->EXT_vertex_attribute_divisor);
 
    /* clang-format on */
 
@@ -483,179 +503,400 @@ vn_physical_device_init_properties(struct vn_physical_device *physical_dev)
       instance->ring.ring, vn_physical_device_to_handle(physical_dev),
       &props2);
 
-   VkPhysicalDeviceProperties *vk10_props = &props->vulkan_1_0;
-   VkPhysicalDeviceVulkan11Properties *vk11_props = &props->vulkan_1_1;
-   VkPhysicalDeviceVulkan12Properties *vk12_props = &props->vulkan_1_2;
-   VkPhysicalDeviceVulkan13Properties *vk13_props = &props->vulkan_1_3;
-
-   *vk10_props = props2.properties;
-
    /* clang-format off */
+
+   /* VkPhysicalDeviceProperties */
+   VN_SET_CORE_FIELD(props, driverVersion, props2.properties);
+   VN_SET_CORE_FIELD(props, vendorID, props2.properties);
+   VN_SET_CORE_FIELD(props, deviceID, props2.properties);
+   VN_SET_CORE_FIELD(props, deviceType, props2.properties);
+   VN_SET_CORE_ARRAY(props, deviceName, props2.properties);
+
+   /* Limits */
+   VN_SET_CORE_FIELD(props, maxImageDimension1D, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxImageDimension2D, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxImageDimension3D, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxImageDimensionCube, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxImageArrayLayers, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxTexelBufferElements, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxUniformBufferRange, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxStorageBufferRange, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxPushConstantsSize, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxMemoryAllocationCount, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxSamplerAllocationCount, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, bufferImageGranularity, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, sparseAddressSpaceSize, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxBoundDescriptorSets, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxPerStageDescriptorSamplers, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxPerStageDescriptorUniformBuffers, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxPerStageDescriptorStorageBuffers, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxPerStageDescriptorSampledImages, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxPerStageDescriptorStorageImages, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxPerStageDescriptorInputAttachments, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxPerStageResources, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxDescriptorSetSamplers, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxDescriptorSetUniformBuffers, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxDescriptorSetUniformBuffersDynamic, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxDescriptorSetStorageBuffers, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxDescriptorSetStorageBuffersDynamic, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxDescriptorSetSampledImages, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxDescriptorSetStorageImages, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxDescriptorSetInputAttachments, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxVertexInputAttributes, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxVertexInputBindings, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxVertexInputAttributeOffset, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxVertexInputBindingStride, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxVertexOutputComponents, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxTessellationGenerationLevel, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxTessellationPatchSize, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxTessellationControlPerVertexInputComponents, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxTessellationControlPerVertexOutputComponents, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxTessellationControlPerPatchOutputComponents, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxTessellationControlTotalOutputComponents, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxTessellationEvaluationInputComponents, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxTessellationEvaluationOutputComponents, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxGeometryShaderInvocations, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxGeometryInputComponents, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxGeometryOutputComponents, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxGeometryOutputVertices, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxGeometryTotalOutputComponents, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxFragmentInputComponents, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxFragmentOutputAttachments, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxFragmentDualSrcAttachments, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxFragmentCombinedOutputResources, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxComputeSharedMemorySize, props2.properties.limits);
+   VN_SET_CORE_ARRAY(props, maxComputeWorkGroupCount, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxComputeWorkGroupInvocations, props2.properties.limits);
+   VN_SET_CORE_ARRAY(props, maxComputeWorkGroupSize, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, subPixelPrecisionBits, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, subTexelPrecisionBits, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, mipmapPrecisionBits, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxDrawIndexedIndexValue, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxDrawIndirectCount, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxSamplerLodBias, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxSamplerAnisotropy, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxViewports, props2.properties.limits);
+   VN_SET_CORE_ARRAY(props, maxViewportDimensions, props2.properties.limits);
+   VN_SET_CORE_ARRAY(props, viewportBoundsRange, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, viewportSubPixelBits, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, minMemoryMapAlignment, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, minTexelBufferOffsetAlignment, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, minUniformBufferOffsetAlignment, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, minStorageBufferOffsetAlignment, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, minTexelOffset, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxTexelOffset, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, minTexelGatherOffset, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxTexelGatherOffset, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, minInterpolationOffset, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxInterpolationOffset, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, subPixelInterpolationOffsetBits, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxFramebufferWidth, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxFramebufferHeight, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxFramebufferLayers, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, framebufferColorSampleCounts, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, framebufferDepthSampleCounts, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, framebufferStencilSampleCounts, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, framebufferNoAttachmentsSampleCounts, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxColorAttachments, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, sampledImageColorSampleCounts, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, sampledImageIntegerSampleCounts, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, sampledImageDepthSampleCounts, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, sampledImageStencilSampleCounts, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, storageImageSampleCounts, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxSampleMaskWords, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, timestampComputeAndGraphics, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, timestampPeriod, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxClipDistances, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxCullDistances, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, maxCombinedClipAndCullDistances, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, discreteQueuePriorities, props2.properties.limits);
+   VN_SET_CORE_ARRAY(props, pointSizeRange, props2.properties.limits);
+   VN_SET_CORE_ARRAY(props, lineWidthRange, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, pointSizeGranularity, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, lineWidthGranularity, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, strictLines, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, standardSampleLocations, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, optimalBufferCopyOffsetAlignment, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, optimalBufferCopyRowPitchAlignment, props2.properties.limits);
+   VN_SET_CORE_FIELD(props, nonCoherentAtomSize, props2.properties.limits);
+
+   /* Use different macro for these, as field names differ */
+   VN_SET_CORE_VALUE(props, sparseResidencyStandard2DBlockShape, props2.properties.sparseProperties.residencyStandard2DBlockShape);
+   VN_SET_CORE_VALUE(props, sparseResidencyStandard2DMultisampleBlockShape, props2.properties.sparseProperties.residencyStandard2DMultisampleBlockShape);
+   VN_SET_CORE_VALUE(props, sparseResidencyStandard3DBlockShape, props2.properties.sparseProperties.residencyStandard3DBlockShape);
+   VN_SET_CORE_VALUE(props, sparseResidencyAlignedMipSize, props2.properties.sparseProperties.residencyAlignedMipSize);
+   VN_SET_CORE_VALUE(props, sparseResidencyNonResidentStrict, props2.properties.sparseProperties.residencyNonResidentStrict);
 
    /* See comment for sparse binding feature disable */
    if (physical_dev->sparse_binding_disabled) {
-      VN_SET_CORE_VALUE(vk10_props, limits.sparseAddressSpaceSize, 0);
-      VN_SET_CORE_VALUE(vk10_props, sparseProperties, (VkPhysicalDeviceSparseProperties){ 0 });
+      VN_SET_CORE_VALUE(props, sparseAddressSpaceSize, 0);
+      VN_SET_CORE_VALUE(props, sparseResidencyStandard2DBlockShape, 0);
+      VN_SET_CORE_VALUE(props, sparseResidencyStandard2DMultisampleBlockShape, 0);
+      VN_SET_CORE_VALUE(props, sparseResidencyStandard3DBlockShape, 0);
+      VN_SET_CORE_VALUE(props, sparseResidencyAlignedMipSize, 0);
+      VN_SET_CORE_VALUE(props, sparseResidencyNonResidentStrict, 0);
    }
 
    if (renderer_version < VK_API_VERSION_1_2) {
       /* Vulkan 1.1 */
-      VN_SET_CORE_ARRAY(vk11_props, deviceUUID, local_props.id);
-      VN_SET_CORE_ARRAY(vk11_props, driverUUID, local_props.id);
-      VN_SET_CORE_ARRAY(vk11_props, deviceLUID, local_props.id);
-      VN_SET_CORE_FIELD(vk11_props, deviceNodeMask, local_props.id);
-      VN_SET_CORE_FIELD(vk11_props, deviceLUIDValid, local_props.id);
+      VN_SET_CORE_ARRAY(props, deviceUUID, local_props.id);
+      VN_SET_CORE_ARRAY(props, driverUUID, local_props.id);
+      VN_SET_CORE_ARRAY(props, deviceLUID, local_props.id);
+      VN_SET_CORE_FIELD(props, deviceNodeMask, local_props.id);
+      VN_SET_CORE_FIELD(props, deviceLUIDValid, local_props.id);
 
-      /* Cannot use macro because names differ. */
-      vk11_props->subgroupSize = local_props.subgroup.subgroupSize;
-      vk11_props->subgroupSupportedStages = local_props.subgroup.supportedStages;
-      vk11_props->subgroupSupportedOperations = local_props.subgroup.supportedOperations;
-      vk11_props->subgroupQuadOperationsInAllStages = local_props.subgroup.quadOperationsInAllStages;
+      VN_SET_CORE_FIELD(props, subgroupSize, local_props.subgroup);
+      VN_SET_CORE_VALUE(props, subgroupSupportedStages, local_props.subgroup.supportedStages);
+      VN_SET_CORE_VALUE(props, subgroupSupportedOperations, local_props.subgroup.supportedOperations);
+      VN_SET_CORE_VALUE(props, subgroupQuadOperationsInAllStages, local_props.subgroup.quadOperationsInAllStages);
 
-      VN_SET_CORE_FIELD(vk11_props, pointClippingBehavior, local_props.point_clipping);
-      VN_SET_CORE_FIELD(vk11_props, maxMultiviewViewCount, local_props.multiview);
-      VN_SET_CORE_FIELD(vk11_props, maxMultiviewInstanceIndex, local_props.multiview);
-      VN_SET_CORE_FIELD(vk11_props, protectedNoFault, local_props.protected_memory);
-      VN_SET_CORE_FIELD(vk11_props, maxPerSetDescriptors, local_props.maintenance_3);
-      VN_SET_CORE_FIELD(vk11_props, maxMemoryAllocationSize, local_props.maintenance_3);
+      VN_SET_CORE_FIELD(props, pointClippingBehavior, local_props.point_clipping);
+      VN_SET_CORE_FIELD(props, maxMultiviewViewCount, local_props.multiview);
+      VN_SET_CORE_FIELD(props, maxMultiviewInstanceIndex, local_props.multiview);
+      VN_SET_CORE_FIELD(props, protectedNoFault, local_props.protected_memory);
+      VN_SET_CORE_FIELD(props, maxPerSetDescriptors, local_props.maintenance_3);
+      VN_SET_CORE_FIELD(props, maxMemoryAllocationSize, local_props.maintenance_3);
 
       /* Vulkan 1.2 */
       if (exts->KHR_driver_properties) {
-         VN_SET_CORE_FIELD(vk12_props, driverID, local_props.driver);
-         VN_SET_CORE_ARRAY(vk12_props, driverName, local_props.driver);
-         VN_SET_CORE_ARRAY(vk12_props, driverInfo, local_props.driver);
-         VN_SET_CORE_FIELD(vk12_props, conformanceVersion, local_props.driver);
+         VN_SET_CORE_FIELD(props, driverID, local_props.driver);
+         VN_SET_CORE_ARRAY(props, driverName, local_props.driver);
+         VN_SET_CORE_ARRAY(props, driverInfo, local_props.driver);
+         VN_SET_CORE_FIELD(props, conformanceVersion, local_props.driver);
       }
       if (exts->KHR_shader_float_controls) {
-         VN_SET_CORE_FIELD(vk12_props, denormBehaviorIndependence, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, roundingModeIndependence, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, shaderSignedZeroInfNanPreserveFloat16, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, shaderSignedZeroInfNanPreserveFloat32, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, shaderSignedZeroInfNanPreserveFloat64, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, shaderDenormPreserveFloat16, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, shaderDenormPreserveFloat32, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, shaderDenormPreserveFloat64, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, shaderDenormFlushToZeroFloat16, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, shaderDenormFlushToZeroFloat32, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, shaderDenormFlushToZeroFloat64, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, shaderRoundingModeRTEFloat16, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, shaderRoundingModeRTEFloat32, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, shaderRoundingModeRTEFloat64, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, shaderRoundingModeRTZFloat16, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, shaderRoundingModeRTZFloat32, local_props.float_controls);
-         VN_SET_CORE_FIELD(vk12_props, shaderRoundingModeRTZFloat64, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, denormBehaviorIndependence, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, roundingModeIndependence, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, shaderSignedZeroInfNanPreserveFloat16, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, shaderSignedZeroInfNanPreserveFloat32, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, shaderSignedZeroInfNanPreserveFloat64, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, shaderDenormPreserveFloat16, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, shaderDenormPreserveFloat32, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, shaderDenormPreserveFloat64, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, shaderDenormFlushToZeroFloat16, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, shaderDenormFlushToZeroFloat32, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, shaderDenormFlushToZeroFloat64, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, shaderRoundingModeRTEFloat16, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, shaderRoundingModeRTEFloat32, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, shaderRoundingModeRTEFloat64, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, shaderRoundingModeRTZFloat16, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, shaderRoundingModeRTZFloat32, local_props.float_controls);
+         VN_SET_CORE_FIELD(props, shaderRoundingModeRTZFloat64, local_props.float_controls);
       }
       if (exts->EXT_descriptor_indexing) {
-         VN_SET_CORE_FIELD(vk12_props, maxUpdateAfterBindDescriptorsInAllPools, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, shaderUniformBufferArrayNonUniformIndexingNative, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, shaderSampledImageArrayNonUniformIndexingNative, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, shaderStorageBufferArrayNonUniformIndexingNative, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, shaderStorageImageArrayNonUniformIndexingNative, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, shaderInputAttachmentArrayNonUniformIndexingNative, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, robustBufferAccessUpdateAfterBind, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, quadDivergentImplicitLod, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, maxPerStageDescriptorUpdateAfterBindSamplers, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, maxPerStageDescriptorUpdateAfterBindUniformBuffers, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, maxPerStageDescriptorUpdateAfterBindStorageBuffers, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, maxPerStageDescriptorUpdateAfterBindSampledImages, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, maxPerStageDescriptorUpdateAfterBindStorageImages, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, maxPerStageDescriptorUpdateAfterBindInputAttachments, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, maxPerStageUpdateAfterBindResources, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, maxDescriptorSetUpdateAfterBindSamplers, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, maxDescriptorSetUpdateAfterBindUniformBuffers, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, maxDescriptorSetUpdateAfterBindStorageBuffers, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, maxDescriptorSetUpdateAfterBindSampledImages, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, maxDescriptorSetUpdateAfterBindStorageImages, local_props.descriptor_indexing);
-         VN_SET_CORE_FIELD(vk12_props, maxDescriptorSetUpdateAfterBindInputAttachments, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxUpdateAfterBindDescriptorsInAllPools, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, shaderUniformBufferArrayNonUniformIndexingNative, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, shaderSampledImageArrayNonUniformIndexingNative, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, shaderStorageBufferArrayNonUniformIndexingNative, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, shaderStorageImageArrayNonUniformIndexingNative, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, shaderInputAttachmentArrayNonUniformIndexingNative, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, robustBufferAccessUpdateAfterBind, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, quadDivergentImplicitLod, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxPerStageDescriptorUpdateAfterBindSamplers, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxPerStageDescriptorUpdateAfterBindUniformBuffers, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxPerStageDescriptorUpdateAfterBindStorageBuffers, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxPerStageDescriptorUpdateAfterBindSampledImages, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxPerStageDescriptorUpdateAfterBindStorageImages, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxPerStageDescriptorUpdateAfterBindInputAttachments, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxPerStageUpdateAfterBindResources, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxDescriptorSetUpdateAfterBindSamplers, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxDescriptorSetUpdateAfterBindUniformBuffers, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxDescriptorSetUpdateAfterBindStorageBuffers, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxDescriptorSetUpdateAfterBindSampledImages, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxDescriptorSetUpdateAfterBindStorageImages, local_props.descriptor_indexing);
+         VN_SET_CORE_FIELD(props, maxDescriptorSetUpdateAfterBindInputAttachments, local_props.descriptor_indexing);
       }
       if (exts->KHR_depth_stencil_resolve) {
-         VN_SET_CORE_FIELD(vk12_props, supportedDepthResolveModes, local_props.depth_stencil_resolve);
-         VN_SET_CORE_FIELD(vk12_props, supportedStencilResolveModes, local_props.depth_stencil_resolve);
-         VN_SET_CORE_FIELD(vk12_props, independentResolveNone, local_props.depth_stencil_resolve);
-         VN_SET_CORE_FIELD(vk12_props, independentResolve, local_props.depth_stencil_resolve);
+         VN_SET_CORE_FIELD(props, supportedDepthResolveModes, local_props.depth_stencil_resolve);
+         VN_SET_CORE_FIELD(props, supportedStencilResolveModes, local_props.depth_stencil_resolve);
+         VN_SET_CORE_FIELD(props, independentResolveNone, local_props.depth_stencil_resolve);
+         VN_SET_CORE_FIELD(props, independentResolve, local_props.depth_stencil_resolve);
       }
       if (exts->EXT_sampler_filter_minmax) {
-         VN_SET_CORE_FIELD(vk12_props, filterMinmaxSingleComponentFormats, local_props.sampler_filter_minmax);
-         VN_SET_CORE_FIELD(vk12_props, filterMinmaxImageComponentMapping, local_props.sampler_filter_minmax);
+         VN_SET_CORE_FIELD(props, filterMinmaxSingleComponentFormats, local_props.sampler_filter_minmax);
+         VN_SET_CORE_FIELD(props, filterMinmaxImageComponentMapping, local_props.sampler_filter_minmax);
       }
       if (exts->KHR_timeline_semaphore) {
-         VN_SET_CORE_FIELD(vk12_props, maxTimelineSemaphoreValueDifference, local_props.timeline_semaphore);
+         VN_SET_CORE_FIELD(props, maxTimelineSemaphoreValueDifference, local_props.timeline_semaphore);
       }
 
-      VN_SET_CORE_VALUE(vk12_props, framebufferIntegerColorSampleCounts, VK_SAMPLE_COUNT_1_BIT);
+      VN_SET_CORE_VALUE(props, framebufferIntegerColorSampleCounts, VK_SAMPLE_COUNT_1_BIT);
+   } else {
+      /* insert more or less the same code here, but with local_props.vulkan_1_2? */
    }
 
    if (renderer_version < VK_API_VERSION_1_3) {
       if (exts->EXT_subgroup_size_control) {
-         VN_SET_CORE_FIELD(vk13_props, minSubgroupSize, local_props.subgroup_size_control);
-         VN_SET_CORE_FIELD(vk13_props, maxSubgroupSize, local_props.subgroup_size_control);
-         VN_SET_CORE_FIELD(vk13_props, maxComputeWorkgroupSubgroups, local_props.subgroup_size_control);
-         VN_SET_CORE_FIELD(vk13_props, requiredSubgroupSizeStages, local_props.subgroup_size_control);
+         VN_SET_CORE_FIELD(props, minSubgroupSize, local_props.subgroup_size_control);
+         VN_SET_CORE_FIELD(props, maxSubgroupSize, local_props.subgroup_size_control);
+         VN_SET_CORE_FIELD(props, maxComputeWorkgroupSubgroups, local_props.subgroup_size_control);
+         VN_SET_CORE_FIELD(props, requiredSubgroupSizeStages, local_props.subgroup_size_control);
       }
       if (exts->EXT_inline_uniform_block) {
-         VN_SET_CORE_FIELD(vk13_props, maxInlineUniformBlockSize, local_props.inline_uniform_block);
-         VN_SET_CORE_FIELD(vk13_props, maxPerStageDescriptorInlineUniformBlocks, local_props.inline_uniform_block);
-         VN_SET_CORE_FIELD(vk13_props, maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks, local_props.inline_uniform_block);
-         VN_SET_CORE_FIELD(vk13_props, maxDescriptorSetInlineUniformBlocks, local_props.inline_uniform_block);
-         VN_SET_CORE_FIELD(vk13_props, maxDescriptorSetUpdateAfterBindInlineUniformBlocks, local_props.inline_uniform_block);
+         VN_SET_CORE_FIELD(props, maxInlineUniformBlockSize, local_props.inline_uniform_block);
+         VN_SET_CORE_FIELD(props, maxPerStageDescriptorInlineUniformBlocks, local_props.inline_uniform_block);
+         VN_SET_CORE_FIELD(props, maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks, local_props.inline_uniform_block);
+         VN_SET_CORE_FIELD(props, maxDescriptorSetInlineUniformBlocks, local_props.inline_uniform_block);
+         VN_SET_CORE_FIELD(props, maxDescriptorSetUpdateAfterBindInlineUniformBlocks, local_props.inline_uniform_block);
       }
       if (exts->KHR_shader_integer_dot_product) {
-         VN_SET_CORE_FIELD(vk13_props, integerDotProduct8BitUnsignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProduct8BitSignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProduct8BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProduct4x8BitPackedUnsignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProduct4x8BitPackedSignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProduct4x8BitPackedMixedSignednessAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProduct16BitUnsignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProduct16BitSignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProduct16BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProduct32BitUnsignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProduct32BitSignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProduct32BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProduct64BitUnsignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProduct64BitSignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProduct64BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProductAccumulatingSaturating8BitUnsignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProductAccumulatingSaturating8BitSignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProductAccumulatingSaturating16BitUnsignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProductAccumulatingSaturating16BitSignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProductAccumulatingSaturating32BitUnsignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProductAccumulatingSaturating32BitSignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProductAccumulatingSaturating64BitUnsignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProductAccumulatingSaturating64BitSignedAccelerated, local_props.shader_integer_dot_product);
-         VN_SET_CORE_FIELD(vk13_props, integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProduct8BitUnsignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProduct8BitSignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProduct8BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProduct4x8BitPackedUnsignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProduct4x8BitPackedSignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProduct4x8BitPackedMixedSignednessAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProduct16BitUnsignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProduct16BitSignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProduct16BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProduct32BitUnsignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProduct32BitSignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProduct32BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProduct64BitUnsignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProduct64BitSignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProduct64BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProductAccumulatingSaturating8BitUnsignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProductAccumulatingSaturating8BitSignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProductAccumulatingSaturating16BitUnsignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProductAccumulatingSaturating16BitSignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProductAccumulatingSaturating32BitUnsignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProductAccumulatingSaturating32BitSignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProductAccumulatingSaturating64BitUnsignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProductAccumulatingSaturating64BitSignedAccelerated, local_props.shader_integer_dot_product);
+         VN_SET_CORE_FIELD(props, integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated, local_props.shader_integer_dot_product);
       }
       if (exts->EXT_texel_buffer_alignment) {
-         VN_SET_CORE_FIELD(vk13_props, storageTexelBufferOffsetAlignmentBytes, local_props.texel_buffer_alignment);
-         VN_SET_CORE_FIELD(vk13_props, storageTexelBufferOffsetSingleTexelAlignment, local_props.texel_buffer_alignment);
-         VN_SET_CORE_FIELD(vk13_props, uniformTexelBufferOffsetAlignmentBytes, local_props.texel_buffer_alignment);
-         VN_SET_CORE_FIELD(vk13_props, uniformTexelBufferOffsetSingleTexelAlignment, local_props.texel_buffer_alignment);
+         VN_SET_CORE_FIELD(props, storageTexelBufferOffsetAlignmentBytes, local_props.texel_buffer_alignment);
+         VN_SET_CORE_FIELD(props, storageTexelBufferOffsetSingleTexelAlignment, local_props.texel_buffer_alignment);
+         VN_SET_CORE_FIELD(props, uniformTexelBufferOffsetAlignmentBytes, local_props.texel_buffer_alignment);
+         VN_SET_CORE_FIELD(props, uniformTexelBufferOffsetSingleTexelAlignment, local_props.texel_buffer_alignment);
       }
       if (exts->KHR_maintenance4) {
-         VN_SET_CORE_FIELD(vk13_props, maxBufferSize, local_props.maintenance4);
+         VN_SET_CORE_FIELD(props, maxBufferSize, local_props.maintenance4);
       }
+   } else {
+      VN_SET_CORE_FIELD(props, maxInlineUniformTotalSize, local_props.vulkan_1_3);
+
+      /* insert same code here as in the "then" block, but with local_props.vulkan_1_3? */
    }
+
+   /* KHR */
+   /* FRAGMENT_SHADING_RATE_PROPERTIES_KHR */
+   VN_SET_CORE_FIELD(props, minFragmentShadingRateAttachmentTexelSize, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, maxFragmentShadingRateAttachmentTexelSize, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, maxFragmentShadingRateAttachmentTexelSizeAspectRatio, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, primitiveFragmentShadingRateWithMultipleViewports, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, layeredShadingRateAttachments, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, fragmentShadingRateNonTrivialCombinerOps, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, maxFragmentSize, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, maxFragmentSizeAspectRatio, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, maxFragmentShadingRateCoverageSamples, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, maxFragmentShadingRateRasterizationSamples, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, fragmentShadingRateWithShaderDepthStencilWrites, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, fragmentShadingRateWithSampleMask, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, fragmentShadingRateWithShaderSampleMask, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, fragmentShadingRateWithConservativeRasterization, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, fragmentShadingRateWithFragmentShaderInterlock, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, fragmentShadingRateWithCustomSampleLocations, local_props.fragment_shading_rate);
+   VN_SET_CORE_FIELD(props, fragmentShadingRateStrictMultiplyCombiner, local_props.fragment_shading_rate);
+
+   /* PUSH_DESCRIPTOR_PROPERTIES_KHR */
+   VN_SET_CORE_FIELD(props, maxPushDescriptors, local_props.push_descriptor);
+
+   /* EXT */
+   /* CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT */
+   VN_SET_CORE_FIELD(props, primitiveOverestimationSize, local_props.conservative_rasterization);
+   VN_SET_CORE_FIELD(props, maxExtraPrimitiveOverestimationSize, local_props.conservative_rasterization);
+   VN_SET_CORE_FIELD(props, extraPrimitiveOverestimationSizeGranularity, local_props.conservative_rasterization);
+   VN_SET_CORE_FIELD(props, primitiveUnderestimation, local_props.conservative_rasterization);
+   VN_SET_CORE_FIELD(props, conservativePointAndLineRasterization, local_props.conservative_rasterization);
+   VN_SET_CORE_FIELD(props, degenerateTrianglesRasterized, local_props.conservative_rasterization);
+   VN_SET_CORE_FIELD(props, degenerateLinesRasterized, local_props.conservative_rasterization);
+   VN_SET_CORE_FIELD(props, fullyCoveredFragmentShaderInputVariable, local_props.conservative_rasterization);
+   VN_SET_CORE_FIELD(props, conservativeRasterizationPostDepthCoverage, local_props.conservative_rasterization);
+
+   /* CUSTOM_BORDER_COLOR_PROPERTIES_EXT */
+   VN_SET_CORE_FIELD(props, maxCustomBorderColorSamplers, local_props.custom_border_color);
+
+   /* EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT */
+   VN_SET_CORE_FIELD(props, dynamicPrimitiveTopologyUnrestricted, local_props.extended_dynamic_state_3);
+
+   /* GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT */
+   VN_SET_CORE_FIELD(props, graphicsPipelineLibraryFastLinking, local_props.graphics_pipeline_library);
+   VN_SET_CORE_FIELD(props, graphicsPipelineLibraryIndependentInterpolationDecoration, local_props.graphics_pipeline_library);
+
+   /* LINE_RASTERIZATION_PROPERTIES_EXT */
+   VN_SET_CORE_FIELD(props, lineSubPixelPrecisionBits, local_props.line_rasterization);
+
+   /* MULTI_DRAW_PROPERTIES_EXT */
+   VN_SET_CORE_FIELD(props, maxMultiDrawCount, local_props.multi_draw);
+
+   /* PROVOKING_VERTEX_PROPERTIES_EXT */
+   VN_SET_CORE_FIELD(props, provokingVertexModePerPipeline, local_props.provoking_vertex);
+   VN_SET_CORE_FIELD(props, transformFeedbackPreservesTriangleFanProvokingVertex, local_props.provoking_vertex);
+
+   /* ROBUSTNESS_2_PROPERTIES_EXT */
+   VN_SET_CORE_FIELD(props, robustStorageBufferAccessSizeAlignment, local_props.robustness_2);
+   VN_SET_CORE_FIELD(props, robustUniformBufferAccessSizeAlignment, local_props.robustness_2);
+
+   /* TRANSFORM_FEEDBACK_PROPERTIES_EXT */
+   VN_SET_CORE_FIELD(props, maxTransformFeedbackStreams, local_props.transform_feedback);
+   VN_SET_CORE_FIELD(props, maxTransformFeedbackBuffers, local_props.transform_feedback);
+   VN_SET_CORE_FIELD(props, maxTransformFeedbackBufferSize, local_props.transform_feedback);
+   VN_SET_CORE_FIELD(props, maxTransformFeedbackStreamDataSize, local_props.transform_feedback);
+   VN_SET_CORE_FIELD(props, maxTransformFeedbackBufferDataSize, local_props.transform_feedback);
+   VN_SET_CORE_FIELD(props, maxTransformFeedbackBufferDataStride, local_props.transform_feedback);
+   VN_SET_CORE_FIELD(props, transformFeedbackQueries, local_props.transform_feedback);
+   VN_SET_CORE_FIELD(props, transformFeedbackStreamsLinesTriangles, local_props.transform_feedback);
+   VN_SET_CORE_FIELD(props, transformFeedbackRasterizationStreamSelect, local_props.transform_feedback);
+   VN_SET_CORE_FIELD(props, transformFeedbackDraw, local_props.transform_feedback);
+
+   /* VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT */
+   VN_SET_CORE_FIELD(props, maxVertexAttribDivisor, local_props.vertex_attribute_divisor);
+
+   const struct vn_renderer_info *info =
+      &physical_dev->instance->renderer->info;
+
+   /* Cannot use macro because names differ. */
+   props->drmHasPrimary = info->drm.has_primary;
+   props->drmPrimaryMajor = info->drm.primary_major;
+   props->drmPrimaryMinor = info->drm.primary_minor;
+   props->drmHasRender = info->drm.has_render;
+   props->drmRenderMajor = info->drm.render_major;
+   props->drmRenderMinor = info->drm.render_minor;
+
+   /* PCI_BUS_INFO_PROPERTIES_EXT */
+   VN_SET_CORE_FIELD(props, pciDomain, local_props.pci_bus_info);
+   VN_SET_CORE_FIELD(props, pciBus, local_props.pci_bus_info);
+   VN_SET_CORE_FIELD(props, pciDevice, local_props.pci_bus_info);
+   VN_SET_CORE_FIELD(props, pciFunction, local_props.pci_bus_info);
+
+#if DETECT_OS_ANDROID
+   /* ANDROID_native_buffer */
+   props->sharedImage =
+      vn_android_gralloc_get_shared_present_usage() ? VK_TRUE : VK_FALSE;
+#endif
 
    /* clang-format on */
 
    const uint32_t version_override = vk_get_version_override();
    if (version_override) {
-      vk10_props->apiVersion = version_override;
+      props->apiVersion = version_override;
    } else {
       /* cap the advertised api version */
-      uint32_t ver = MIN3(vk10_props->apiVersion, VN_MAX_API_VERSION,
+      uint32_t ver = MIN3(props2.properties.apiVersion, VN_MAX_API_VERSION,
                           instance->renderer->info.vk_xml_version);
-      if (VK_VERSION_PATCH(ver) > VK_VERSION_PATCH(vk10_props->apiVersion)) {
+      if (VK_VERSION_PATCH(ver) > VK_VERSION_PATCH(props2.properties.apiVersion)) {
          ver = ver - VK_VERSION_PATCH(ver) +
-               VK_VERSION_PATCH(vk10_props->apiVersion);
+               VK_VERSION_PATCH(props2.properties.apiVersion);
       }
 
       /* Clamp to 1.2 if we disabled VK_KHR_synchronization2 since it
@@ -665,46 +906,46 @@ vn_physical_device_init_properties(struct vn_physical_device *physical_dev)
       if (!physical_dev->base.base.supported_extensions.KHR_synchronization2)
          ver = MIN2(VK_API_VERSION_1_2, ver);
 
-      vk10_props->apiVersion = ver;
+      props->apiVersion = ver;
    }
 
    /* ANGLE relies on ARM proprietary driver version for workarounds */
    const char *engine_name = instance->base.base.app_info.engine_name;
    const bool forward_driver_version =
-      vk12_props->driverID == VK_DRIVER_ID_ARM_PROPRIETARY && engine_name &&
+      props->driverID == VK_DRIVER_ID_ARM_PROPRIETARY && engine_name &&
       strcmp(engine_name, "ANGLE") == 0;
    if (!forward_driver_version)
-      vk10_props->driverVersion = vk_get_driver_version();
+      props->driverVersion = vk_get_driver_version();
 
    char device_name[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
    int device_name_len =
       snprintf(device_name, sizeof(device_name), "Virtio-GPU Venus (%s)",
-               vk10_props->deviceName);
+               props->deviceName);
    if (device_name_len >= VK_MAX_PHYSICAL_DEVICE_NAME_SIZE) {
       memcpy(device_name + VK_MAX_PHYSICAL_DEVICE_NAME_SIZE - 5, "...)", 4);
       device_name_len = VK_MAX_PHYSICAL_DEVICE_NAME_SIZE - 1;
    }
-   memcpy(vk10_props->deviceName, device_name, device_name_len + 1);
+   memcpy(props->deviceName, device_name, device_name_len + 1);
 
    /* store renderer VkDriverId for implementation specific workarounds */
-   physical_dev->renderer_driver_id = vk12_props->driverID;
-   VN_SET_CORE_VALUE(vk12_props, driverID, VK_DRIVER_ID_MESA_VENUS);
+   physical_dev->renderer_driver_id = props->driverID;
+   VN_SET_CORE_VALUE(props, driverID, VK_DRIVER_ID_MESA_VENUS);
 
-   snprintf(vk12_props->driverName, sizeof(vk12_props->driverName), "venus");
-   snprintf(vk12_props->driverInfo, sizeof(vk12_props->driverInfo),
+   snprintf(props->driverName, sizeof(props->driverName), "venus");
+   snprintf(props->driverInfo, sizeof(props->driverInfo),
             "Mesa " PACKAGE_VERSION MESA_GIT_SHA1);
 
-   VN_SET_CORE_VALUE(vk12_props, conformanceVersion.major, 1);
-   VN_SET_CORE_VALUE(vk12_props, conformanceVersion.minor, 3);
-   VN_SET_CORE_VALUE(vk12_props, conformanceVersion.subminor, 0);
-   VN_SET_CORE_VALUE(vk12_props, conformanceVersion.patch, 0);
+   VN_SET_CORE_VALUE(props, conformanceVersion.major, 1);
+   VN_SET_CORE_VALUE(props, conformanceVersion.minor, 3);
+   VN_SET_CORE_VALUE(props, conformanceVersion.subminor, 0);
+   VN_SET_CORE_VALUE(props, conformanceVersion.patch, 0);
 
    vn_physical_device_init_uuids(physical_dev);
 
    /* Disable unsupported VkPhysicalDeviceFragmentShadingRatePropertiesKHR */
    if (exts->KHR_fragment_shading_rate) {
       /* TODO: Add support for VK_EXT_sample_locations */
-      VN_SET_CORE_VALUE(&props->fragment_shading_rate,
+      VN_SET_CORE_VALUE(props,
                         fragmentShadingRateWithCustomSampleLocations, false);
    }
 }
@@ -1787,106 +2028,6 @@ vn_physical_device_add_format_properties(
    }
 
    simple_mtx_unlock(&physical_dev->format_update_mutex);
-}
-
-void
-vn_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
-                                VkPhysicalDeviceProperties2 *pProperties)
-{
-   struct vn_physical_device *physical_dev =
-      vn_physical_device_from_handle(physicalDevice);
-   const struct vn_physical_device_properties *in_props =
-      &physical_dev->properties;
-
-   pProperties->properties = in_props->vulkan_1_0;
-
-   vk_foreach_struct(out, pProperties->pNext) {
-      if (vk_get_physical_device_core_1_1_property_ext(out,
-                                                       &in_props->vulkan_1_1))
-         continue;
-
-      if (vk_get_physical_device_core_1_2_property_ext(out,
-                                                       &in_props->vulkan_1_2))
-         continue;
-
-      if (vk_get_physical_device_core_1_3_property_ext(out,
-                                                       &in_props->vulkan_1_3))
-         continue;
-
-      /* Cast to avoid warnings for values outside VkStructureType. */
-      switch ((int32_t)out->sType) {
-
-#define CASE(stype, member)                                                  \
-   case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_##stype:                           \
-      vk_copy_struct_guts(out, (VkBaseInStructure *)&in_props->member,       \
-                          sizeof(in_props->member));                         \
-      break
-
-         /* clang-format off */
-
-      /* KHR */
-      CASE(FRAGMENT_SHADING_RATE_PROPERTIES_KHR, fragment_shading_rate);
-      CASE(PUSH_DESCRIPTOR_PROPERTIES_KHR, push_descriptor);
-
-      /* EXT */
-      CASE(CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT, conservative_rasterization);
-      CASE(CUSTOM_BORDER_COLOR_PROPERTIES_EXT, custom_border_color);
-      CASE(EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT, extended_dynamic_state_3);
-      CASE(GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT, graphics_pipeline_library);
-      CASE(LINE_RASTERIZATION_PROPERTIES_EXT, line_rasterization);
-      CASE(MULTI_DRAW_PROPERTIES_EXT, multi_draw);
-      CASE(PROVOKING_VERTEX_PROPERTIES_EXT, provoking_vertex);
-      CASE(ROBUSTNESS_2_PROPERTIES_EXT, robustness_2);
-      CASE(TRANSFORM_FEEDBACK_PROPERTIES_EXT, transform_feedback);
-      CASE(VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT, vertex_attribute_divisor);
-
-         /* clang-format on */
-
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT: {
-         VkPhysicalDeviceDrmPropertiesEXT *out_props = (void *)out;
-         const struct vn_renderer_info *info =
-            &physical_dev->instance->renderer->info;
-
-         out_props->hasPrimary = info->drm.has_primary;
-         out_props->primaryMajor = info->drm.primary_major;
-         out_props->primaryMinor = info->drm.primary_minor;
-         out_props->hasRender = info->drm.has_render;
-         out_props->renderMajor = info->drm.render_major;
-         out_props->renderMinor = info->drm.render_minor;
-         break;
-      }
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT:
-         /* this is used by WSI */
-         if (physical_dev->instance->renderer->info.pci.has_bus_info) {
-            VkPhysicalDevicePCIBusInfoPropertiesEXT *out_props = (void *)out;
-            const struct vn_renderer_info *info =
-               &physical_dev->instance->renderer->info;
-
-            out_props->pciDomain = info->pci.domain;
-            out_props->pciBus = info->pci.bus;
-            out_props->pciDevice = info->pci.device;
-            out_props->pciFunction = info->pci.function;
-         } else {
-            assert(VN_DEBUG(VTEST));
-            vk_copy_struct_guts(out,
-                                (VkBaseInStructure *)&in_props->pci_bus_info,
-                                sizeof(in_props->pci_bus_info));
-         }
-         break;
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENTATION_PROPERTIES_ANDROID: {
-         VkPhysicalDevicePresentationPropertiesANDROID *out_props =
-            (void *)out;
-         out_props->sharedImage =
-            vn_android_gralloc_get_shared_present_usage() ? VK_TRUE
-                                                          : VK_FALSE;
-         break;
-      }
-
-      default:
-         break;
-#undef CASE
-      }
-   }
 }
 
 void

@@ -206,7 +206,37 @@ static void
 swrastPutImage2(__DRIdrawable *draw, int op, int x, int y, int w, int h,
                 int stride, char *data, void *loaderPrivate)
 {
-   swrastPutImage(draw, op, x, y, w, h, data, loaderPrivate);
+   struct dri2_egl_surface *dri2_surf = loaderPrivate;
+   struct dri2_egl_display *dri2_dpy =
+      dri2_egl_display(dri2_surf->base.Resource.Display);
+   int orig_y = y;
+
+   xcb_gcontext_t gc;
+   xcb_void_cookie_t cookie;
+   switch (op) {
+   case __DRI_SWRAST_IMAGE_OP_DRAW:
+      gc = dri2_surf->gc;
+      break;
+   case __DRI_SWRAST_IMAGE_OP_SWAP:
+      gc = dri2_surf->swapgc;
+      break;
+   default:
+      return;
+   }
+
+   /* clamp to drawable size */
+   if (y + h > dri2_surf->base.Height)
+      h = dri2_surf->base.Height - y;
+   /* y-invert */
+   y = dri2_surf->base.Height - y - h;
+
+   for (unsigned i = 0; i < h; i++) {
+      char *pix = data + orig_y * stride + x * dri2_surf->bytes_per_pixel;
+      cookie = xcb_put_image(
+         dri2_dpy->conn, XCB_IMAGE_FORMAT_Z_PIXMAP, dri2_surf->drawable, gc, w,
+         1, x, y + i, 0, dri2_surf->depth, stride, (uint8_t*)pix);
+      xcb_discard_reply(dri2_dpy->conn, cookie.sequence);
+   }
 }
 
 static void
@@ -1614,6 +1644,8 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
 
       if (dri2_dpy->multibuffers_available)
          dri2_set_WL_bind_wayland_display(disp);
+   } else {
+      disp->Extensions.EXT_swap_buffers_with_damage = EGL_TRUE;
    }
    disp->Extensions.EXT_buffer_age = EGL_TRUE;
    disp->Extensions.ANGLE_sync_control_rate = EGL_TRUE;

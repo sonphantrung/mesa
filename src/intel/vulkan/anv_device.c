@@ -3345,8 +3345,12 @@ VkResult anv_CreateDevice(
    if (result != VK_SUCCESS)
       goto fail_alloc;
 
+   anv_device_set_physical(device, physical_device);
+   device->kmd_backend = anv_kmd_backend_get(device->info->kmd_type);
+   device->queue_families = &device->physical->queue;
+
    if (INTEL_DEBUG(DEBUG_BATCH | DEBUG_BATCH_STATS)) {
-      for (unsigned i = 0; i < physical_device->queue.family_count; i++) {
+      for (unsigned i = 0; i < device->queue_families->family_count; i++) {
          struct intel_batch_decode_ctx *decoder = &device->decoder[i];
 
          const unsigned decode_flags = INTEL_BATCH_DECODE_DEFAULT_FLAGS;
@@ -3358,15 +3362,12 @@ VkResult anv_CreateDevice(
                                          decode_get_bo, NULL, device);
          intel_batch_stats_reset(decoder);
 
-         decoder->engine = physical_device->queue.families[i].engine_class;
+         decoder->engine = device->queue_families->families[i].engine_class;
          decoder->dynamic_base = physical_device->va.dynamic_state_pool.addr;
          decoder->surface_base = physical_device->va.internal_surface_state_pool.addr;
          decoder->instruction_base = physical_device->va.instruction_state_pool.addr;
       }
    }
-
-   anv_device_set_physical(device, physical_device);
-   device->kmd_backend = anv_kmd_backend_get(device->info->kmd_type);
 
    /* XXX(chadv): Can we dup() physicalDevice->fd here? */
    device->fd = open(physical_device->path, O_RDWR | O_CLOEXEC);
@@ -3879,7 +3880,7 @@ VkResult anv_CreateDevice(
       VkCommandPoolCreateInfo pool_info = {
          .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
          .queueFamilyIndex =
-             anv_get_first_render_queue_index(device->physical),
+             anv_get_first_render_queue_index(device),
       };
 
       result = vk_common_CreateCommandPool(anv_device_to_handle(device),
@@ -4038,8 +4039,6 @@ void anv_DestroyDevice(
 
    anv_memory_trace_finish(device);
 
-   struct anv_physical_device *pdevice = device->physical;
-
    for (uint32_t i = 0; i < device->queue_count; i++)
       anv_queue_finish(&device->queues[i]);
    vk_free(&device->vk.alloc, device->queues);
@@ -4145,7 +4144,7 @@ void anv_DestroyDevice(
    anv_device_destroy_context_or_vm(device);
 
    if (INTEL_DEBUG(DEBUG_BATCH | DEBUG_BATCH_STATS)) {
-      for (unsigned i = 0; i < pdevice->queue.family_count; i++) {
+      for (unsigned i = 0; i < device->queue_families->family_count; i++) {
          if (INTEL_DEBUG(DEBUG_BATCH_STATS))
             intel_batch_print_stats(&device->decoder[i]);
          intel_batch_decode_ctx_finish(&device->decoder[i]);

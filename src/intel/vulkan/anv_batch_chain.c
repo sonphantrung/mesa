@@ -1232,7 +1232,7 @@ anv_print_batch(struct anv_device *device,
 
    if (cmd_buffer->is_companion_rcs_cmd_buffer) {
       int render_queue_idx =
-         anv_get_first_render_queue_index(device->physical);
+         anv_get_first_render_queue_index(device);
       ctx = &device->decoder[render_queue_idx];
    }
 
@@ -1648,7 +1648,7 @@ anv_queue_submit_simple_batch(struct anv_queue *queue,
    if (INTEL_DEBUG(DEBUG_BATCH) &&
        intel_debug_batch_in_range(device->debug_frame_desc->frame_id)) {
       int render_queue_idx =
-         anv_get_first_render_queue_index(device->physical);
+         anv_get_first_render_queue_index(device);
       struct intel_batch_decode_ctx *ctx = is_companion_rcs_batch ?
                                            &device->decoder[render_queue_idx] :
                                            queue->decoder;

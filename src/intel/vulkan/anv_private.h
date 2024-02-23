@@ -1129,6 +1129,10 @@ struct anv_physical_device {
     /** Can the platform support cooperative matrices and is it enabled? */
     bool                                        has_cooperative_matrix;
 
+    /* Both should only directly accessed if called from Vulkan physical
+     * device functions otherwise anv_device::queue_families should be used
+     * instead.
+     */
     struct anv_physical_device_queue_families   queue;
     struct anv_physical_device_queue_families   queue_without_sparse_trrt;
 
@@ -1868,6 +1872,7 @@ struct anv_device {
     struct anv_state                            cps_states;
     struct anv_state                            cps_states_db;
 
+    struct anv_physical_device_queue_families   *queue_families;
     uint32_t                                    queue_count;
     struct anv_queue  *                         queues;
 
@@ -2015,9 +2020,9 @@ struct anv_device {
 };
 
 static inline uint32_t
-anv_get_first_render_queue_index(struct anv_physical_device *pdevice)
+anv_get_first_render_queue_index(struct anv_device *device)
 {
-   assert(pdevice != NULL);
+   struct anv_physical_device *pdevice = device->physical;
 
    for (uint32_t i = 0; i < pdevice->queue.family_count; i++) {
       if (pdevice->queue.families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {

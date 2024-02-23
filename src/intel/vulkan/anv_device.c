@@ -2125,7 +2125,8 @@ anv_override_engine_counts(int *gc_count, int *g_count, int *c_count, int *v_cou
 
 static void
 init_queue_families(struct anv_physical_device *pdevice,
-                    struct anv_physical_device_queue_families *queue)
+                    struct anv_physical_device_queue_families *queue,
+                    bool with_sparse_trtt)
 {
    int gc_count =
       intel_engines_count(pdevice->engine_info,
@@ -2163,7 +2164,8 @@ init_queue_families(struct anv_physical_device *pdevice,
     * is implemented with render engine.
     */
    if (c_count) {
-      if (can_use_non_render_engines) {
+      if (kernel_supports_non_render_engines &&
+          (sparse_supports_non_render_engines || !with_sparse_trtt)) {
          /* keep c_count value */
       } else {
          c_count = 0;
@@ -2246,7 +2248,9 @@ static void
 anv_physical_device_init_queue_families(struct anv_physical_device *pdevice)
 {
    if (pdevice->engine_info) {
-      init_queue_families(pdevice, &pdevice->queue);
+      init_queue_families(pdevice, &pdevice->queue, true);
+      init_queue_families(pdevice, &pdevice->queue_without_sparse_trrt, false);
+      assert(pdevice->queue.family_count == pdevice->queue_without_sparse_trrt.family_count);
    } else {
       uint32_t family_count = 0;
 
@@ -2266,6 +2270,7 @@ anv_physical_device_init_queue_families(struct anv_physical_device *pdevice)
          };
       }
       pdevice->queue.family_count = family_count;
+      pdevice->queue_without_sparse_trrt = pdevice->queue;
    }
    assert(pdevice->queue.family_count <= ANV_MAX_QUEUE_FAMILIES);
 }

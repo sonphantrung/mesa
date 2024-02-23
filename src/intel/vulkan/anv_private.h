@@ -1130,6 +1130,7 @@ struct anv_physical_device {
     bool                                        has_cooperative_matrix;
 
     struct anv_physical_device_queue_families   queue;
+    struct anv_physical_device_queue_families   queue_without_sparse_trrt;
 
     struct {
       uint32_t                                  type_count;

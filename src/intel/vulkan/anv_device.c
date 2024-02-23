@@ -2134,6 +2134,7 @@ init_queue_families(struct anv_physical_device *pdevice,
       intel_engines_count(pdevice->engine_info, INTEL_ENGINE_CLASS_VIDEO);
    int g_count = 0;
    int c_count = 0;
+   int b_count = 0;
    const bool kernel_supports_non_render_engines = pdevice->has_vm_control;
    const bool sparse_supports_non_render_engines =
       pdevice->sparse_type != ANV_SPARSE_TYPE_TRTT;
@@ -2142,23 +2143,34 @@ init_queue_families(struct anv_physical_device *pdevice,
       sparse_supports_non_render_engines;
    VkQueueFlags protected_flag = pdevice->has_protected_contexts ?
                                  VK_QUEUE_PROTECTED_BIT : 0;
+   enum intel_engine_class compute_class = INTEL_ENGINE_CLASS_RENDER;
+   enum intel_engine_class blit_class = INTEL_ENGINE_CLASS_COPY;
    uint32_t family_count = 0;
 
-   if (can_use_non_render_engines) {
-      c_count = intel_engines_supported_count(pdevice->local_fd,
+   c_count = intel_engines_supported_count(pdevice->local_fd,
+                                           &pdevice->info,
+                                           pdevice->engine_info,
+                                           INTEL_ENGINE_CLASS_COMPUTE);
+   if (pdevice->info.verx10 >= 125 && can_use_non_render_engines) {
+      b_count = intel_engines_supported_count(pdevice->local_fd,
                                               &pdevice->info,
                                               pdevice->engine_info,
-                                              INTEL_ENGINE_CLASS_COMPUTE);
+                                              INTEL_ENGINE_CLASS_COPY);
    }
-   enum intel_engine_class compute_class =
-      c_count < 1 ? INTEL_ENGINE_CLASS_RENDER : INTEL_ENGINE_CLASS_COMPUTE;
 
-   int blit_count = 0;
-   if (pdevice->info.verx10 >= 125 && can_use_non_render_engines) {
-      blit_count = intel_engines_supported_count(pdevice->local_fd,
-                                                 &pdevice->info,
-                                                 pdevice->engine_info,
-                                                 INTEL_ENGINE_CLASS_COPY);
+   /* Only add compute only queue if HW and KMD supports compute engines
+    * TODO: also support copy, some tests fails when a transfer only queue
+    * is implemented with render engine.
+    */
+   if (c_count) {
+      if (can_use_non_render_engines) {
+         /* keep c_count value */
+      } else {
+         c_count = 0;
+      }
+
+      compute_class = c_count ? INTEL_ENGINE_CLASS_COMPUTE : INTEL_ENGINE_CLASS_RENDER;
+      c_count = c_count ? c_count : 1;
    }
 
    anv_override_engine_counts(&gc_count, &g_count, &c_count, &v_count);
@@ -2218,12 +2230,12 @@ init_queue_families(struct anv_physical_device *pdevice,
          .engine_class = INTEL_ENGINE_CLASS_VIDEO,
       };
    }
-   if (blit_count > 0) {
+   if (b_count > 0) {
       queue->families[family_count++] = (struct anv_queue_family) {
          .queueFlags = VK_QUEUE_TRANSFER_BIT |
                        protected_flag,
-         .queueCount = blit_count,
-         .engine_class = INTEL_ENGINE_CLASS_COPY,
+         .queueCount = b_count,
+         .engine_class = blit_class,
       };
    }
 

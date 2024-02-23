@@ -3347,7 +3347,27 @@ VkResult anv_CreateDevice(
 
    anv_device_set_physical(device, physical_device);
    device->kmd_backend = anv_kmd_backend_get(device->info->kmd_type);
-   device->queue_families = &device->physical->queue;
+
+   if (device->physical->sparse_type != ANV_SPARSE_TYPE_TRTT) {
+      device->queue_families = &device->physical->queue;
+   } else {
+      bool sparse_requested = false;
+
+      /* check if sparse queue was asked, if not we can enable async compute and blit */
+      for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
+         struct anv_physical_device_queue_families *queue_families = &device->physical->queue;
+         uint32_t queueFamilyIndex = pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex;
+         struct anv_queue_family *queue_family = &queue_families->families[queueFamilyIndex];
+
+         if (queue_family->queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) {
+            sparse_requested = true;
+            break;
+         }
+      }
+
+      device->queue_families = sparse_requested ? &device->physical->queue :
+                                                  &device->physical->queue_without_sparse_trrt;
+   }
 
    if (INTEL_DEBUG(DEBUG_BATCH | DEBUG_BATCH_STATS)) {
       for (unsigned i = 0; i < device->queue_families->family_count; i++) {

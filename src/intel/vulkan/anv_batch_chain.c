@@ -429,8 +429,7 @@ struct anv_address
 anv_cmd_buffer_surface_base_address(struct anv_cmd_buffer *cmd_buffer)
 {
    /* Only graphics & compute queues need binding tables. */
-   if (!(cmd_buffer->queue_family->queueFlags & (VK_QUEUE_GRAPHICS_BIT |
-                                                 VK_QUEUE_COMPUTE_BIT)))
+   if (!anv_cmd_buffer_is_render_or_compute_queue(cmd_buffer))
       return ANV_NULL_ADDRESS;
 
    /* If we've never allocated a binding table block, do it now. Otherwise we

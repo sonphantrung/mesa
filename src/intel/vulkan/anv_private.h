@@ -4047,7 +4047,7 @@ static inline bool
 anv_cmd_buffer_is_render_queue(const struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_queue_family *queue_family = cmd_buffer->queue_family;
-   return (queue_family->queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
+   return queue_family->engine_class == INTEL_ENGINE_CLASS_RENDER;
 }
 
 static inline bool

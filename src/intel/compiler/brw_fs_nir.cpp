@@ -8101,6 +8101,7 @@ fs_nir_emit_texture(nir_to_brw_state &ntb,
       header_bits |= instr->component << 16;
    }
 
+   fs_reg nir_def_reg = get_nir_def(ntb, instr->def);
    fs_reg dst = bld.vgrf(brw_type_for_nir_type(devinfo, instr->dest_type), 4 + instr->is_sparse);
    fs_inst *inst = bld.emit(opcode, dst, srcs, ARRAY_SIZE(srcs));
    inst->offset = header_bits;
@@ -8150,6 +8151,8 @@ fs_nir_emit_texture(nir_to_brw_state &ntb,
    for (unsigned i = 0; i < read_size; i++)
       nir_dest[i] = offset(dst, bld, i);
 
+   bool direct_result = true;
+
    if (instr->op == nir_texop_query_levels) {
       /* # levels is in .w */
       if (devinfo->ver == 9) {
@@ -8167,13 +8170,19 @@ fs_nir_emit_texture(nir_to_brw_state &ntb,
       } else {
          nir_dest[0] = offset(dst, bld, 3);
       }
+      direct_result = false;
    }
 
    /* The residency bits are only in the first component. */
-   if (instr->is_sparse)
+   if (instr->is_sparse) {
       nir_dest[dest_size - 1] = component(offset(dst, bld, dest_size - 1), 0);
+      direct_result = false;
+   }
 
-   bld.LOAD_PAYLOAD(get_nir_def(ntb, instr->def), nir_dest, dest_size, 0);
+   if (direct_result)
+      inst->dst = nir_def_reg;
+   else
+      bld.LOAD_PAYLOAD(nir_def_reg, nir_dest, dest_size, 0);
 }
 
 static void

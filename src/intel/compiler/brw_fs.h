@@ -613,7 +613,9 @@ bool brw_fs_lower_sends_overlapping_payload(fs_visitor &s);
 bool brw_fs_lower_simd_width(fs_visitor &s);
 bool brw_fs_lower_sub_sat(fs_visitor &s);
 bool brw_fs_lower_uniform_pull_constant_loads(fs_visitor &s);
+bool brw_fs_lower_send_indirect_messages(fs_visitor &s);
 
+bool brw_fs_opt_address_reg_load(fs_visitor &s);
 bool brw_fs_opt_algebraic(fs_visitor &s);
 bool brw_fs_opt_bank_conflicts(fs_visitor &s);
 bool brw_fs_opt_cmod_propagation(fs_visitor &s);

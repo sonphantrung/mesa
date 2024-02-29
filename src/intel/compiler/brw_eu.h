@@ -1450,7 +1450,6 @@ brw_send_indirect_message(struct brw_codegen *p,
                           struct brw_reg dst,
                           struct brw_reg payload,
                           struct brw_reg desc,
-                          unsigned desc_imm,
                           bool eot);
 
 void
@@ -1460,10 +1459,8 @@ brw_send_indirect_split_message(struct brw_codegen *p,
                                 struct brw_reg payload0,
                                 struct brw_reg payload1,
                                 struct brw_reg desc,
-                                unsigned desc_imm,
                                 struct brw_reg ex_desc,
-                                unsigned ex_desc_imm,
-                                bool ex_desc_scratch,
+                                unsigned ex_mlen,
                                 bool ex_bso,
                                 bool eot);
 

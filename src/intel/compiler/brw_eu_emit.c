@@ -1485,7 +1485,6 @@ brw_send_indirect_message(struct brw_codegen *p,
                           struct brw_reg dst,
                           struct brw_reg payload,
                           struct brw_reg desc,
-                          unsigned desc_imm,
                           bool eot)
 {
    const struct intel_device_info *devinfo = p->devinfo;
@@ -1498,35 +1497,17 @@ brw_send_indirect_message(struct brw_codegen *p,
    if (desc.file == BRW_IMMEDIATE_VALUE) {
       send = next_insn(p, BRW_OPCODE_SEND);
       brw_set_src0(p, send, retype(payload, BRW_REGISTER_TYPE_UD));
-      brw_set_desc(p, send, desc.ud | desc_imm);
+      brw_set_desc(p, send, desc.ud);
    } else {
-      const struct tgl_swsb swsb = brw_get_default_swsb(p);
-      struct brw_reg addr = retype(brw_address_reg(0), BRW_REGISTER_TYPE_UD);
-
-      brw_push_insn_state(p);
-      brw_set_default_access_mode(p, BRW_ALIGN_1);
-      brw_set_default_mask_control(p, BRW_MASK_DISABLE);
-      brw_set_default_exec_size(p, BRW_EXECUTE_1);
-      brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
-      brw_set_default_flag_reg(p, 0, 0);
-      brw_set_default_swsb(p, tgl_swsb_src_dep(swsb));
-
-      /* Load the indirect descriptor to an address register using OR so the
-       * caller can specify additional descriptor bits with the desc_imm
-       * immediate.
-       */
-      brw_OR(p, addr, desc, brw_imm_ud(desc_imm));
-
-      brw_pop_insn_state(p);
-
-      brw_set_default_swsb(p, tgl_swsb_dst_dep(swsb, 1));
+      assert(desc.file == BRW_ARCHITECTURE_REGISTER_FILE);
+      assert(desc.nr == BRW_ARF_ADDRESS);
+      assert(desc.subnr == 0);
       send = next_insn(p, BRW_OPCODE_SEND);
       brw_set_src0(p, send, retype(payload, BRW_REGISTER_TYPE_UD));
-
       if (devinfo->ver >= 12)
          brw_inst_set_send_sel_reg32_desc(devinfo, send, true);
       else
-         brw_set_src1(p, send, addr);
+         brw_set_src1(p, send, desc);
    }
 
    brw_set_dest(p, send, dst);
@@ -1541,10 +1522,8 @@ brw_send_indirect_split_message(struct brw_codegen *p,
                                 struct brw_reg payload0,
                                 struct brw_reg payload1,
                                 struct brw_reg desc,
-                                unsigned desc_imm,
                                 struct brw_reg ex_desc,
-                                unsigned ex_desc_imm,
-                                bool ex_desc_scratch,
+                                unsigned ex_mlen,
                                 bool ex_bso,
                                 bool eot)
 {
@@ -1554,92 +1533,6 @@ brw_send_indirect_split_message(struct brw_codegen *p,
    dst = retype(dst, BRW_REGISTER_TYPE_UW);
 
    assert(desc.type == BRW_REGISTER_TYPE_UD);
-
-   if (desc.file == BRW_IMMEDIATE_VALUE) {
-      desc.ud |= desc_imm;
-   } else {
-      const struct tgl_swsb swsb = brw_get_default_swsb(p);
-      struct brw_reg addr = retype(brw_address_reg(0), BRW_REGISTER_TYPE_UD);
-
-      brw_push_insn_state(p);
-      brw_set_default_access_mode(p, BRW_ALIGN_1);
-      brw_set_default_mask_control(p, BRW_MASK_DISABLE);
-      brw_set_default_exec_size(p, BRW_EXECUTE_1);
-      brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
-      brw_set_default_flag_reg(p, 0, 0);
-      brw_set_default_swsb(p, tgl_swsb_src_dep(swsb));
-
-      /* Load the indirect descriptor to an address register using OR so the
-       * caller can specify additional descriptor bits with the desc_imm
-       * immediate.
-       */
-      brw_OR(p, addr, desc, brw_imm_ud(desc_imm));
-
-      brw_pop_insn_state(p);
-      desc = addr;
-
-      brw_set_default_swsb(p, tgl_swsb_dst_dep(swsb, 1));
-   }
-
-   if (ex_desc.file == BRW_IMMEDIATE_VALUE &&
-       !ex_desc_scratch &&
-       (devinfo->ver >= 12 ||
-        ((ex_desc.ud | ex_desc_imm) & INTEL_MASK(15, 12)) == 0)) {
-      /* ATS-M PRMs, Volume 2d: Command Reference: Structures,
-       * EU_INSTRUCTION_SEND instruction
-       *
-       *    "ExBSO: Exists If: ([ExDesc.IsReg]==true)"
-       */
-      assert(!ex_bso);
-      ex_desc.ud |= ex_desc_imm;
-   } else {
-      const struct tgl_swsb swsb = brw_get_default_swsb(p);
-      struct brw_reg addr = retype(brw_address_reg(2), BRW_REGISTER_TYPE_UD);
-
-      brw_push_insn_state(p);
-      brw_set_default_access_mode(p, BRW_ALIGN_1);
-      brw_set_default_mask_control(p, BRW_MASK_DISABLE);
-      brw_set_default_exec_size(p, BRW_EXECUTE_1);
-      brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
-      brw_set_default_flag_reg(p, 0, 0);
-      brw_set_default_swsb(p, tgl_swsb_src_dep(swsb));
-
-      /* Load the indirect extended descriptor to an address register using OR
-       * so the caller can specify additional descriptor bits with the
-       * desc_imm immediate.
-       *
-       * Even though the instruction dispatcher always pulls the SFID and EOT
-       * fields from the instruction itself, actual external unit which
-       * processes the message gets the SFID and EOT from the extended
-       * descriptor which comes from the address register.  If we don't OR
-       * those two bits in, the external unit may get confused and hang.
-       */
-      unsigned imm_part = ex_bso ? 0 : (ex_desc_imm | sfid | eot << 5);
-
-      if (ex_desc_scratch) {
-         /* Or the scratch surface offset together with the immediate part of
-          * the extended descriptor.
-          */
-         assert(devinfo->verx10 >= 125);
-         brw_AND(p, addr,
-                 retype(brw_vec1_grf(0, 5), BRW_REGISTER_TYPE_UD),
-                 brw_imm_ud(INTEL_MASK(31, 10)));
-         brw_OR(p, addr, addr, brw_imm_ud(imm_part));
-      } else if (ex_desc.file == BRW_IMMEDIATE_VALUE) {
-         /* ex_desc bits 15:12 don't exist in the instruction encoding prior
-          * to Gfx12, so we may have fallen back to an indirect extended
-          * descriptor.
-          */
-         brw_MOV(p, addr, brw_imm_ud(ex_desc.ud | imm_part));
-      } else {
-         brw_OR(p, addr, ex_desc, brw_imm_ud(imm_part));
-      }
-
-      brw_pop_insn_state(p);
-      ex_desc = addr;
-
-      brw_set_default_swsb(p, tgl_swsb_dst_dep(swsb, 1));
-   }
 
    send = next_insn(p, devinfo->ver >= 12 ? BRW_OPCODE_SEND : BRW_OPCODE_SENDS);
    brw_set_dest(p, send, dst);
@@ -1675,7 +1568,7 @@ brw_send_indirect_split_message(struct brw_codegen *p,
        */
       if (devinfo->ver < 20 || sfid != GFX12_SFID_UGM)
          brw_inst_set_send_ex_bso(devinfo, send, true);
-      brw_inst_set_send_src1_len(devinfo, send, GET_BITS(ex_desc_imm, 10, 6));
+      brw_inst_set_send_src1_len(devinfo, send, ex_mlen / reg_unit(devinfo));
    }
    brw_inst_set_sfid(devinfo, send, sfid);
    brw_inst_set_eot(devinfo, send, eot);

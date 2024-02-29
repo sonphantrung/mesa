@@ -2996,3 +2996,78 @@ brw_fs_lower_uniform_pull_constant_loads(fs_visitor &s)
 
    return progress;
 }
+
+bool
+brw_fs_lower_send_indirect_messages(fs_visitor &s)
+{
+   const intel_device_info *devinfo = s.devinfo;
+   bool progress = false;
+
+   foreach_block_and_inst (block, fs_inst, inst, s.cfg) {
+      if (inst->opcode != SHADER_OPCODE_SEND)
+         continue;
+
+      const fs_builder ubld = fs_builder(&s, block, inst).exec_all().group(1, 0);
+
+      /* Descriptor */
+      const unsigned rlen = inst->dst.is_null() ? 0 : inst->size_written / REG_SIZE;
+      uint32_t desc_imm = inst->desc |
+         brw_message_desc(devinfo, inst->mlen, rlen, inst->header_size);
+
+      assert(inst->src[0].file != BAD_FILE);
+      assert(inst->src[1].file != BAD_FILE);
+
+      fs_reg desc = inst->src[0];
+      if (desc.file == IMM) {
+         inst->src[0] = brw_imm_ud(desc.ud | desc_imm);
+      } else {
+         fs_reg addr_reg = ubld.vaddr(BRW_REGISTER_TYPE_UD, 0);
+         ubld.OR(addr_reg, desc, brw_imm_ud(desc_imm));
+         inst->src[0] = addr_reg;
+      }
+
+      /* Extended descriptor */
+      fs_reg ex_desc = inst->src[1];
+      uint32_t ex_desc_imm = inst->ex_desc |
+         brw_message_ex_desc(devinfo, inst->ex_mlen);
+
+      if (ex_desc.file == IMM)
+         ex_desc_imm |= ex_desc.ud;
+
+      bool needs_addr_reg = false;
+      if (ex_desc.file != IMM)
+         needs_addr_reg = true;
+      if (devinfo->ver < 12 && ex_desc.file == IMM &&
+          (ex_desc_imm & INTEL_MASK(15, 12)) != 0)
+         needs_addr_reg = true;
+
+      if (inst->send_ex_bso) {
+         needs_addr_reg = true;
+         /* When using the extended bindless offset, the whole extended
+          * descriptor is the surface handle.
+          */
+         ex_desc_imm = 0;
+      } else {
+         if (needs_addr_reg)
+            ex_desc_imm |=  inst->sfid | inst->eot << 5;
+      }
+
+      if (needs_addr_reg) {
+         fs_reg addr_reg = ubld.vaddr(BRW_REGISTER_TYPE_UD, 2);
+         if (ex_desc.file == IMM)
+            ubld.MOV(addr_reg, brw_imm_ud(ex_desc_imm));
+         else if (ex_desc_imm == 0)
+            ubld.MOV(addr_reg, ex_desc);
+         else
+            ubld.OR(addr_reg, ex_desc, brw_imm_ud(ex_desc_imm));
+         inst->src[1] = addr_reg;
+      } else {
+         inst->src[1] = brw_imm_ud(ex_desc_imm);
+      }
+
+      progress = true;
+      s.invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES);
+   }
+
+   return progress;
+}

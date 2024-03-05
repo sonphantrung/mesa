@@ -6919,7 +6919,7 @@ fs_nir_emit_intrinsic(nir_to_brw_state &ntb,
       fs_reg srcs[SURFACE_LOGICAL_NUM_SRCS];
 
       if (devinfo->verx10 >= 125) {
-         const fs_builder ubld = bld.exec_all().group(1, 0);
+         const fs_builder ubld = bld.exec_all().group(8, 0);
          fs_reg handle = component(ubld.vgrf(BRW_REGISTER_TYPE_UD), 0);
          ubld.AND(handle, retype(brw_vec1_grf(0, 5), BRW_REGISTER_TYPE_UD),
                           brw_imm_ud(INTEL_MASK(31, 10)));
@@ -6982,7 +6982,7 @@ fs_nir_emit_intrinsic(nir_to_brw_state &ntb,
       fs_reg srcs[SURFACE_LOGICAL_NUM_SRCS];
 
       if (devinfo->verx10 >= 125) {
-         const fs_builder ubld = bld.exec_all().group(1, 0);
+         const fs_builder ubld = bld.exec_all().group(8, 0);
          fs_reg handle = component(ubld.vgrf(BRW_REGISTER_TYPE_UD), 0);
          ubld.AND(handle, retype(brw_vec1_grf(0, 5), BRW_REGISTER_TYPE_UD),
                           brw_imm_ud(INTEL_MASK(31, 10)));

@@ -2125,8 +2125,7 @@ anv_override_engine_counts(int *gc_count, int *g_count, int *c_count, int *v_cou
 
 static void
 init_queue_families(struct anv_physical_device *pdevice,
-                    struct anv_physical_device_queue_families *queue,
-                    VkQueueFlags sparse_flags)
+                    struct anv_physical_device_queue_families *queue)
 {
    int gc_count =
       intel_engines_count(pdevice->engine_info,
@@ -2169,17 +2168,24 @@ init_queue_families(struct anv_physical_device *pdevice,
          .queueFlags = VK_QUEUE_GRAPHICS_BIT |
                        VK_QUEUE_COMPUTE_BIT |
                        VK_QUEUE_TRANSFER_BIT |
-                       sparse_flags |
                        protected_flag,
          .queueCount = gc_count,
          .engine_class = INTEL_ENGINE_CLASS_RENDER,
       };
+      if (pdevice->sparse_type != ANV_SPARSE_TYPE_NOT_SUPPORTED) {
+         queue->families[family_count++] = (struct anv_queue_family) {
+            .queueFlags = VK_QUEUE_SPARSE_BINDING_BIT |
+                          protected_flag,
+
+            .queueCount = 1,
+            .engine_class = INTEL_ENGINE_CLASS_RENDER,
+         };
+      }
    }
    if (g_count > 0) {
       queue->families[family_count++] = (struct anv_queue_family) {
          .queueFlags = VK_QUEUE_GRAPHICS_BIT |
                        VK_QUEUE_TRANSFER_BIT |
-                       sparse_flags |
                        protected_flag,
          .queueCount = g_count,
          .engine_class = INTEL_ENGINE_CLASS_RENDER,
@@ -2189,7 +2195,6 @@ init_queue_families(struct anv_physical_device *pdevice,
       queue->families[family_count++] = (struct anv_queue_family) {
          .queueFlags = VK_QUEUE_COMPUTE_BIT |
                        VK_QUEUE_TRANSFER_BIT |
-                       sparse_flags |
                        protected_flag,
          .queueCount = c_count,
          .engine_class = compute_class,
@@ -2228,22 +2233,27 @@ init_queue_families(struct anv_physical_device *pdevice,
 static void
 anv_physical_device_init_queue_families(struct anv_physical_device *pdevice)
 {
-   VkQueueFlags sparse_flags = pdevice->sparse_type != ANV_SPARSE_TYPE_NOT_SUPPORTED ?
-                               VK_QUEUE_SPARSE_BINDING_BIT : 0;
-
    if (pdevice->engine_info) {
-      init_queue_families(pdevice, &pdevice->queue, sparse_flags);
+      init_queue_families(pdevice, &pdevice->queue);
    } else {
+      uint32_t family_count = 0;
+
       /* Default to a single render queue */
-      pdevice->queue.families[0] = (struct anv_queue_family) {
+      pdevice->queue.families[family_count++] = (struct anv_queue_family) {
          .queueFlags = VK_QUEUE_GRAPHICS_BIT |
                        VK_QUEUE_COMPUTE_BIT |
-                       VK_QUEUE_TRANSFER_BIT |
-                       sparse_flags,
+                       VK_QUEUE_TRANSFER_BIT,
          .queueCount = 1,
          .engine_class = INTEL_ENGINE_CLASS_RENDER,
       };
-      pdevice->queue.family_count = 1;
+      if (pdevice->sparse_type != ANV_SPARSE_TYPE_NOT_SUPPORTED) {
+         pdevice->queue.families[family_count++] = (struct anv_queue_family) {
+            .queueFlags = VK_QUEUE_SPARSE_BINDING_BIT,
+            .queueCount = 1,
+            .engine_class = INTEL_ENGINE_CLASS_RENDER,
+         };
+      }
+      pdevice->queue.family_count = family_count;
    }
    assert(pdevice->queue.family_count <= ANV_MAX_QUEUE_FAMILIES);
 }

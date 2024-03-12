@@ -1421,9 +1421,21 @@ genX(init_trtt_context_state)(struct anv_queue *queue)
    anv_batch_emit(&batch, GENX(MI_BATCH_BUFFER_END), bbe);
    assert(batch.next <= batch.end);
 
+#if GFX_VER >= 20
+   /* All render/compute contexts having the same address space must have the
+    * same TR-TT programming.
+    */
+   for (uint32_t i = 0; i < device->queue_count; i++) {
+      struct anv_queue *q = &device->queues[i];
+      VkResult res = anv_queue_submit_simple_batch(q, &batch, false);
+      if (res != VK_SUCCESS)
+         return res;
+   }
+#else
    VkResult res = anv_queue_submit_simple_batch(queue, &batch, false);
    if (res != VK_SUCCESS)
       return res;
+#endif
 
 #endif
    return VK_SUCCESS;

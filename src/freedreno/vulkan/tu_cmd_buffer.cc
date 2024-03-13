@@ -5946,6 +5946,13 @@ tu_dispatch(struct tu_cmd_buffer *cmd,
                    HLSQ_CS_NDRANGE_5(CHIP, .globalsize_z = local_size[2] * num_groups[2]),
                    HLSQ_CS_NDRANGE_6(CHIP, .globaloff_z = 0));
 
+   if (CHIP >= A7XX) {
+      tu_cs_emit_regs(cs,
+                      A7XX_HLSQ_CS_LAST_LOCAL_SIZE(.localsizex = local_size[0] - 1,
+                                                   .localsizey = local_size[1] - 1,
+                                                   .localsizez = local_size[2] - 1));
+   }
+
    trace_start_compute(&cmd->trace, cs, info->indirect != NULL, local_size[0],
                        local_size[1], local_size[2], info->blocks[0],
                        info->blocks[1], info->blocks[2]);

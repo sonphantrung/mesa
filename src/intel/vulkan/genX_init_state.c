@@ -1397,7 +1397,6 @@ genX(init_trtt_context_state)(struct anv_queue *queue)
    anv_batch_write_reg(&batch, GENX(GFX_TRTT_L3_BASE_HIGH), trtt_base_high)
       trtt_base_high.TRVAL3PointerUpperAddress = l3_addr_high;
 
-#if GFX_VER >= 20
    anv_batch_write_reg(&batch, GENX(BLT_TRTT_INVAL), trtt_inval)
       trtt_inval.InvalidTileDetectionValue = ANV_TRTT_L1_INVALID_TILE_VAL;
    anv_batch_write_reg(&batch, GENX(BLT_TRTT_NULL), trtt_null)
@@ -1415,7 +1414,6 @@ genX(init_trtt_context_state)(struct anv_queue *queue)
       trtt_base_low.TRVAL3PointerLowerAddress = l3_addr_low;
    anv_batch_write_reg(&batch, GENX(COMP_CTX0_TRTT_L3_BASE_HIGH), trtt_base_high)
       trtt_base_high.TRVAL3PointerUpperAddress = l3_addr_high;
-#endif
 
 #if GFX_VER >= 20
    uint32_t trva_base = device->physical->va.trtt.addr >> 44;
@@ -1430,24 +1428,28 @@ genX(init_trtt_context_state)(struct anv_queue *queue)
       trtt_va_range.TRVAMaskValue = 0xF;
       trtt_va_range.TRVADataValue = 0xF;
    }
+   anv_batch_write_reg(&batch, GENX(BLT_TRTT_VA_RANGE), trtt_va_range) {
+      trtt_va_range.TRVAMaskValue = 0xF;
+      trtt_va_range.TRVADataValue = 0xF;
+   }
+   anv_batch_write_reg(&batch, GENX(COMP_CTX0_TRTT_VA_RANGE), trtt_va_range) {
+      trtt_va_range.TRVAMaskValue = 0xF;
+      trtt_va_range.TRVADataValue = 0xF;
+   }
 #endif
 
    /* Enabling TR-TT needs to be done after setting up the other registers.
    */
    anv_batch_write_reg(&batch, GENX(GFX_TRTT_CR), trtt_cr)
       trtt_cr.TRTTEnable = true;
-
-#if GFX_VER >= 20
    anv_batch_write_reg(&batch, GENX(BLT_TRTT_CR), trtt_cr)
       trtt_cr.TRTTEnable = true;
    anv_batch_write_reg(&batch, GENX(COMP_CTX0_TRTT_CR), trtt_cr)
       trtt_cr.TRTTEnable = true;
-#endif
 
    anv_batch_emit(&batch, GENX(MI_BATCH_BUFFER_END), bbe);
    assert(batch.next <= batch.end);
 
-#if GFX_VER >= 20
    /* All render/compute contexts having the same address space must have the
     * same TR-TT programming.
     */
@@ -1457,11 +1459,6 @@ genX(init_trtt_context_state)(struct anv_queue *queue)
       if (res != VK_SUCCESS)
          return res;
    }
-#else
-   VkResult res = anv_queue_submit_simple_batch(queue, &batch, false);
-   if (res != VK_SUCCESS)
-      return res;
-#endif
 
 #endif
    return VK_SUCCESS;

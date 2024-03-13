@@ -164,8 +164,9 @@ struct brw_reg {
          unsigned address_mode:1;       /* relative addressing, hopefully! */
          unsigned pad0:17;
          unsigned subnr:5;              /* :1 in align16 */
+         unsigned arfnr;
       };
-      uint32_t bits;
+      uint64_t bits;
    };
 
    union {
@@ -392,6 +393,7 @@ brw_reg(enum brw_reg_file file,
    reg.pad0 = 0;
    reg.subnr = subnr * type_sz(type);
    reg.nr = nr;
+   reg.arfnr = 0;
 
    /* Could do better: If the reg is r5.3<0;1,0>, we probably want to
     * set swizzle and writemask to W, as the lower bits of subnr will

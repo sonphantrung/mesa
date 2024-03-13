@@ -93,6 +93,16 @@ fs_visitor::validate()
    cfg->validate(_mesa_shader_stage_to_abbrev(stage));
 
    foreach_block (block, cfg) {
+      /* Track the last used address register. Usage of the address register
+       * in the IR should be limited to within a block, otherwise we would
+       * unable to schedule some instructions without spilling the address
+       * register to a VGRF.
+       *
+       * Another pattern we stick to when using the address register in the IR
+       * is that we write and read the register in pairs of instruction.
+       */
+      uint32_t last_used_address_register[8] = {};
+
       foreach_inst_in_block (fs_inst, inst, block) {
          switch (inst->opcode) {
          case SHADER_OPCODE_SEND:
@@ -177,12 +187,22 @@ fs_visitor::validate()
          if (inst->dst.file == VGRF) {
             fsv_assert_lte(inst->dst.offset / REG_SIZE + regs_written(inst),
                            alloc.sizes[inst->dst.nr]);
+         } else if (inst->dst.is_address()) {
+            fsv_assert(inst->dst.arfnr != 0);
          }
 
+         bool read_address_reg = false;
          for (unsigned i = 0; i < inst->sources; i++) {
             if (inst->src[i].file == VGRF) {
                fsv_assert_lte(inst->src[i].offset / REG_SIZE + regs_read(inst, i),
                               alloc.sizes[inst->src[i].nr]);
+            } else if (inst->src[i].is_address()) {
+               fsv_assert(inst->src[i].arfnr != 0);
+               for (unsigned hw = 0; hw < inst->size_read(i); hw += 2) {
+                  fsv_assert_eq(inst->src[i].arfnr,
+                                last_used_address_register[inst->src[i].subnr + hw / 2]);
+               }
+               read_address_reg = true;
             }
          }
 
@@ -213,6 +233,30 @@ fs_visitor::validate()
                fsv_assert(!is_uniform(inst->src[i]) ||
                           inst->src[i].type != BRW_REGISTER_TYPE_HF);
             }
+         }
+
+         /* Update the last used address register. */
+         if (read_address_reg) {
+            /* When an instruction only reads the address register, we assume
+             * the read parts are never going to be used again.
+             */
+            for (unsigned i = 0; i < inst->sources; i++) {
+               if (!inst->src[i].is_address())
+                  continue;
+               for (unsigned hw = 0; hw < inst->size_read(i); hw += 2)
+                  last_used_address_register[inst->src[i].subnr + hw / 2] = 0;
+            }
+         }
+         if (inst->dst.is_address()) {
+            /* For the written part of the address register */
+            for (unsigned hw = 0; hw < inst->size_written; hw += 2)
+               last_used_address_register[inst->dst.subnr + hw / 2] = inst->dst.arfnr;
+         } else if (inst->uses_address_register()) {
+            /* If the instruction is making use of the address register,
+             * discard the entire thing.
+             */
+            memset(last_used_address_register, 0,
+                   sizeof(last_used_address_register));
          }
       }
    }

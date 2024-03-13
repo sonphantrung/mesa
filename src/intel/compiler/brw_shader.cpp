@@ -286,6 +286,12 @@ fs_reg::is_accumulator() const
 }
 
 bool
+fs_reg::is_address() const
+{
+   return file == ARF && nr >= BRW_ARF_ADDRESS && nr < BRW_ARF_ACCUMULATOR;
+}
+
+bool
 fs_inst::is_commutative() const
 {
    switch (opcode) {

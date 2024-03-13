@@ -62,6 +62,12 @@ public:
    bool is_negative_one() const;
    bool is_null() const;
    bool is_accumulator() const;
+   bool is_address() const;
+
+   unsigned address_slot(unsigned byte_offset) const {
+      assert(is_address());
+      return (subnr + byte_offset) / 2;
+   }
 
    /**
     * Return the size in bytes of a single logical component of the
@@ -76,6 +82,7 @@ public:
    using brw_reg::address_mode;
    using brw_reg::subnr;
    using brw_reg::nr;
+   using brw_reg::arfnr;
 
    using brw_reg::swizzle;
    using brw_reg::writemask;
@@ -464,6 +471,11 @@ public:
     * data.
     */
    bool has_sampler_residency() const;
+
+   /**
+    * Return true if this instruction is using the address register.
+    */
+   bool uses_address_register() const;
 
    /** @{
     * Annotation for the generated IR.  One of the two can be set.

@@ -5946,11 +5946,6 @@ tu_dispatch(struct tu_cmd_buffer *cmd,
                    HLSQ_CS_NDRANGE_5(CHIP, .globalsize_z = local_size[2] * num_groups[2]),
                    HLSQ_CS_NDRANGE_6(CHIP, .globaloff_z = 0));
 
-   tu_cs_emit_regs(cs,
-                   HLSQ_CS_KERNEL_GROUP_X(CHIP, 1),
-                   HLSQ_CS_KERNEL_GROUP_Y(CHIP, 1),
-                   HLSQ_CS_KERNEL_GROUP_Z(CHIP, 1));
-
    trace_start_compute(&cmd->trace, cs, info->indirect != NULL, local_size[0],
                        local_size[1], local_size[2], info->blocks[0],
                        info->blocks[1], info->blocks[2]);

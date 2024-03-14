@@ -546,18 +546,19 @@ fs_inst::can_change_types() const
 }
 
 void
-fs_reg::init()
+fs_reg::init(enum brw_reg_file file, unsigned nr, enum brw_reg_type type)
 {
    memset((void*)this, 0, sizeof(*this));
-   type = BRW_REGISTER_TYPE_UD;
-   stride = 1;
+   this->file = file;
+   this->type = type;
+   this->nr = nr;
+   this->stride = (file == UNIFORM ? 0 : 1);
 }
 
 /** Generic unset register constructor. */
 fs_reg::fs_reg()
 {
-   init();
-   this->file = BAD_FILE;
+   init(BAD_FILE, 0, BRW_REGISTER_TYPE_UD);
 }
 
 fs_reg::fs_reg(struct ::brw_reg reg) :
@@ -1132,20 +1133,12 @@ fs_visitor::vgrf(const glsl_type *const type)
 
 fs_reg::fs_reg(enum brw_reg_file file, unsigned nr)
 {
-   init();
-   this->file = file;
-   this->nr = nr;
-   this->type = BRW_REGISTER_TYPE_F;
-   this->stride = (file == UNIFORM ? 0 : 1);
+   init(file, nr, BRW_REGISTER_TYPE_F);
 }
 
 fs_reg::fs_reg(enum brw_reg_file file, unsigned nr, enum brw_reg_type type)
 {
-   init();
-   this->file = file;
-   this->nr = nr;
-   this->type = type;
-   this->stride = (file == UNIFORM ? 0 : 1);
+   init(file, nr, type);
 }
 
 /* For SIMD16, we need to follow from the uniform setup of SIMD8 dispatch.

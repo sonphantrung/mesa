@@ -32,7 +32,7 @@ class fs_reg : private brw_reg {
 public:
    DECLARE_RALLOC_CXX_OPERATORS(fs_reg)
 
-   void init();
+   void init(enum brw_reg_file file, unsigned nr, enum brw_reg_type type);
 
    fs_reg();
    fs_reg(struct ::brw_reg reg);

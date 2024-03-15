@@ -1586,6 +1586,29 @@ emit_intrinsic_image_size_tex(struct ir3_context *ctx,
    }
 }
 
+static void
+emit_readonly_load_uav(struct ir3_context *ctx,
+                       nir_intrinsic_instr *intr,
+                       nir_src *index,
+                       struct ir3_instruction *coords,
+                       struct ir3_instruction **dst)
+{
+   struct ir3_block *b = ctx->block;
+   struct tex_src_info info = get_image_ssbo_samp_tex_src(ctx, index, false);
+
+   unsigned num_components = intr->def.num_components;
+   struct ir3_instruction *sam =
+      emit_sam(ctx, OPC_ISAM, info, utype_for_size(intr->def.bit_size),
+               MASK(num_components), coords, NULL);
+
+   ir3_handle_nonuniform(sam, intr);
+
+   sam->barrier_class = IR3_BARRIER_BUFFER_R;
+   sam->barrier_conflict = IR3_BARRIER_BUFFER_W;
+
+   ir3_split_dest(b, dst, sam, 0, num_components);
+}
+
 /* src[] = { buffer_index, offset }. No const_index */
 static void
 emit_intrinsic_load_ssbo(struct ir3_context *ctx,
@@ -1603,19 +1626,26 @@ emit_intrinsic_load_ssbo(struct ir3_context *ctx,
    struct ir3_block *b = ctx->block;
    struct ir3_instruction *offset = ir3_get_src(ctx, &intr->src[2])[0];
    struct ir3_instruction *coords = ir3_collect(b, offset, create_immed(b, 0));
-   struct tex_src_info info = get_image_ssbo_samp_tex_src(ctx, &intr->src[0], false);
+   emit_readonly_load_uav(ctx, intr, &intr->src[0], coords, dst);
+}
 
-   unsigned num_components = intr->def.num_components;
-   struct ir3_instruction *sam =
-      emit_sam(ctx, OPC_ISAM, info, utype_for_size(intr->def.bit_size),
-               MASK(num_components), coords, NULL);
+static void
+emit_intrinsic_load_uav(struct ir3_context *ctx,
+                        nir_intrinsic_instr *intr,
+                        struct ir3_instruction **dst)
+{
+   /* Note: isam currently can't handle vectorized loads/stores */
+   if (!(nir_intrinsic_access(intr) & ACCESS_CAN_REORDER) ||
+       intr->def.num_components > 1 ||
+       !ctx->compiler->has_isam_ssbo) {
+      ctx->funcs->emit_intrinsic_load_uav(ctx, intr, dst);
+      return;
+   }
 
-   ir3_handle_nonuniform(sam, intr);
-
-   sam->barrier_class = IR3_BARRIER_BUFFER_R;
-   sam->barrier_conflict = IR3_BARRIER_BUFFER_W;
-
-   ir3_split_dest(b, dst, sam, 0, num_components);
+   struct ir3_block *b = ctx->block;
+   struct ir3_instruction *coords =
+      ir3_create_collect(b, ir3_get_src(ctx, &intr->src[1]), 2);
+   emit_readonly_load_uav(ctx, intr, &intr->src[0], coords, dst);
 }
 
 static void
@@ -2385,6 +2415,9 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
     */
    case nir_intrinsic_load_ssbo_ir3:
       emit_intrinsic_load_ssbo(ctx, intr, dst);
+      break;
+   case nir_intrinsic_load_uav_ir3:
+      emit_intrinsic_load_uav(ctx, intr, dst);
       break;
    case nir_intrinsic_store_ssbo_ir3:
       ctx->funcs->emit_intrinsic_store_ssbo(ctx, intr);

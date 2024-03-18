@@ -2656,6 +2656,7 @@ tu_CmdBindDescriptorSets(VkCommandBuffer commandBuffer,
                      unsigned offset_shift;
                      switch (format) {
                      case 0:
+                     case FMT6_8_UINT:
                         offset_shift = 0;
                         break;
                      case FMT6_16_UINT:

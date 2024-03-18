@@ -252,6 +252,8 @@ struct fd_dev_info {
        * fully compatible.
        */
       bool ubwc_unorm_snorm_int_compatible;
+
+      bool storage_8bit;
    } a7xx;
 };
 

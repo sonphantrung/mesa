@@ -831,6 +831,7 @@ a7xx_750 = A7XXProps(
         # example dEQP-VK.image.load_store.with_format.2d.*. Disable this for
         # now.
         #supports_ibo_ubwc = True,
+        storage_8bit = True,
     )
 
 a730_magic_regs = dict(

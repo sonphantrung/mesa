@@ -67,6 +67,8 @@ struct ir3_compiler_options {
 
    /* True if 16-bit descriptors are available. */
    bool storage_16bit;
+   /* True if 8-bit descriptors are available. */
+   bool storage_8bit;
    /* True if 16-bit descriptors are used for both 16-bit and 32-bit access. */
    bool universal_16bit_storage_descriptor;
 

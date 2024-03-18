@@ -1631,6 +1631,12 @@ emit_intrinsic_load_ssbo(struct ir3_context *ctx,
       }
    }
 
+   if (ctx->compiler->options.storage_16bit &&
+       ctx->compiler->options.universal_16bit_storage_descriptor &&
+       (sam->flags & IR3_INSTR_B) && intr->def.bit_size == 32) {
+      sam->flags |= (IR3_INSTR_V | IR3_INSTR_INV_1D);
+   }
+
    ir3_handle_nonuniform(sam, intr);
 
    sam->barrier_class = IR3_BARRIER_BUFFER_R;

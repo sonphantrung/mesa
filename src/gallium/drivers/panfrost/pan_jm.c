@@ -812,7 +812,8 @@ jm_emit_tiler_job(struct panfrost_batch *batch,
 
 void
 GENX(jm_launch_xfb)(struct panfrost_batch *batch,
-                    const struct pipe_draw_info *info, unsigned count)
+                    const struct pipe_draw_info *info, unsigned count,
+                    const struct pipe_draw_indirect_info *indirect)
 {
    struct panfrost_ptr t = pan_pool_alloc_desc(&batch->pool.base, COMPUTE_JOB);
 

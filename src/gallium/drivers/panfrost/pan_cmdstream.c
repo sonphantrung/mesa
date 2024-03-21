@@ -2732,7 +2732,8 @@ panfrost_update_state_3d(struct panfrost_batch *batch)
 
 static void
 panfrost_launch_xfb(struct panfrost_batch *batch,
-                    const struct pipe_draw_info *info, unsigned count)
+                    const struct pipe_draw_info *info, unsigned count,
+                    const struct pipe_draw_indirect_info *indirect)
 {
    struct panfrost_context *ctx = batch->ctx;
 
@@ -2771,7 +2772,7 @@ panfrost_launch_xfb(struct panfrost_batch *batch,
                               &batch->push_uniforms[PIPE_SHADER_VERTEX],
                               &batch->nr_push_uniforms[PIPE_SHADER_VERTEX]);
 
-   JOBX(launch_xfb)(batch, info, count);
+   JOBX(launch_xfb)(batch, info, count, indirect);
    batch->compute_count++;
 
    ctx->uncompiled[PIPE_SHADER_VERTEX] = vs_uncompiled;
@@ -2900,7 +2901,7 @@ panfrost_single_direct_draw(struct panfrost_batch *batch,
    panfrost_clean_state_3d(ctx);
 
    if (ctx->uncompiled[PIPE_SHADER_VERTEX]->xfb) {
-      panfrost_launch_xfb(batch, info, draw->count);
+      panfrost_launch_xfb(batch, info, draw->count, NULL);
    }
 
    /* Increment transform feedback offsets */
@@ -2943,7 +2944,7 @@ panfrost_indirect_draw(struct panfrost_batch *batch,
    panfrost_clean_state_3d(ctx);
 
    if (ctx->uncompiled[PIPE_SHADER_VERTEX]->xfb) {
-      panfrost_launch_xfb(batch, info, 0);
+      panfrost_launch_xfb(batch, info, 0, indirect);
    }
 
    /* Increment transform feedback offsets */

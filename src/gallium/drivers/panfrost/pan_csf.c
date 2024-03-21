@@ -639,14 +639,12 @@ GENX(csf_launch_grid)(struct panfrost_batch *batch,
 
 void
 GENX(csf_launch_xfb)(struct panfrost_batch *batch,
-                     const struct pipe_draw_info *info, unsigned count)
+                     const struct pipe_draw_info *info, unsigned count,
+                     const struct pipe_draw_indirect_info *indirect)
 {
    struct cs_builder *b = batch->csf.cs.builder;
 
    cs_move64_to(b, cs_reg64(b, 24), batch->tls.gpu);
-
-   /* TODO: Indexing. Also, attribute_offset is a legacy feature.. */
-   cs_move32_to(b, cs_reg32(b, 32), batch->ctx->offset_start);
 
    /* Compute workgroup size */
    uint32_t wg_size[4];
@@ -666,14 +664,56 @@ GENX(csf_launch_xfb)(struct panfrost_batch *batch,
    for (unsigned i = 0; i < 3; ++i)
       cs_move32_to(b, cs_reg32(b, 34 + i), 0);
 
-   cs_move32_to(b, cs_reg32(b, 37), count);
-   cs_move32_to(b, cs_reg32(b, 38), info->instance_count);
-   cs_move32_to(b, cs_reg32(b, 39), 1);
-
    csf_emit_shader_regs(batch, PIPE_SHADER_VERTEX,
                         batch->rsd[PIPE_SHADER_VERTEX]);
-   /* XXX: Choose correctly */
-   cs_run_compute(b, 1, MALI_TASK_AXIS_Z, false, cs_shader_res_sel(0, 0, 0, 0));
+   if (indirect) {
+      struct cs_index address = cs_reg64(b, 64);
+      struct cs_index counter = cs_reg32(b, 66);
+      cs_move64_to(
+         b, address,
+         pan_resource(indirect->buffer)->image.data.base + indirect->offset);
+      cs_move32_to(b, counter, indirect->draw_count);
+
+      cs_while(b, MALI_CS_CONDITION_GREATER, counter) {
+         if (info->index_size) {
+            /* loads vertex count, instance count */
+            cs_load_to(b, cs_reg_tuple(b, 37, 2), address, BITFIELD_MASK(2), 0);
+            // TODO handle indexed in XFB
+            /* index offset */
+            // cs_load_to(b, cs_reg_tuple(b, ??, 1), address, BITFIELD_MASK(1),
+            // 2 * sizeof(uint32_t));
+            cs_load_to(b, cs_reg_tuple(b, 32, 1), address, BITFIELD_MASK(1),
+                       3 * sizeof(uint32_t));
+         } else {
+            /* vertex count, instance count */
+            cs_load_to(b, cs_reg_tuple(b, 37, 2), address, BITFIELD_MASK(2), 0);
+            // instance offset
+            cs_move32_to(b, cs_reg32(b, 35), 0);
+            // vertex offset
+            cs_load_to(b, cs_reg_tuple(b, 32, 1), address, BITFIELD_MASK(1),
+                       2 * sizeof(uint32_t));
+         }
+         cs_move32_to(b, cs_reg32(b, 39), 1);
+         cs_wait_slot(b, 0, false);
+         /* XXX: Choose correctly */
+         cs_run_compute(b, 1, MALI_TASK_AXIS_Z, false,
+                        cs_shader_res_sel(0, 0, 0, 0));
+
+         cs_add64(b, address, address, indirect->stride);
+         cs_add32(b, counter, counter, (unsigned int)-1);
+      }
+   } else {
+      /* TODO: Indexing. Also, attribute_offset is a legacy feature.. */
+      cs_move32_to(b, cs_reg32(b, 32), batch->ctx->offset_start);
+
+      cs_move32_to(b, cs_reg32(b, 37), count);
+      cs_move32_to(b, cs_reg32(b, 38), info->instance_count);
+      cs_move32_to(b, cs_reg32(b, 39), 1);
+
+      /* XXX: Choose correctly */
+      cs_run_compute(b, 1, MALI_TASK_AXIS_Z, false,
+                     cs_shader_res_sel(0, 0, 0, 0));
+   }
 }
 
 static mali_ptr

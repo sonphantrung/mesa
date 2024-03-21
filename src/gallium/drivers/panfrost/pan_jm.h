@@ -73,7 +73,8 @@ void GENX(jm_emit_fragment_job)(struct panfrost_batch *batch,
                                 const struct pan_fb_info *pfb);
 
 void GENX(jm_launch_xfb)(struct panfrost_batch *batch,
-                         const struct pipe_draw_info *info, unsigned count);
+                         const struct pipe_draw_info *info, unsigned count,
+                         const struct pipe_draw_indirect_info *indirect);
 
 void GENX(jm_launch_grid)(struct panfrost_batch *batch,
                           const struct pipe_grid_info *info);

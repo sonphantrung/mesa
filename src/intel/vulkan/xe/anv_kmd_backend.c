@@ -279,9 +279,24 @@ xe_vm_bind_op(struct anv_device *device,
       intel_bind_timeline_bind_end(&device->bind_timeline);
 
    if (ret) {
+      /* These errors can happen during normal driver operation (i.e., they
+       * don't necessarily mean a bug in our driver):
+       *   ENOMEM: Out of Kernel memory.
+       *   EBUSY:  Temporarily out of resources for a multiple VM_BIND job.
+       *           Retry with lower number of VM_BIND operations. Does not
+       *           occur with single VM_BIND job.
+       *   ENOSPC: Graphics memory is overcommitted, unbind resources and then
+       *           retry.
+       *
+       * Both ENOMEM and EBUSY mean we're out of host memory, it's just that
+       * when we're guaranteed to not get EBUSY if we issue one bind per
+       * ioctl.
+       */
       assert(errno_ != EINVAL);
-      if (errno_ == ENOMEM)
+      if (errno_ == ENOMEM || errno_ == EBUSY)
          result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      else if (errno_ == ENOSPC)
+         result = vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
       else
          result = vk_device_set_lost(&device->vk,
                                      "vm_bind failed with errno %d", errno_);

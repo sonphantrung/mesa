@@ -230,6 +230,12 @@ impl Index<FloatType> for ShaderFloatControls {
     }
 }
 
+enum SyncType {
+    Sync,
+    Brk,
+    Cont,
+}
+
 struct ShaderFromNir<'a> {
     nir: &'a nir_shader,
     info: ShaderInfo,
@@ -238,6 +244,7 @@ struct ShaderFromNir<'a> {
     label_alloc: LabelAllocator,
     block_label: HashMap<u32, Label>,
     bar_label: HashMap<u32, Label>,
+    block_sync: HashMap<u32, SyncType>,
     fs_out_regs: [SSAValue; 34],
     end_block_id: u32,
     ssa_map: HashMap<u32, Vec<SSAValue>>,
@@ -255,6 +262,7 @@ impl<'a> ShaderFromNir<'a> {
             label_alloc: LabelAllocator::new(),
             block_label: HashMap::new(),
             bar_label: HashMap::new(),
+            block_sync: HashMap::new(),
             fs_out_regs: [SSAValue::NONE; 34],
             end_block_id: 0,
             ssa_map: HashMap::new(),
@@ -2932,6 +2940,12 @@ impl<'a> ShaderFromNir<'a> {
             b.push_op(OpNop { label: Some(label) });
         }
 
+        if matches!(self.block_sync.get(&nb.index), Some(SyncType::Cont)) {
+            b.push_op(OpPCnt {
+                target: self.get_block_label(nb),
+            });
+        }
+
         let mut phi = OpPhiDsts::new();
         for ni in nb.iter_instr_list() {
             if ni.type_ == nir_instr_type_phi {
@@ -3026,6 +3040,14 @@ impl<'a> ShaderFromNir<'a> {
             self.cfg.add_edge(nb.index, ni.first_then_block().index);
             self.cfg.add_edge(nb.index, ni.first_else_block().index);
 
+            if self.info.sm < 70 && ni.condition.as_def().divergent {
+                let fb = ni.following_block();
+                self.block_sync.insert(fb.index, SyncType::Sync);
+                b.push_op(OpSSy {
+                    target: self.get_block_label(fb),
+                });
+            }
+
             let mut bra = Instr::new_boxed(OpBra {
                 target: self.get_block_label(ni.first_else_block()),
             });
@@ -3037,16 +3059,45 @@ impl<'a> ShaderFromNir<'a> {
 
             b.push_instr(bra);
         } else {
+            if self.info.sm < 70 {
+                if let Some(nl) = nb.following_loop() {
+                    let fb = nl.following_block();
+                    self.block_sync.insert(fb.index, SyncType::Brk);
+                    b.push_op(OpPBk {
+                        target: self.get_block_label(fb),
+                    });
+                }
+            }
+
             assert!(succ[1].is_none());
             let s0 = succ[0].unwrap();
+            let target = self.get_block_label(s0);
             if s0.index == self.end_block_id {
                 self.store_fs_outputs(&mut b);
                 b.push_op(OpExit {});
             } else {
                 self.cfg.add_edge(nb.index, s0.index);
-                b.push_op(OpBra {
-                    target: self.get_block_label(s0),
-                });
+                if let Some(sync) = self.block_sync.get(&s0.index) {
+                    match sync {
+                        SyncType::Sync => {
+                            b.push_op(OpSync {});
+                        }
+                        SyncType::Brk => {
+                            b.push_op(OpBrk {});
+                        }
+                        SyncType::Cont => {
+                            b.push_op(OpCont { });
+                        }
+                    }
+                } else {
+                    b.push_op(OpBra {
+                        target: target,
+                    });
+                }
+            }
+
+            if self.info.sm < 70 && nb.following_loop().is_some() {
+                self.block_sync.insert(s0.index, SyncType::Cont);
             }
         }
 

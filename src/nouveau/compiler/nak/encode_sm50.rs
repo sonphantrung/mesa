@@ -1302,6 +1302,54 @@ impl SM50Instr {
         self.set_field(0..5, 0xF_u8); // TODO: Pred?
     }
 
+    fn encode_ssy(
+        &mut self,
+        op: &OpSSy,
+        ip: usize,
+        labels: &HashMap<Label, usize>,
+    ) {
+        self.set_opcode(0xe290);
+        self.set_rel_offset(20..44, &op.target, ip, labels);
+        self.set_field(0..5, 0xF_u8); // TODO: Pred?
+    }
+
+    fn encode_sync(&mut self, _op: &OpSync) {
+        self.set_opcode(0xf0f8);
+        self.set_field(0..5, 0xF_u8); // TODO: Pred?
+    }
+
+    fn encode_brk(&mut self, _op: &OpBrk) {
+        self.set_opcode(0xe340);
+        self.set_field(0..5, 0xF_u8); // TODO: Pred?
+    }
+
+    fn encode_pbk(
+        &mut self,
+        op: &OpPBk,
+        ip: usize,
+        labels: &HashMap<Label, usize>,
+    ) {
+        self.set_opcode(0xe2a0);
+        self.set_rel_offset(20..44, &op.target, ip, labels);
+        self.set_field(0..5, 0xF_u8); // TODO: Pred?
+    }
+
+    fn encode_cont(&mut self, _op: &OpCont) {
+        self.set_opcode(0xe350);
+        self.set_field(0..5, 0xF_u8); // TODO: Pred?
+    }
+
+    fn encode_pcnt(
+        &mut self,
+        op: &OpPCnt,
+        ip: usize,
+        labels: &HashMap<Label, usize>,
+    ) {
+        self.set_opcode(0xe2b0);
+        self.set_rel_offset(20..44, &op.target, ip, labels);
+        self.set_field(0..5, 0xF_u8); // TODO: Pred?
+    }
+
     fn encode_exit(&mut self, _op: &OpExit) {
         self.set_opcode(0xe300);
 
@@ -2139,6 +2187,12 @@ impl SM50Instr {
             Op::MemBar(op) => si.encode_membar(op),
             Op::Atom(op) => si.encode_atom(op),
             Op::Bra(op) => si.encode_bra(op, ip, labels),
+            Op::SSy(op) => si.encode_ssy(op, ip, labels),
+            Op::Sync(op) => si.encode_sync(op),
+            Op::Brk(op) => si.encode_brk(op),
+            Op::PBk(op) => si.encode_pbk(op, ip, labels),
+            Op::Cont(op) => si.encode_cont(op),
+            Op::PCnt(op) => si.encode_pcnt(op, ip, labels),
             Op::Exit(op) => si.encode_exit(op),
             Op::Bar(op) => si.encode_bar(op),
             Op::SuLd(op) => si.encode_suld(op),

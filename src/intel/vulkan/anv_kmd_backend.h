@@ -70,6 +70,8 @@ enum anv_vm_bind_flags {
     * new timeline point and signal it upon completion.
     */
    ANV_VM_BIND_FLAG_SIGNAL_BIND_TIMELINE = 1 << 0,
+   /* Wait for the bind to complete before returning. */
+   ANV_VM_BIND_FLAG_SYNC = 1 << 1,
 };
 
 struct anv_kmd_backend {

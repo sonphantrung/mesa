@@ -613,7 +613,49 @@ anv_sparse_bind_vm_bind(struct anv_device *device,
    if (!queue)
       assert(submit->wait_count == 0 && submit->signal_count == 0);
 
-   return device->kmd_backend->vm_bind(device, submit, ANV_VM_BIND_FLAG_NONE);
+   VkResult result = device->kmd_backend->vm_bind(device, submit,
+                                                  ANV_VM_BIND_FLAG_NONE);
+
+   if (result == VK_ERROR_OUT_OF_HOST_MEMORY) {
+      /* If we get this, try to issue each bind operation in a single ioctl as
+       * it requires less Kernel memory and so we may be able to move things
+       * forward, although slowly. Performance isn't a concern at this point:
+       * we're just trying to move progress forward without crashing until
+       * whatever is eating too much memory goes away. We also do things in a
+       * completely synchronous way so we don't overload the Kernel and hoping
+       * that while we wait for progress the situation gets better.
+       */
+
+      result = vk_sync_wait_many(&device->vk, submit->wait_count,
+                                 submit->waits, VK_SYNC_WAIT_COMPLETE,
+                                 INT64_MAX);
+      if (result != VK_SUCCESS)
+         return vk_queue_set_lost(&queue->vk, "vk_sync_wait failed");
+
+      for (int b = 0; b < submit->binds_len; b++) {
+         struct anv_sparse_submission s = {
+            .queue = submit->queue,
+            .binds = &submit->binds[b],
+            .binds_len = 1,
+            .binds_capacity = 1,
+            .wait_count = 0,
+            .signal_count = 0,
+         };
+         result = device->kmd_backend->vm_bind(device, &s,
+                                               ANV_VM_BIND_FLAG_SYNC);
+         if (result != VK_SUCCESS)
+            return result; /* Well, at least we tried... */
+      }
+
+      for (uint32_t i = 0; i < submit->signal_count; i++) {
+         struct vk_sync_signal *s = &submit->signals[i];
+         result = vk_sync_signal(&device->vk, s->sync, s->signal_value);
+         if (result != VK_SUCCESS)
+            return vk_queue_set_lost(&queue->vk, "vk_sync_signal failed");
+      }
+   }
+
+   return VK_SUCCESS;
 }
 
 VkResult

@@ -279,6 +279,8 @@ struct tu_device
    /* Backup in-memory cache to be used if the app doesn't provide one */
    struct vk_pipeline_cache *mem_cache;
 
+   struct vk_meta_device meta;
+
 #define MIN_SCRATCH_BO_SIZE_LOG2 12 /* A page */
 
    /* Currently the kernel driver uses a 32-bit GPU address space, but it

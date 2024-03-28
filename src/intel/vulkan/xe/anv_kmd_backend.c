@@ -173,9 +173,11 @@ xe_vm_bind_op(struct anv_device *device,
               struct anv_sparse_submission *submit,
               enum anv_vm_bind_flags flags)
 {
+   struct anv_queue *queue = submit->queue;
    VkResult result = VK_SUCCESS;
    int ret;
-   const bool do_sync = flags & ANV_VM_BIND_FLAG_SYNC;
+   const bool has_queue_sync = queue && queue->sync;
+   const bool do_sync = flags & ANV_VM_BIND_FLAG_SYNC || has_queue_sync;
    const bool signal_bind_timeline =
       flags & ANV_VM_BIND_FLAG_SIGNAL_BIND_TIMELINE;
 
@@ -199,7 +201,9 @@ xe_vm_bind_op(struct anv_device *device,
                                 submit->signals[s].signal_value,
                                 true);
    }
-   if (do_sync) {
+   if (has_queue_sync) {
+      xe_syncs[sync_idx++] = vk_sync_to_drm_xe_sync(queue->sync, 0, true);
+   } else if (do_sync) {
       struct drm_syncobj_create syncobj_create = {};
       ret = intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_CREATE,
                         &syncobj_create);
@@ -287,7 +291,11 @@ xe_vm_bind_op(struct anv_device *device,
       goto out_stackarray;
    }
 
-   if (do_sync) {
+   if (has_queue_sync) {
+      result = vk_sync_wait(&device->vk, queue->sync, 0,
+                            VK_SYNC_WAIT_COMPLETE, UINT64_MAX);
+
+   } else if (do_sync) {
       struct drm_syncobj_wait syncobj_wait = {
          .handles = (intptr_t)&xe_syncs[submit_sync_idx].handle,
          .timeout_nsec = INT64_MAX,
@@ -305,7 +313,7 @@ out_stackarray:
    STACK_ARRAY_FINISH(xe_binds_stackarray);
 
 out_submit_sync:
-   if (do_sync) {
+   if (do_sync && !has_queue_sync) {
       struct drm_syncobj_destroy syncobj_destroy = {
          .handle = xe_syncs[submit_sync_idx].handle,
       };

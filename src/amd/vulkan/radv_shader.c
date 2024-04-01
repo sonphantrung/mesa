@@ -597,33 +597,6 @@ radv_shader_spirv_to_nir(struct radv_device *device, const struct radv_shader_st
    NIR_PASS(_, nir, nir_lower_global_vars_to_local);
    NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
 
-   bool gfx7minus = device->physical_device->rad_info.gfx_level <= GFX7;
-   bool has_inverse_ballot = true;
-#if LLVM_AVAILABLE
-   has_inverse_ballot = !radv_use_llvm_for_stage(device, nir->info.stage) || LLVM_VERSION_MAJOR >= 17;
-#endif
-
-   NIR_PASS(_, nir, nir_lower_subgroups,
-            &(struct nir_lower_subgroups_options){
-               .subgroup_size = subgroup_size,
-               .ballot_bit_size = ballot_bit_size,
-               .ballot_components = 1,
-               .lower_to_scalar = 1,
-               .lower_subgroup_masks = 1,
-               .lower_relative_shuffle = 1,
-               .lower_rotate_to_shuffle = radv_use_llvm_for_stage(device, nir->info.stage),
-               .lower_shuffle_to_32bit = 1,
-               .lower_vote_eq = 1,
-               .lower_vote_bool_eq = 1,
-               .lower_quad_broadcast_dynamic = 1,
-               .lower_quad_broadcast_dynamic_to_const = gfx7minus,
-               .lower_shuffle_to_swizzle_amd = 1,
-               .lower_ballot_bit_count_to_mbcnt_amd = 1,
-               .lower_inverse_ballot = !has_inverse_ballot,
-               .lower_boolean_reduce = 1,
-               .lower_boolean_shuffle = true,
-            });
-
    NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
    NIR_PASS(_, nir, nir_opt_shrink_stores, !device->instance->drirc.disable_shrink_image_store);
 
@@ -634,6 +607,37 @@ radv_shader_spirv_to_nir(struct radv_device *device, const struct radv_shader_st
     * to remove any copies introduced by nir_opt_find_array_copies().
     */
    NIR_PASS(_, nir, nir_lower_var_copies);
+
+   bool gfx7minus = device->physical_device->rad_info.gfx_level <= GFX7;
+   bool has_inverse_ballot = true;
+#if LLVM_AVAILABLE
+   has_inverse_ballot = !radv_use_llvm_for_stage(device, nir->info.stage) || LLVM_VERSION_MAJOR >= 17;
+#endif
+
+   bool run_opt = false;
+   NIR_PASS(run_opt, nir, nir_lower_subgroups,
+            &(struct nir_lower_subgroups_options){
+               .subgroup_size = subgroup_size,
+               .ballot_bit_size = ballot_bit_size,
+               .ballot_components = true,
+               .lower_to_scalar = true,
+               .lower_subgroup_masks = true,
+               .lower_relative_shuffle = true,
+               .lower_rotate_to_shuffle = radv_use_llvm_for_stage(device, nir->info.stage),
+               .lower_shuffle_to_32bit = true,
+               .lower_vote_eq = true,
+               .lower_vote_bool_eq = true,
+               .lower_quad_broadcast_dynamic = true,
+               .lower_quad_broadcast_dynamic_to_const = gfx7minus,
+               .lower_shuffle_to_swizzle_amd = true,
+               .lower_ballot_bit_count_to_mbcnt_amd = true,
+               .lower_inverse_ballot = !has_inverse_ballot,
+               .lower_boolean_reduce = true,
+               .lower_boolean_shuffle = true,
+            });
+
+   if (run_opt && !stage->key.optimisations_disabled)
+      radv_optimize_nir(nir, false);
 
    unsigned lower_flrp = (nir->options->lower_flrp16 ? 16 : 0) | (nir->options->lower_flrp32 ? 32 : 0) |
                          (nir->options->lower_flrp64 ? 64 : 0);

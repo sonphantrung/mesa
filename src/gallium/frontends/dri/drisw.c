@@ -595,7 +595,7 @@ drisw_init_screen(struct dri_screen *screen)
       pscreen = pipe_loader_create_screen(screen->dev);
 
    if (!pscreen)
-      goto fail;
+      goto release_pipe;
 
    dri_init_options(screen);
    configs = dri_init_screen(screen, pscreen);
@@ -624,6 +624,11 @@ drisw_init_screen(struct dri_screen *screen)
    return configs;
 fail:
    dri_release_screen(screen);
+release_pipe:
+#ifdef HAVE_DRISW_KMS
+   if (screen->dev)
+      pipe_loader_release(&screen->dev, 1);
+#endif
    return NULL;
 }
 

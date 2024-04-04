@@ -333,8 +333,7 @@ fail:
 }
 
 int
-pipe_loader_sw_probe(struct pipe_loader_device **devs, int ndev,
-                     UNUSED enum pipe_loader_probe_options opts)
+pipe_loader_sw_probe(struct pipe_loader_device **devs, int ndev)
 {
    int i = 1;
 

@@ -69,14 +69,6 @@ struct pipe_loader_device {
 
    driOptionCache option_cache;
    driOptionCache option_info;
-
-   bool allow_virtio_native_driver;
-};
-
-enum pipe_loader_probe_options {
-   pipe_loader_probe_no_special_drivers  = 0x0000,
-   pipe_loader_probe_with_zink           = 0x0001,
-   pipe_loader_probe_with_native_context = 0x0002
 };
 
 /**
@@ -85,12 +77,11 @@ enum pipe_loader_probe_options {
  * \param devs      Array that will be filled with pointers to the devices
  *                  available in the system.
  * \param ndev      Maximum number of devices to return.
- * \param options   Options when loading devices (eg: zink or native context)
+ * \param with_zink If devices should also be loaded with zink.
  * \return Number of devices available in the system.
  */
 int
-pipe_loader_probe(struct pipe_loader_device **devs, int ndev,
-                  enum pipe_loader_probe_options options);
+pipe_loader_probe(struct pipe_loader_device **devs, int ndev, bool with_zink);
 
 /**
  * Create a pipe_screen for the specified device.
@@ -200,7 +191,7 @@ pipe_loader_sw_probe_null(struct pipe_loader_device **devs);
  * \sa pipe_loader_probe
  */
 int
-pipe_loader_sw_probe(struct pipe_loader_device **devs, int ndev, enum pipe_loader_probe_options opts);
+pipe_loader_sw_probe(struct pipe_loader_device **devs, int ndev);
 
 /**
  * Get a software device wrapped atop another device.
@@ -221,8 +212,7 @@ pipe_loader_sw_probe_wrapped(struct pipe_loader_device **dev,
  * \sa pipe_loader_probe
  */
 int
-pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev,
-                      enum pipe_loader_probe_options options);
+pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev);
 
 #ifdef HAVE_ZINK
 /**
@@ -251,8 +241,7 @@ pipe_loader_get_compatible_render_capable_device_fd(int kms_only_fd);
  * \sa pipe_loader_probe
  */
 bool
-pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd,
-                         enum pipe_loader_probe_options options);
+pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd, bool zink);
 
 /**
  * Get the dri options used for the DRM driver of the given name, if any.

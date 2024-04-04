@@ -1296,7 +1296,7 @@ lvp_enumerate_physical_devices(struct vk_instance *vk_instance)
       container_of(vk_instance, struct lvp_instance, vk);
 
    /* sw only for now */
-   instance->num_devices = pipe_loader_sw_probe(NULL, 0, false);
+   instance->num_devices = pipe_loader_sw_probe(NULL, 0);
 
    assert(instance->num_devices == 1);
 

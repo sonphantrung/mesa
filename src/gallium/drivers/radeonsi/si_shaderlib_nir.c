@@ -414,17 +414,20 @@ void *si_create_blit_cs(struct si_context *sctx, const union si_compute_blit_sha
    coord_src = nir_iadd(&b, coord_src, src_xyz);
 
    /* Clamp to edge for src, only X and Y because Z can't be out of bounds. */
-   if (options->xy_clamp_to_edge) {
-      unsigned src_clamp_channels = options->src_is_1d ? 0x1 : 0x3;
-      nir_def *dim = nir_image_deref_size(&b, 4, 32, deref_ssa(&b, img_src), zero);
-      dim = nir_channels(&b, dim, src_clamp_channels);
+   for (unsigned i = 0; i < 2; i++) {
+      nir_def *dim = NULL;
 
-      nir_def *coord_src_clamped = nir_channels(&b, coord_src, src_clamp_channels);
-      coord_src_clamped = nir_imax(&b, coord_src_clamped, nir_imm_int(&b, 0));
-      coord_src_clamped = nir_imin(&b, coord_src_clamped, nir_iadd_imm(&b, dim, -1));
+      if (i ? options->y_clamp_to_edge : options->x_clamp_to_edge) {
+         assert(!options->src_is_1d || i == 0);
 
-      for (unsigned i = 0; i < util_bitcount(src_clamp_channels); i++)
-         coord_src = nir_vector_insert_imm(&b, coord_src, nir_channel(&b, coord_src_clamped, i), i);
+         if (!dim)
+            dim = nir_image_deref_size(&b, 4, 32, deref_ssa(&b, img_src), zero);
+
+         nir_def *tmp = nir_channel(&b, coord_src, i);
+         tmp = nir_imax(&b, tmp, nir_imm_int(&b, 0));
+         tmp = nir_imin(&b, tmp, nir_iadd_imm(&b, nir_channel(&b, dim, i), -1));
+         coord_src = nir_vector_insert_imm(&b, coord_src, tmp, i);
+      }
    }
 
    /* Swizzle coordinates for 1D_ARRAY. */

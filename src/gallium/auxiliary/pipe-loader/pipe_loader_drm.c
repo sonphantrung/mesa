@@ -48,6 +48,11 @@
 #include "util/u_debug.h"
 #include "util/xmlconfig.h"
 
+#include "virtio/virtio-gpu/drm_hw.h"
+#define VIRGL_RENDERER_UNSTABLE_APIS
+#include "virtio/virtio-gpu/virglrenderer_hw.h"
+#include "virtgpu_drm.h"
+
 #define DRM_RENDER_NODE_DEV_NAME_FORMAT "%s/renderD%d"
 #define DRM_RENDER_NODE_MAX_NODES 63
 #define DRM_RENDER_NODE_MIN_MINOR 128
@@ -121,6 +126,26 @@ get_driver_descriptor(const char *driver_name, struct util_dl_library **plib)
    return NULL;
 }
 
+static uint32_t
+get_nctx_type(int fd)
+{
+   struct virgl_renderer_capset_drm caps = {};
+   struct drm_virtgpu_get_caps args = {
+         .cap_set_id = VIRGL_RENDERER_CAPSET_DRM,
+         .cap_set_ver = 0,
+         .addr = (uintptr_t)&caps,
+         .size = sizeof(caps),
+   };
+   int ret;
+
+   ret = drmIoctl(fd, DRM_IOCTL_VIRTGPU_GET_CAPS, &args);
+   if (ret)
+      return 0;
+
+   return caps.context_type;
+}
+
+
 static bool
 pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd, bool zink)
 {
@@ -154,6 +179,18 @@ pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd, bool zin
    if (strcmp(ddev->base.driver_name, "amdgpu") == 0) {
       FREE(ddev->base.driver_name);
       ddev->base.driver_name = strdup("radeonsi");
+   }
+
+   if (strcmp(ddev->base.driver_name, "virtio_gpu") == 0) {
+      uint32_t context_type = get_nctx_type(fd);
+      if (context_type) {
+         for (int i = 0; i < ARRAY_SIZE(driver_descriptors); i++) {
+            if (driver_descriptors[i]->virtgpu_native_context_type == context_type) {
+               FREE(ddev->base.driver_name);
+               ddev->base.driver_name = strdup(driver_descriptors[i]->driver_name);
+            }
+         }
+      }
    }
 
    struct util_dl_library **plib = NULL;

@@ -1821,10 +1821,10 @@ static unsigned rvcn_dec_dynamic_dpb_t2_message(struct radeon_decoder *dec, rvcn
             if (!dummy)
                dummy = d;
 
-            addr = dec->ws->buffer_get_virtual_address(d->dpb.res->buf);
+            addr = dec->ws->buffer_get_virtual_address(dec->ws, d->dpb.res->buf);
             if (!addr && dummy) {
                RVID_ERR("Ref list from application is incorrect, using dummy buffer instead.\n");
-               addr = dec->ws->buffer_get_virtual_address(dummy->dpb.res->buf);
+               addr = dec->ws->buffer_get_virtual_address(dec->ws, dummy->dpb.res->buf);
             }
             dynamic_dpb_t2->dpbAddrLo[i] = addr;
             dynamic_dpb_t2->dpbAddrHi[i] = addr >> 32;
@@ -1889,7 +1889,7 @@ static unsigned rvcn_dec_dynamic_dpb_t2_message(struct radeon_decoder *dec, rvcn
 
    dec->ws->cs_add_buffer(&dec->cs, dpb->dpb.res->buf,
       RADEON_USAGE_READWRITE | RADEON_USAGE_SYNCHRONIZED, RADEON_DOMAIN_VRAM);
-   addr = dec->ws->buffer_get_virtual_address(dpb->dpb.res->buf);
+   addr = dec->ws->buffer_get_virtual_address(dec->ws, dpb->dpb.res->buf);
    dynamic_dpb_t2->dpbCurrLo = addr;
    dynamic_dpb_t2->dpbCurrHi = addr >> 32;
 
@@ -2424,7 +2424,7 @@ static void send_cmd(struct radeon_decoder *dec, unsigned cmd, struct pb_buffer_
    uint64_t addr;
 
    dec->ws->cs_add_buffer(&dec->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED, domain);
-   addr = dec->ws->buffer_get_virtual_address(buf);
+   addr = dec->ws->buffer_get_virtual_address(dec->ws, buf);
    addr = addr + off;
 
    if (dec->vcn_dec_sw_ring == false) {

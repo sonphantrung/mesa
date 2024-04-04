@@ -18,6 +18,15 @@ const struct drm_driver_descriptor descriptor_name = {         \
    .create_screen = func,                                      \
 };
 
+#define DEFINE_DRM_DRIVER_DESCRIPTOR2(descriptor_name, driver, _driconf, _driconf_count, func, nctx_type) \
+const struct drm_driver_descriptor descriptor_name = {         \
+   .driver_name = #driver,                                     \
+   .driconf = _driconf,                                        \
+   .driconf_count = _driconf_count,                            \
+   .create_screen = func,                                      \
+   .virtgpu_native_context_type = nctx_type,                   \
+};
+
 /* The static pipe loader refers to the *_driver_descriptor structs for all
  * drivers, regardless of whether they are configured in this Mesa build, or
  * whether they're included in the specific gallium target.  The target (dri,
@@ -35,6 +44,8 @@ const struct drm_driver_descriptor descriptor_name = {         \
 
 #define DRM_DRIVER_DESCRIPTOR(driver, driconf, driconf_count)           \
    PUBLIC DEFINE_DRM_DRIVER_DESCRIPTOR(driver_descriptor, driver, driconf, driconf_count, pipe_##driver##_create_screen)
+#define DRM_DRIVER_DESCRIPTOR2(driver, driconf, driconf_count, nctx_type)           \
+   PUBLIC DEFINE_DRM_DRIVER_DESCRIPTOR2(driver_descriptor, driver, driconf, driconf_count, pipe_##driver##_create_screen, nctx_type)
 
 #define DRM_DRIVER_DESCRIPTOR_STUB(driver)
 
@@ -44,6 +55,8 @@ const struct drm_driver_descriptor descriptor_name = {         \
 
 #define DRM_DRIVER_DESCRIPTOR(driver, driconf, driconf_count)                          \
    DEFINE_DRM_DRIVER_DESCRIPTOR(driver##_driver_descriptor, driver, driconf, driconf_count, pipe_##driver##_create_screen)
+#define DRM_DRIVER_DESCRIPTOR2(driver, driconf, driconf_count, nctx_type)                          \
+   DEFINE_DRM_DRIVER_DESCRIPTOR2(driver##_driver_descriptor, driver, driconf, driconf_count, pipe_##driver##_create_screen, nctx_type)
 
 #define DRM_DRIVER_DESCRIPTOR_STUB(driver)                              \
    static struct pipe_screen *                                          \
@@ -206,8 +219,11 @@ pipe_radeonsi_create_screen(int fd, const struct pipe_screen_config *config)
 const driOptionDescription radeonsi_driconf[] = {
       #include "radeonsi/driinfo_radeonsi.h"
 };
+#ifdef HAVE_AMDGPU_VIRTIO
+DRM_DRIVER_DESCRIPTOR2(radeonsi, radeonsi_driconf, ARRAY_SIZE(radeonsi_driconf), 2 /* VIRTGPU_DRM_CONTEXT_AMDGPU */)
+#else
 DRM_DRIVER_DESCRIPTOR(radeonsi, radeonsi_driconf, ARRAY_SIZE(radeonsi_driconf))
-
+#endif
 #else
 DRM_DRIVER_DESCRIPTOR_STUB(radeonsi)
 #endif
@@ -259,7 +275,7 @@ DRM_DRIVER_DESCRIPTOR_STUB(msm)
 DRM_DRIVER_DESCRIPTOR_STUB(kgsl)
 #endif
 
-#if defined(GALLIUM_VIRGL) || (defined(GALLIUM_FREEDRENO) && !defined(PIPE_LOADER_DYNAMIC))
+#if defined(GALLIUM_VIRGL) || (defined(GALLIUM_FREEDRENO) && !defined(PIPE_LOADER_DYNAMIC)) || (defined(GALLIUM_RADEONSI) && !defined(PIPE_LOADER_DYNAMIC))
 #include "virgl/drm/virgl_drm_public.h"
 #include "virgl/virgl_public.h"
 

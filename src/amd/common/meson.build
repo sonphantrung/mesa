@@ -66,6 +66,31 @@ gfx10_format_table_c = custom_target(
   depend_files : ['../registers/regdb.py']
 )
 
+# TODO: enable this? Or keep committing the generated sources since it won't
+#       change often anyway.
+# libdrm_amdgpu_loader_h = custom_target(
+#   'libdrm_amdgpu_loader.h',
+#   input : files(
+#     'libdrm_amdgpu_gen_loader.py',
+#     dep_libdrm_amdgpu.get_variable('includedir') + '/libdrm/amdgpu.h',
+#   ),
+#   output : 'libdrm_amdgpu_loader.h',
+#   command : [prog_python, '@INPUT@', 'header', meson.get_compiler('c').cmd_array()[-1]],
+#   capture : true,
+# )
+
+# libdrm_amdgpu_loader_c = custom_target(
+#   'libdrm_amdgpu_loader.c',
+#   input : files(
+#     'libdrm_amdgpu_gen_loader.py',
+#     dep_libdrm_amdgpu.get_variable('includedir') + '/libdrm/amdgpu.h',
+#   ),
+#   output : 'libdrm_amdgpu_loader.c',
+#   command : [prog_python, '@INPUT@', 'source', meson.get_compiler('c').cmd_array()[-1]],
+#   capture : true,
+# )
+
+
 amd_common_files = files(
   'ac_binary.c',
   'ac_binary.h',
@@ -109,7 +134,22 @@ amd_common_files = files(
   'ac_perfcounter.c',
   'ac_perfcounter.h',
   'ac_vcn_av1_default.h',
+  'libdrm_amdgpu_loader.c',
+  'libdrm_amdgpu_loader.h'
 )
+
+link_with = []
+c_args = ['-DADDR_FASTCALL=']
+if with_amdgpu_virtio
+  c_args += '-DHAVE_AMDGPU_VIRTIO'
+  amd_common_files += files(
+    'virtio/amdgpu_virtio.c',
+    'virtio/amdgpu_virtio_bo.c',
+    'virtio/amdgpu_virtio_device.c',
+    'virtio/amdgpu_virtio_private.h',
+    'virtio/amdgpu_virtio_proto.h')
+  link_with += libvdrm
+endif
 
 if dep_elf.found()
   amd_common_files += files(
@@ -123,14 +163,15 @@ libamd_common = static_library(
   'amd_common',
   [amd_common_files, sid_tables_h, amdgfxregs_h, gfx10_format_table_c],
   include_directories : [
-    inc_include, inc_src, inc_amd,
+    inc_include, inc_src, inc_amd, inc_virtio_gpu,
   ],
   dependencies : [
     dep_thread, dep_elf, dep_libdrm_amdgpu, dep_valgrind,
     idep_mesautil, idep_nir_headers, idep_nir
   ],
+  link_with: [ link_with ],
   gnu_symbol_visibility : 'hidden',
-  c_args : ['-DADDR_FASTCALL=']
+  c_args : c_args
 )
 
 idep_amdgfxregs_h = declare_dependency(sources : [amdgfxregs_h])

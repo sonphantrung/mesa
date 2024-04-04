@@ -305,6 +305,7 @@ set_context(int fd)
    struct drm_virtgpu_context_set_param params[] = {
          { VIRTGPU_CONTEXT_PARAM_CAPSET_ID, VIRGL_RENDERER_CAPSET_DRM },
          { VIRTGPU_CONTEXT_PARAM_NUM_RINGS, 64 },
+         { VIRTGPU_CONTEXT_PARAM_FENCE_PASSING, 1 }
    };
    struct drm_virtgpu_context_init args = {
       .num_params = ARRAY_SIZE(params),

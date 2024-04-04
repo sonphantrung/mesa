@@ -1006,7 +1006,7 @@ static struct si_texture *si_texture_create_object(struct pipe_screen *screen,
          goto error;
    } else {
       resource->buf = imported_buf;
-      resource->gpu_address = sscreen->ws->buffer_get_virtual_address(resource->buf);
+      resource->gpu_address = sscreen->ws->buffer_get_virtual_address(sscreen->ws, resource->buf);
       resource->bo_size = imported_buf->size;
       resource->bo_alignment_log2 = imported_buf->alignment_log2;
       resource->domains = sscreen->ws->buffer_get_initial_domain(resource->buf);
@@ -1988,6 +1988,7 @@ static void *si_texture_transfer_map(struct pipe_context *ctx, struct pipe_resou
 
    /* Always unmap texture CPU mappings on 32-bit architectures, so that
     * we don't run out of the CPU address space.
+    * TODO: virtio
     */
    if (sizeof(void *) == 4)
       usage |= RADEON_MAP_TEMPORARY;
@@ -2014,6 +2015,7 @@ static void si_texture_transfer_unmap(struct pipe_context *ctx, struct pipe_tran
 
    /* Always unmap texture CPU mappings on 32-bit architectures, so that
     * we don't run out of the CPU address space.
+    * TODO: virtio
     */
    if (sizeof(void *) == 4) {
       struct si_resource *buf = stransfer->staging ? stransfer->staging : &tex->buffer;

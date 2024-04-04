@@ -31,6 +31,8 @@
 #include "ac_llvm_util.h"
 #endif
 
+#include "libdrm_amdgpu_loader.h"
+
 #include <xf86drm.h>
 
 static struct pipe_context *si_create_context(struct pipe_screen *screen, unsigned flags);
@@ -1566,13 +1568,20 @@ struct pipe_screen *radeonsi_screen_create(int fd, const struct pipe_screen_conf
    driParseConfigFiles(config->options, config->options_info, 0, "radeonsi",
                        NULL, NULL, NULL, 0, NULL, 0);
 
-   switch (version->version_major) {
-   case 2:
-      rw = radeon_drm_winsys_create(fd, config, radeonsi_screen_create_impl);
-      break;
-   case 3:
-      rw = amdgpu_winsys_create(fd, config, radeonsi_screen_create_impl);
-      break;
+#ifdef HAVE_AMDGPU_VIRTIO
+   if (strcmp(version->name, "virtio_gpu") == 0) {
+      rw = amdgpu_winsys_create(fd, config, radeonsi_screen_create_impl, true);
+   } else
+#endif
+   {
+      switch (version->version_major) {
+      case 2:
+         rw = radeon_drm_winsys_create(fd, config, radeonsi_screen_create_impl);
+         break;
+      case 3:
+         rw = amdgpu_winsys_create(fd, config, radeonsi_screen_create_impl, false);
+         break;
+      }
    }
 
    si_driver_ds_init();

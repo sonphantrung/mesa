@@ -18,6 +18,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+c_args = []
+if with_amdgpu_virtio
+  c_args += '-DHAVE_AMDGPU_VIRTIO'
+endif
+
 libamdgpuwinsys = static_library(
   'amdgpuwinsys',
   files(
@@ -27,9 +32,10 @@ libamdgpuwinsys = static_library(
   ),
   include_directories : [
     inc_amd, inc_gallium, inc_gallium_aux, inc_include, inc_src,
-    inc_amd_common, inc_amd_common_llvm,
+    inc_amd_common, inc_amd_common_llvm, inc_virtio_gpu
   ],
   gnu_symbol_visibility : 'hidden',
   link_with : libamdgpu_addrlib,
   dependencies : [dep_llvm, dep_libdrm_amdgpu, idep_amdgfxregs_h, idep_mesautil],
+  c_args : c_args
 )

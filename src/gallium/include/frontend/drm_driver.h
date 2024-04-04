@@ -27,8 +27,11 @@ struct drm_driver_descriptor
    /* Number of entries in the driconf array. */
    unsigned driconf_count;
 
+   /* If the driver supports virtgpu native context, it's context_type: */
+   uint32_t virtgpu_native_context_type;
+
    /**
-    * Create a pipe srcreen.
+    * Create a pipe screen.
     *
     * This function does any wrapping of the screen.
     * For example wrapping trace or rbug debugging drivers around it.

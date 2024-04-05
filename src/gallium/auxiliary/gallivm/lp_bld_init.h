@@ -54,6 +54,7 @@ struct gallivm_state
 #endif
    LLVMContextRef context;
    LLVMBuilderRef builder;
+   LLVMDIBuilderRef di_builder;
    LLVMMCJITMemoryManagerRef memorymgr;
    struct lp_generated_code *code;
    struct lp_cached_code *cache;

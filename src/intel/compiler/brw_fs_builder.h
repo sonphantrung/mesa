@@ -786,9 +786,9 @@ namespace brw {
          inst->rcount = rcount;
 
          if (dst.type == BRW_REGISTER_TYPE_HF) {
-            inst->size_written = rcount * REG_SIZE / 2;
+            inst->size_written = reg_unit(shader->devinfo) * rcount * REG_SIZE / 2;
          } else {
-            inst->size_written = rcount * REG_SIZE;
+            inst->size_written = reg_unit(shader->devinfo) * rcount * REG_SIZE;
          }
 
          return inst;

@@ -628,16 +628,16 @@ gallivm_compile_module(struct gallivm_state *gallivm)
    LLVMPassBuilderOptionsRef opts = LLVMCreatePassBuilderOptions();
    LLVMRunPasses(gallivm->module, passes, LLVMGetExecutionEngineTargetMachine(gallivm->engine), opts);
 
-   if (!(gallivm_perf & GALLIVM_PERF_NO_OPT))
+   if (!(gallivm_perf & GALLIVM_PERF_NO_OPT) && !(gallivm_debug & GALLIVM_DEBUG_SYMBOLS)) {
 #if LLVM_VERSION_MAJOR >= 18
       strcpy(passes, "sroa,early-cse,simplifycfg,reassociate,mem2reg,instsimplify,instcombine<no-verify-fixpoint>");
 #else
       strcpy(passes, "sroa,early-cse,simplifycfg,reassociate,mem2reg,instsimplify,instcombine");
 #endif
-   else
-      strcpy(passes, "mem2reg");
 
-   LLVMRunPasses(gallivm->module, passes, LLVMGetExecutionEngineTargetMachine(gallivm->engine), opts);
+      LLVMRunPasses(gallivm->module, passes, LLVMGetExecutionEngineTargetMachine(gallivm->engine), opts);
+   }
+
    LLVMDisposePassBuilderOptions(opts);
 #else
 #if GALLIVM_HAVE_CORO == 1

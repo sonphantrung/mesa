@@ -40,6 +40,8 @@
 #include "nir_deref.h"
 #include "nir_search_helpers.h"
 
+#include <sys/stat.h>
+
 
 // Doing AOS (and linear) codegen?
 static bool
@@ -2763,6 +2765,15 @@ visit_block(struct lp_build_nir_context *bld_base, nir_block *block)
 {
    nir_foreach_instr(instr, block)
    {
+      struct gallivm_state *gallivm = bld_base->base.gallivm;
+      if (instr->src_loc_index && gallivm->di_builder) {
+         nir_src_loc src_loc = bld_base->shader->src_locs[instr->src_loc_index];
+
+         LLVMMetadataRef loc = LLVMDIBuilderCreateDebugLocation(
+            gallivm->context, src_loc.line, src_loc.col, gallivm->di_function, NULL);
+         LLVMSetCurrentDebugLocation2(gallivm->builder, loc);
+      }
+
       switch (instr->type) {
       case nir_instr_type_alu:
          visit_alu(bld_base, nir_instr_as_alu(instr));
@@ -2904,6 +2915,21 @@ bool lp_build_nir_llvm(struct lp_build_nir_context *bld_base,
                        struct nir_shader *nir,
                        nir_function_impl *impl)
 {
+   nir_index_ssa_defs(impl);
+
+   if (bld_base->base.gallivm->di_builder) {
+      char *shader_src = nir_shader_gather_src_locs(nir, bld_base->base.gallivm->file_name);
+      if (shader_src) {
+         mkdir(LP_NIR_SHADER_DUMP_DIR, 0774);
+
+         FILE *f = fopen(bld_base->base.gallivm->file_name, "w");
+         fprintf(f, "%s\n", shader_src);
+         fclose(f);
+
+         ralloc_free(shader_src);
+      }
+   }
+
    nir_foreach_shader_out_variable(variable, nir)
       handle_shader_output_decl(bld_base, nir, variable);
 
@@ -2935,7 +2961,7 @@ bool lp_build_nir_llvm(struct lp_build_nir_context *bld_base,
                                                type, "reg");
       _mesa_hash_table_insert(bld_base->regs, reg, reg_alloc);
    }
-   nir_index_ssa_defs(impl);
+
    bld_base->ssa_defs = calloc(impl->ssa_alloc, sizeof(LLVMValueRef));
    visit_cf_list(bld_base, &impl->body);
 

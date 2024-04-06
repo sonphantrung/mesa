@@ -229,6 +229,7 @@ gallivm_free_ir(struct gallivm_state *gallivm)
       free(gallivm->cache->data);
    }
    FREE(gallivm->module_name);
+   FREE(gallivm->file_name);
 
    if (gallivm->target) {
       LLVMDisposeTargetData(gallivm->target);
@@ -246,6 +247,7 @@ gallivm_free_ir(struct gallivm_state *gallivm)
    gallivm->target = NULL;
    gallivm->module = NULL;
    gallivm->module_name = NULL;
+   gallivm->file_name = NULL;
 #if GALLIVM_USE_NEW_PASS == 0
 #if GALLIVM_HAVE_CORO == 1
    gallivm->cgpassmgr = NULL;

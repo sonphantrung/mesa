@@ -396,6 +396,7 @@ generate_compute(struct llvmpipe_context *lp,
    LLVMSetFunctionCallConv(coro, LLVMCCallConv);
    lp_build_coro_add_presplit(coro);
 
+
    variant->function = function;
 
    for (i = 0; i < CS_ARG_MAX - !is_mesh; ++i) {
@@ -557,6 +558,8 @@ generate_compute(struct llvmpipe_context *lp,
       }
    }
 
+   lp_function_add_debug_info(gallivm, function, func_type);
+
    block = LLVMAppendBasicBlockInContext(gallivm->context, function, "entry");
    builder = gallivm->builder;
    assert(builder);
@@ -690,6 +693,9 @@ generate_compute(struct llvmpipe_context *lp,
    if (is_mesh)
       output_array = LLVMGetParam(coro, CS_ARG_CORO_OUTPUTS);
    block = LLVMAppendBasicBlockInContext(gallivm->context, coro, "entry");
+
+   lp_function_add_debug_info(gallivm, coro, coro_func_type);
+
    LLVMPositionBuilderAtEnd(builder, block);
    {
       LLVMValueRef consts_ptr;

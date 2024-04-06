@@ -288,6 +288,8 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
       LLVMAddFunction(gallivm->module, func_name, func_type);
    LLVMSetFunctionCallConv(function, LLVMCCallConv);
 
+   lp_function_add_debug_info(gallivm, function, func_type);
+
    variant->linear_function = function;
 
    /* XXX: need to propagate noalias down into color param now we are

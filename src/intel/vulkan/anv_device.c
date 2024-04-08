@@ -435,6 +435,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .INTEL_shader_integer_functions2       = true,
       .EXT_multi_draw                        = true,
       .NV_compute_shader_derivatives         = true,
+      .MESA_image_alignment_control          = true,
       .VALVE_mutable_descriptor_type         = true,
    };
 }
@@ -937,6 +938,9 @@ get_features(const struct anv_physical_device *pdevice,
 
       /* VK_EXT_legacy_vertex_attributes */
       .legacyVertexAttributes = true,
+
+      /* VK_MESA_image_alignment_control */
+      .imageAlignmentControl = true,
    };
 
    /* The new DOOM and Wolfenstein games require depthBounds without
@@ -1879,6 +1883,12 @@ get_properties(const struct anv_physical_device *pdevice,
    }
 #endif /* DETECT_OS_ANDROID */
 
+
+   /* VK_MESA_image_alignment_control */
+   {
+      /* We support 4k/64k tiling alignments on most platforms */
+      props->supportedImageAlignmentMask = (1 << 12) | (1 << 16);
+   }
 }
 
 static VkResult MUST_CHECK

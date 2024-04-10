@@ -92,10 +92,11 @@ ir3_nir_should_scalarize_mem(const nir_instr *instr, const void *data)
 
    /* Scalarize load_ssbo's that we could otherwise lower to isam,
     * as the tex cache benefit outweighs the benefit of vectorizing
+    * Don't do this if (vectorized) isam.v is supported.
     */
    if ((intrin->intrinsic == nir_intrinsic_load_ssbo) &&
        (nir_intrinsic_access(intrin) & ACCESS_CAN_REORDER) &&
-       compiler->has_isam_ssbo) {
+       compiler->has_isam_ssbo && !compiler->has_isam_v) {
       return true;
    }
 
@@ -852,7 +853,7 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
    if (so->compiler->gen >= 6)
       progress |= OPT(s, nir_lower_ubo_vec4);
 
-   OPT_V(s, ir3_nir_lower_io_offsets);
+   progress |= OPT(s, ir3_nir_lower_io_offsets);
 
    if (progress)
       ir3_optimize_loop(so->compiler, s);

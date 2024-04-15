@@ -1152,6 +1152,7 @@ typedef uint64_t isl_surf_usage_flags_t;
 #define ISL_SURF_USAGE_NO_AUX_TT_ALIGNMENT_BIT (1u << 21)
 #define ISL_SURF_USAGE_BLITTER_DST_BIT         (1u << 22)
 #define ISL_SURF_USAGE_BLITTER_SRC_BIT         (1u << 23)
+#define ISL_SURF_USAGE_MULTI_ENGINE_ALIGN_BIT  (1u << 24)
 /** @} */
 
 /**

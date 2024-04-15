@@ -1714,6 +1714,12 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
        image->vk.tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT)
       isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
 
+   /* Notify ISL whether the app may access images or image subresources from
+    * different engines in parallel.
+    */
+   if (device->queue_count > 1)
+      isl_extra_usage_flags |= ISL_SURF_USAGE_MULTI_ENGINE_ALIGN_BIT;
+
    const isl_tiling_flags_t isl_tiling_flags =
       choose_isl_tiling_flags(device->info, create_info, isl_mod_info,
                               image->vk.wsi_legacy_scanout);

@@ -91,6 +91,7 @@ static const driOptionDescription anv_dri_options[] = {
       DRI_CONF_ANV_FORCE_INDIRECT_DESCRIPTORS(false)
       DRI_CONF_SHADER_SPILLING_RATE(0)
       DRI_CONF_OPT_B(intel_tbimr, true, "Enable TBIMR tiled rendering")
+      DRI_CONF_OPT_B(force_low_latency, true, "Enable low latency GuC strategy")
    DRI_CONF_SECTION_END
 
    DRI_CONF_SECTION_DEBUG
@@ -2628,6 +2629,7 @@ anv_init_dri_options(struct anv_instance *instance)
             driQueryOptionb(&instance->dri_options, "anv_disable_fcv");
     instance->external_memory_implicit_sync =
             driQueryOptionb(&instance->dri_options, "anv_external_memory_implicit_sync");
+    instance->force_low_latency = driQueryOptionb(&instance->dri_options, "force_low_latency");
 }
 
 VkResult anv_CreateInstance(

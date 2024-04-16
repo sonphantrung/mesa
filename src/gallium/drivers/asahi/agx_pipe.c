@@ -640,6 +640,14 @@ agx_resource_create(struct pipe_screen *screen,
    return agx_resource_create_with_modifiers(screen, templ, NULL, 0);
 }
 
+static uint64_t
+agx_resource_get_address(struct pipe_screen *screen,
+                         struct pipe_resource *prsrc)
+{
+   struct agx_resource *rsrc = (struct agx_resource *)prsrc;
+   return rsrc->bo->ptr.gpu;
+}
+
 static void
 agx_resource_destroy(struct pipe_screen *screen, struct pipe_resource *prsrc)
 {
@@ -2239,6 +2247,7 @@ agx_screen_create(int fd, struct renderonly *ro,
    screen->resource_get_handle = agx_resource_get_handle;
    screen->resource_get_param = agx_resource_get_param;
    screen->resource_create_with_modifiers = agx_resource_create_with_modifiers;
+   screen->resource_get_address = agx_resource_get_address;
    screen->get_timestamp = agx_get_timestamp;
    screen->fence_reference = agx_fence_reference;
    screen->fence_finish = agx_fence_finish;

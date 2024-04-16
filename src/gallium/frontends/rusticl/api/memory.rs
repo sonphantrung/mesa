@@ -2912,16 +2912,16 @@ fn enqueue_svm_migrate_mem(
     // CL_INVALID_VALUE if sizes[i] is non-zero range [svm_pointers[i], svm_pointers[i]+sizes[i]) is
     // not contained within an existing clSVMAlloc allocation.
     for (ptr, size) in svm_pointers.iter_mut().zip(&mut sizes) {
-        if let Some((alloc, layout)) = q.context.find_svm_alloc(*ptr) {
+        if let Some((alloc, alloc_size)) = q.context.find_svm_alloc(*ptr) {
             let ptr_addr = *ptr;
             let alloc_addr = alloc as usize;
 
             // if the offset + size is bigger than the allocation we are out of bounds
-            if (ptr_addr - alloc_addr) + *size <= layout.size() {
+            if (ptr_addr - alloc_addr) + *size <= alloc_size {
                 // if the size is 0, the entire allocation should be migrated
                 if *size == 0 {
                     *ptr = alloc as usize;
-                    *size = layout.size();
+                    *size = alloc_size;
                 }
                 continue;
             }

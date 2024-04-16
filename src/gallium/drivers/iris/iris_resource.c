@@ -1161,6 +1161,13 @@ iris_resource_create(struct pipe_screen *pscreen,
 }
 
 static uint64_t
+iris_resource_get_address(struct pipe_screen *pscreen, struct pipe_resource *resource)
+{
+   struct iris_resource *res = (void *) resource;
+   return res->bo->address + res->offset;
+}
+
+static uint64_t
 tiling_to_modifier(struct iris_bufmgr *bufmgr, uint32_t tiling)
 {
    if (iris_bufmgr_get_device_info(bufmgr)->kmd_type != INTEL_KMD_TYPE_I915) {
@@ -2789,6 +2796,7 @@ iris_init_screen_resource_functions(struct pipe_screen *pscreen)
    pscreen->resource_create_with_modifiers =
       iris_resource_create_with_modifiers;
    pscreen->resource_create = u_transfer_helper_resource_create;
+   pscreen->resource_get_address = iris_resource_get_address;
    pscreen->resource_from_user_memory = iris_resource_from_user_memory;
    pscreen->resource_from_handle = iris_resource_from_handle;
    pscreen->resource_from_memobj = iris_resource_from_memobj_wrapper;

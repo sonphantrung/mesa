@@ -152,9 +152,16 @@ brw_fs_optimize(fs_visitor &s)
       OPT(brw_fs_lower_simd_width);
    }
 
-   OPT(brw_fs_lower_sends_overlapping_payload);
-
    OPT(brw_fs_lower_uniform_pull_constant_loads);
+
+   if (OPT(brw_fs_lower_send_indirect_messages)) {
+      if (OPT(brw_fs_opt_copy_propagation))
+         OPT(brw_fs_opt_algebraic);
+      OPT(brw_fs_opt_address_reg_load);
+      OPT(brw_fs_opt_dead_code_eliminate);
+   }
+
+   OPT(brw_fs_lower_sends_overlapping_payload);
 
    OPT(brw_fs_lower_find_live_channel);
 
@@ -515,4 +522,3 @@ brw_fs_opt_remove_extra_rounding_modes(fs_visitor &s)
 
    return progress;
 }
-

@@ -32,7 +32,7 @@ class fs_reg : private brw_reg {
 public:
    DECLARE_RALLOC_CXX_OPERATORS(fs_reg)
 
-   void init();
+   void init(enum brw_reg_file file, unsigned nr, enum brw_reg_type type);
 
    fs_reg();
    fs_reg(struct ::brw_reg reg);
@@ -62,6 +62,12 @@ public:
    bool is_negative_one() const;
    bool is_null() const;
    bool is_accumulator() const;
+   bool is_address() const;
+
+   unsigned address_slot(unsigned byte_offset) const {
+      assert(is_address());
+      return (subnr + byte_offset) / 2;
+   }
 
    /**
     * Return the size in bytes of a single logical component of the
@@ -76,6 +82,7 @@ public:
    using brw_reg::address_mode;
    using brw_reg::subnr;
    using brw_reg::nr;
+   using brw_reg::arfnr;
 
    using brw_reg::swizzle;
    using brw_reg::writemask;
@@ -465,6 +472,11 @@ public:
     */
    bool has_sampler_residency() const;
 
+   /**
+    * Return true if this instruction is using the address register.
+    */
+   bool uses_address_register() const;
+
    /** @{
     * Annotation for the generated IR.  One of the two can be set.
     */
@@ -537,10 +549,6 @@ public:
          bool check_tdr:1; /**< Only valid for SEND; turns it into a SENDC */
          bool send_has_side_effects:1; /**< Only valid for SHADER_OPCODE_SEND */
          bool send_is_volatile:1; /**< Only valid for SHADER_OPCODE_SEND */
-         bool send_ex_desc_scratch:1; /**< Only valid for SHADER_OPCODE_SEND, use
-                                       *   the scratch surface offset to build
-                                       *   extended descriptor
-                                       */
          bool send_ex_bso:1; /**< Only for SHADER_OPCODE_SEND, use extended
                               *   bindless surface offset (26bits instead of
                               *   20bits)

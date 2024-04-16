@@ -38,7 +38,7 @@ namespace brw {
    class simple_allocator {
    public:
       simple_allocator() :
-         sizes(NULL), offsets(NULL), count(0), total_size(0), capacity(0)
+         sizes(NULL), offsets(NULL), count(0), total_size(0), arf_ids(1), capacity(0)
       {
       }
 
@@ -65,6 +65,12 @@ namespace brw {
          return count++;
       }
 
+      unsigned
+      allocate_arf()
+      {
+         return arf_ids++;
+      }
+
       /**
        * Array of sizes for each allocation.  The allocation unit is up to the
        * back-end, but it's expected to be one scalar value in the FS back-end
@@ -83,6 +89,9 @@ namespace brw {
 
       /** Cumulative size in allocation units. */
       unsigned total_size;
+
+      /** ARF virtual identifiers */
+      unsigned arf_ids;
 
    private:
       unsigned capacity;

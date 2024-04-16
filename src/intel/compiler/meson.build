@@ -75,6 +75,7 @@ libintel_compiler_brw_files = files(
   'brw_fs_lower_simd_width.cpp',
   'brw_fs_nir.cpp',
   'brw_fs_opt.cpp',
+  'brw_fs_opt_address_reg_load.cpp',
   'brw_fs_opt_algebraic.cpp',
   'brw_fs_opt_virtual_grfs.cpp',
   'brw_fs_reg_allocate.cpp',

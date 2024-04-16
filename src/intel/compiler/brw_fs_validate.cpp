@@ -92,124 +92,171 @@ fs_visitor::validate()
 {
    cfg->validate(_mesa_shader_stage_to_abbrev(stage));
 
-   foreach_block_and_inst (block, fs_inst, inst, cfg) {
-      switch (inst->opcode) {
-      case SHADER_OPCODE_SEND:
-         fsv_assert(is_uniform(inst->src[0]) && is_uniform(inst->src[1]));
-         break;
+   foreach_block (block, cfg) {
+      /* Track the last used address register. Usage of the address register
+       * in the IR should be limited to within a block, otherwise we would
+       * unable to schedule some instructions without spilling the address
+       * register to a VGRF.
+       *
+       * Another pattern we stick to when using the address register in the IR
+       * is that we write and read the register in pairs of instruction.
+       */
+      uint32_t last_used_address_register[8] = {};
 
-      case BRW_OPCODE_MOV:
-         fsv_assert(inst->sources == 1);
-         break;
+      foreach_inst_in_block (fs_inst, inst, block) {
+         switch (inst->opcode) {
+         case SHADER_OPCODE_SEND:
+            fsv_assert(is_uniform(inst->src[0]) && is_uniform(inst->src[1]));
+            break;
 
-      default:
-         break;
-      }
+         case BRW_OPCODE_MOV:
+            fsv_assert(inst->sources == 1);
+            break;
 
-      if (inst->is_3src(compiler)) {
-         const unsigned integer_sources =
-            brw_reg_type_is_integer(inst->src[0].type) +
-            brw_reg_type_is_integer(inst->src[1].type) +
-            brw_reg_type_is_integer(inst->src[2].type);
-         const unsigned float_sources =
-            brw_reg_type_is_floating_point(inst->src[0].type) +
-            brw_reg_type_is_floating_point(inst->src[1].type) +
-            brw_reg_type_is_floating_point(inst->src[2].type);
+         default:
+            break;
+         }
 
-         fsv_assert((integer_sources == 3 && float_sources == 0) ||
-                    (integer_sources == 0 && float_sources == 3));
+         if (inst->is_3src(compiler)) {
+            const unsigned integer_sources =
+               brw_reg_type_is_integer(inst->src[0].type) +
+               brw_reg_type_is_integer(inst->src[1].type) +
+               brw_reg_type_is_integer(inst->src[2].type);
+            const unsigned float_sources =
+               brw_reg_type_is_floating_point(inst->src[0].type) +
+               brw_reg_type_is_floating_point(inst->src[1].type) +
+               brw_reg_type_is_floating_point(inst->src[2].type);
 
-         if (devinfo->ver >= 10) {
-            for (unsigned i = 0; i < 3; i++) {
-               if (inst->src[i].file == BRW_IMMEDIATE_VALUE)
-                  continue;
+            fsv_assert((integer_sources == 3 && float_sources == 0) ||
+                       (integer_sources == 0 && float_sources == 3));
 
-               switch (inst->src[i].vstride) {
-               case BRW_VERTICAL_STRIDE_0:
-               case BRW_VERTICAL_STRIDE_4:
-               case BRW_VERTICAL_STRIDE_8:
-               case BRW_VERTICAL_STRIDE_16:
-                  break;
+            if (devinfo->ver >= 10) {
+               for (unsigned i = 0; i < 3; i++) {
+                  if (inst->src[i].file == BRW_IMMEDIATE_VALUE)
+                     continue;
+
+                  switch (inst->src[i].vstride) {
+                  case BRW_VERTICAL_STRIDE_0:
+                  case BRW_VERTICAL_STRIDE_4:
+                  case BRW_VERTICAL_STRIDE_8:
+                  case BRW_VERTICAL_STRIDE_16:
+                     break;
 
                case BRW_VERTICAL_STRIDE_1:
                   fsv_assert_lte(12, devinfo->ver);
                   break;
 
-               case BRW_VERTICAL_STRIDE_2:
-                  fsv_assert_lte(devinfo->ver, 11);
-                  break;
+                  case BRW_VERTICAL_STRIDE_2:
+                     fsv_assert_lte(devinfo->ver, 11);
+                     break;
 
-               default:
-                  fsv_assert(!"invalid vstride");
-                  break;
+                  default:
+                     fsv_assert(!"invalid vstride");
+                     break;
+                  }
+               }
+            } else if (grf_used != 0) {
+               /* Only perform the pre-Gfx10 checks after register allocation
+                * has occured.
+                *
+                * Many passes (e.g., constant copy propagation) will
+                * genenerate invalid 3-source instructions with the
+                * expectation that later passes (e.g., combine constants) will
+                * fix them.
+                */
+               for (unsigned i = 0; i < 3; i++) {
+                  fsv_assert_ne(inst->src[i].file, BRW_IMMEDIATE_VALUE);
+
+                  /* A stride of 1 (the usual case) or 0, with a special
+                   * "repctrl" bit, is allowed. The repctrl bit doesn't work for
+                   * 64-bit datatypes, so if the source type is 64-bit then only
+                   * a stride of 1 is allowed. From the Broadwell PRM, Volume 7
+                   * "3D Media GPGPU", page 944:
+                   *
+                   *    This is applicable to 32b datatypes and 16b datatype. 64b
+                   *    datatypes cannot use the replicate control.
+                   */
+                  fsv_assert_lte(inst->src[i].vstride, 1);
+
+                  if (type_sz(inst->src[i].type) > 4)
+                     fsv_assert_eq(inst->src[i].vstride, 1);
                }
             }
-         } else if (grf_used != 0) {
-            /* Only perform the pre-Gfx10 checks after register allocation has
-             * occured.
-             *
-             * Many passes (e.g., constant copy propagation) will genenerate
-             * invalid 3-source instructions with the expectation that later
-             * passes (e.g., combine constants) will fix them.
-             */
-            for (unsigned i = 0; i < 3; i++) {
-               fsv_assert_ne(inst->src[i].file, BRW_IMMEDIATE_VALUE);
+         }
 
-               /* A stride of 1 (the usual case) or 0, with a special
-                * "repctrl" bit, is allowed. The repctrl bit doesn't work for
-                * 64-bit datatypes, so if the source type is 64-bit then only
-                * a stride of 1 is allowed. From the Broadwell PRM, Volume 7
-                * "3D Media GPGPU", page 944:
-                *
-                *    This is applicable to 32b datatypes and 16b datatype. 64b
-                *    datatypes cannot use the replicate control.
-                */
-               fsv_assert_lte(inst->src[i].vstride, 1);
+         if (inst->dst.file == VGRF) {
+            fsv_assert_lte(inst->dst.offset / REG_SIZE + regs_written(inst),
+                           alloc.sizes[inst->dst.nr]);
+         } else if (inst->dst.is_address()) {
+            fsv_assert(inst->dst.arfnr != 0);
+         }
 
-               if (type_sz(inst->src[i].type) > 4)
-                  fsv_assert_eq(inst->src[i].vstride, 1);
+         bool read_address_reg = false;
+         for (unsigned i = 0; i < inst->sources; i++) {
+            if (inst->src[i].file == VGRF) {
+               fsv_assert_lte(inst->src[i].offset / REG_SIZE + regs_read(inst, i),
+                              alloc.sizes[inst->src[i].nr]);
+            } else if (inst->src[i].is_address()) {
+               fsv_assert(inst->src[i].arfnr != 0);
+               for (unsigned hw = 0; hw < inst->size_read(i); hw += 2) {
+                  fsv_assert_eq(inst->src[i].arfnr,
+                                last_used_address_register[inst->src[i].subnr + hw / 2]);
+               }
+               read_address_reg = true;
             }
          }
-      }
 
-      if (inst->dst.file == VGRF) {
-         fsv_assert_lte(inst->dst.offset / REG_SIZE + regs_written(inst),
-                        alloc.sizes[inst->dst.nr]);
-      }
-
-      for (unsigned i = 0; i < inst->sources; i++) {
-         if (inst->src[i].file == VGRF) {
-            fsv_assert_lte(inst->src[i].offset / REG_SIZE + regs_read(inst, i),
-                           alloc.sizes[inst->src[i].nr]);
-         }
-      }
-
-      /* Accumulator Registers, bspec 47251:
-       *
-       * "When destination is accumulator with offset 0, destination
-       * horizontal stride must be 1."
-       */
-      if (intel_needs_workaround(devinfo, 14014617373) &&
-          inst->dst.is_accumulator() &&
-          phys_subnr(devinfo, inst->dst.as_brw_reg()) == 0) {
-         fsv_assert_eq(inst->dst.hstride, 1);
-      }
-
-      if (inst->is_math() && intel_needs_workaround(devinfo, 22016140776)) {
-         /* Wa_22016140776:
+         /* Accumulator Registers, bspec 47251:
           *
-          *    Scalar broadcast on HF math (packed or unpacked) must not be
-          *    used.  Compiler must use a mov instruction to expand the scalar
-          *    value to a vector before using in a HF (packed or unpacked)
-          *    math operation.
-          *
-          * Since copy propagation knows about this restriction, nothing
-          * should be able to generate these invalid source strides. Detect
-          * potential problems sooner rather than later.
+          * "When destination is accumulator with offset 0, destination
+          * horizontal stride must be 1."
           */
-         for (unsigned i = 0; i < inst->sources; i++) {
-            fsv_assert(!is_uniform(inst->src[i]) ||
-                       inst->src[i].type != BRW_REGISTER_TYPE_HF);
+         if (intel_needs_workaround(devinfo, 14014617373) &&
+             inst->dst.is_accumulator() &&
+             phys_subnr(devinfo, inst->dst.as_brw_reg()) == 0) {
+            fsv_assert_eq(inst->dst.hstride, 1);
+         }
+
+         if (inst->is_math() && intel_needs_workaround(devinfo, 22016140776)) {
+            /* Wa_22016140776:
+             *
+             *    Scalar broadcast on HF math (packed or unpacked) must not be
+             *    used. Compiler must use a mov instruction to expand the
+             *    scalar value to a vector before using in a HF (packed or
+             *    unpacked) math operation.
+             *
+             * Since copy propagation knows about this restriction, nothing
+             * should be able to generate these invalid source strides. Detect
+             * potential problems sooner rather than later.
+             */
+            for (unsigned i = 0; i < inst->sources; i++) {
+               fsv_assert(!is_uniform(inst->src[i]) ||
+                          inst->src[i].type != BRW_REGISTER_TYPE_HF);
+            }
+         }
+
+         /* Update the last used address register. */
+         if (read_address_reg) {
+            /* When an instruction only reads the address register, we assume
+             * the read parts are never going to be used again.
+             */
+            for (unsigned i = 0; i < inst->sources; i++) {
+               if (!inst->src[i].is_address())
+                  continue;
+               for (unsigned hw = 0; hw < inst->size_read(i); hw += 2)
+                  last_used_address_register[inst->src[i].subnr + hw / 2] = 0;
+            }
+         }
+         if (inst->dst.is_address()) {
+            /* For the written part of the address register */
+            for (unsigned hw = 0; hw < inst->size_written; hw += 2)
+               last_used_address_register[inst->dst.subnr + hw / 2] = inst->dst.arfnr;
+         } else if (inst->uses_address_register()) {
+            /* If the instruction is making use of the address register,
+             * discard the entire thing.
+             */
+            memset(last_used_address_register, 0,
+                   sizeof(last_used_address_register));
          }
       }
    }

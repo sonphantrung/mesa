@@ -423,7 +423,9 @@ impl PipeContext {
         block: [u32; 3],
         grid: [u32; 3],
         variable_local_mem: u32,
+        globals: &[Arc<PipeResource>],
     ) {
+        let mut globals: Vec<*mut pipe_resource> = globals.iter().map(|res| res.pipe()).collect();
         let info = pipe_grid_info {
             pc: 0,
             input: ptr::null(),
@@ -439,21 +441,10 @@ impl PipeContext {
             draw_count: 0,
             indirect_draw_count_offset: 0,
             indirect_draw_count: ptr::null_mut(),
+            globals: globals.as_mut_ptr(),
+            num_globals: globals.len() as u32,
         };
         unsafe { self.pipe.as_ref().launch_grid.unwrap()(self.pipe.as_ptr(), &info) }
-    }
-
-    pub fn set_global_binding(&self, res: &[&Arc<PipeResource>], out: &mut [*mut u32]) {
-        let mut res: Vec<_> = res.iter().map(|r| r.pipe()).collect();
-        unsafe {
-            self.pipe.as_ref().set_global_binding.unwrap()(
-                self.pipe.as_ptr(),
-                0,
-                res.len() as u32,
-                res.as_mut_ptr(),
-                out.as_mut_ptr(),
-            )
-        }
     }
 
     pub fn create_sampler_view(
@@ -472,18 +463,6 @@ impl PipeContext {
             );
 
             s_view
-        }
-    }
-
-    pub fn clear_global_binding(&self, count: u32) {
-        unsafe {
-            self.pipe.as_ref().set_global_binding.unwrap()(
-                self.pipe.as_ptr(),
-                0,
-                count,
-                ptr::null_mut(),
-                ptr::null_mut(),
-            )
         }
     }
 
@@ -656,7 +635,6 @@ fn has_required_cbs(context: &pipe_context) -> bool {
         & has_required_feature!(context, resource_copy_region)
         & has_required_feature!(context, sampler_view_destroy)
         & has_required_feature!(context, set_constant_buffer)
-        & has_required_feature!(context, set_global_binding)
         & has_required_feature!(context, set_sampler_views)
         & has_required_feature!(context, set_shader_images)
         & has_required_feature!(context, texture_map)

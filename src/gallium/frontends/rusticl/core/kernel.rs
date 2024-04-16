@@ -907,7 +907,7 @@ impl Kernel {
         let mut grid = create_kernel_arr::<u32>(grid, 1);
         let offsets = create_kernel_arr::<u64>(offsets, 0);
         let mut input: Vec<u8> = Vec::new();
-        let mut resource_info = Vec::new();
+        let mut resources = Vec::new();
         // Set it once so we get the alignment padding right
         let static_local_size: u64 = nir_kernel_build.shared_size;
         let mut variable_local_size: u64 = static_local_size;
@@ -944,12 +944,13 @@ impl Kernel {
                 KernelArgValue::Constant(c) => input.extend_from_slice(c),
                 KernelArgValue::Buffer(buffer) => {
                     let res = buffer.get_res_of_dev(q.device)?;
+                    let address = res.address() + buffer.offset;
                     if q.device.address_bits() == 64 {
-                        input.extend_from_slice(&buffer.offset.to_ne_bytes());
+                        input.extend_from_slice(&address.to_ne_bytes());
                     } else {
-                        input.extend_from_slice(&(buffer.offset as u32).to_ne_bytes());
-                    }
-                    resource_info.push((res.clone(), arg.offset));
+                        input.extend_from_slice(&(address as u32).to_ne_bytes());
+                    };
+                    resources.push(Arc::clone(res));
                 }
                 KernelArgValue::Image(image) => {
                     let res = image.get_res_of_dev(q.device)?;
@@ -1034,11 +1035,13 @@ impl Kernel {
             match arg.kind {
                 InternalKernelArgType::ConstantBuffer => {
                     assert!(nir_kernel_build.constant_buffer.is_some());
-                    input.extend_from_slice(null_ptr);
-                    resource_info.push((
-                        nir_kernel_build.constant_buffer.clone().unwrap(),
-                        arg.offset,
-                    ));
+                    let res = nir_kernel_build.constant_buffer.as_ref().unwrap();
+                    if q.device.address_bits() == 64 {
+                        input.extend_from_slice(&res.address().to_ne_bytes());
+                    } else {
+                        input.extend_from_slice(&(res.address() as u32).to_ne_bytes());
+                    };
+                    resources.push(Arc::clone(res));
                 }
                 InternalKernelArgType::GlobalWorkOffsets => {
                     if q.device.address_bits() == 64 {
@@ -1065,8 +1068,12 @@ impl Kernel {
                             .unwrap(),
                     );
 
-                    input.extend_from_slice(null_ptr);
-                    resource_info.push((buf.clone(), arg.offset));
+                    if q.device.address_bits() == 64 {
+                        input.extend_from_slice(&buf.address().to_ne_bytes());
+                    } else {
+                        input.extend_from_slice(&(buf.address() as u32).to_ne_bytes());
+                    };
+                    resources.push(Arc::clone(&buf));
 
                     printf_buf = Some(buf);
                 }
@@ -1088,9 +1095,6 @@ impl Kernel {
         }
 
         Ok(Box::new(move |q, ctx| {
-            let mut input = input.clone();
-            let mut resources = Vec::with_capacity(resource_info.len());
-            let mut globals: Vec<*mut u32> = Vec::new();
             let printf_format = &nir_kernel_build.printf_info;
 
             let mut sviews: Vec<_> = sviews
@@ -1101,11 +1105,6 @@ impl Kernel {
                 .iter()
                 .map(|s| ctx.create_sampler_state(s))
                 .collect();
-
-            for (res, offset) in &resource_info {
-                resources.push(res);
-                globals.push(unsafe { input.as_mut_ptr().add(*offset) }.cast());
-            }
 
             if let Some(printf_buf) = &printf_buf {
                 let init_data: [u8; 1] = [4];
@@ -1130,12 +1129,16 @@ impl Kernel {
             ctx.bind_sampler_states(&samplers);
             ctx.set_sampler_views(&mut sviews);
             ctx.set_shader_images(&iviews);
-            ctx.set_global_binding(resources.as_slice(), &mut globals);
             ctx.update_cb0(&input);
 
-            ctx.launch_grid(work_dim, block, grid, variable_local_size as u32);
+            ctx.launch_grid(
+                work_dim,
+                block,
+                grid,
+                variable_local_size as u32,
+                &resources,
+            );
 
-            ctx.clear_global_binding(globals.len() as u32);
             ctx.clear_shader_images(iviews.len() as u32);
             ctx.clear_sampler_views(sviews.len() as u32);
             ctx.clear_sampler_states(samplers.len() as u32);

@@ -5,6 +5,7 @@ use std::{mem, ptr};
 #[derive(PartialEq, Eq, Hash)]
 pub struct PipeResource {
     pipe: *mut pipe_resource,
+    address: u64,
     pub is_user: bool,
 }
 
@@ -63,19 +64,24 @@ impl AppImgInfo {
 }
 
 impl PipeResource {
-    pub(super) fn new(res: *mut pipe_resource, is_user: bool) -> Option<Self> {
+    pub(super) fn new(res: *mut pipe_resource, address: u64, is_user: bool) -> Option<Self> {
         if res.is_null() {
             return None;
         }
 
         Some(Self {
             pipe: res,
+            address: address,
             is_user: is_user,
         })
     }
 
     pub(super) fn pipe(&self) -> *mut pipe_resource {
         self.pipe
+    }
+
+    pub fn address(&self) -> u64 {
+        self.address
     }
 
     fn as_ref(&self) -> &pipe_resource {

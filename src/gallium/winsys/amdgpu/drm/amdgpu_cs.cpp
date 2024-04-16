@@ -269,10 +269,9 @@ static struct radeon_winsys_ctx *amdgpu_ctx_create(struct radeon_winsys *rws,
                                                    bool allow_context_lost)
 {
    struct amdgpu_ctx *ctx = CALLOC_STRUCT(amdgpu_ctx);
+   struct amdgpu_winsys *aws = amdgpu_winsys(rws);
    int r;
-   struct amdgpu_bo_alloc_request alloc_buffer = {};
    uint32_t amdgpu_priority = radeon_to_amdgpu_priority(priority);
-   amdgpu_bo_handle buf_handle;
 
    if (!ctx)
       return NULL;
@@ -287,29 +286,24 @@ static struct radeon_winsys_ctx *amdgpu_ctx_create(struct radeon_winsys *rws,
       goto error_create;
    }
 
-   alloc_buffer.alloc_size = ctx->aws->info.gart_page_size;
-   alloc_buffer.phys_alignment = ctx->aws->info.gart_page_size;
-   alloc_buffer.preferred_heap = AMDGPU_GEM_DOMAIN_GTT;
-
-   r = amdgpu_bo_alloc(ctx->aws->dev, &alloc_buffer, &buf_handle);
-   if (r) {
-      fprintf(stderr, "amdgpu: amdgpu_bo_alloc failed. (%i)\n", r);
+   ctx->user_fence_bo = amdgpu_bo_create(aws, aws->info.gart_page_size,
+                                         aws->info.gart_page_size,
+                                         RADEON_DOMAIN_GTT,
+                                         RADEON_FLAG_NO_SUBALLOC);
+   if (!ctx->user_fence_bo)
       goto error_user_fence_alloc;
-   }
 
-   r = amdgpu_bo_cpu_map(buf_handle, (void**)&ctx->user_fence_cpu_address_base);
-   if (r) {
-      fprintf(stderr, "amdgpu: amdgpu_bo_cpu_map failed. (%i)\n", r);
+   ctx->user_fence_cpu_address_base = (uint64_t*)amdgpu_bo_map(
+      &aws->dummy_sws.base, ctx->user_fence_bo, NULL,
+      (enum pipe_map_flags)(PIPE_MAP_READ | PIPE_MAP_WRITE | PIPE_MAP_UNSYNCHRONIZED));
+   if (!ctx->user_fence_cpu_address_base)
       goto error_user_fence_map;
-   }
 
-   memset(ctx->user_fence_cpu_address_base, 0, alloc_buffer.alloc_size);
-   ctx->user_fence_bo = buf_handle;
-
+   memset(ctx->user_fence_cpu_address_base, 0, ctx->aws->info.gart_page_size);
    return (struct radeon_winsys_ctx*)ctx;
 
 error_user_fence_map:
-   amdgpu_bo_free(buf_handle);
+   radeon_bo_reference(&aws->dummy_sws.base, &ctx->user_fence_bo, NULL);
 error_user_fence_alloc:
    amdgpu_cs_ctx_free(ctx->ctx);
 error_create:
@@ -928,7 +922,7 @@ amdgpu_cs_create(struct radeon_cmdbuf *rcs,
    }
 
    struct amdgpu_cs_fence_info fence_info;
-   fence_info.handle = cs->ctx->user_fence_bo;
+   fence_info.handle = get_real_bo(amdgpu_winsys_bo(cs->ctx->user_fence_bo))->bo_handle;
    fence_info.offset = cs->ip_type * 4;
    amdgpu_cs_chunk_fence_info_to_data(&fence_info,
                                       (struct drm_amdgpu_cs_chunk_data*)&cs->fence_chunk);

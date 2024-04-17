@@ -167,6 +167,14 @@ if with_tools.contains('etnaviv')
     ],
     dependencies: [dep_pest, dep_pest_derive],
   )
+
+  etnaviv_assembler = executable(
+    'etnaviv-assembler',
+    ['assembler.c'],
+    gnu_symbol_visibility: 'hidden',
+    dependencies: [ idep_libetnaviv_decode ],
+    link_with: [libetnaviv_parser, libetnaviv_encode],
+  )
 endif
 
 subdir('tests')

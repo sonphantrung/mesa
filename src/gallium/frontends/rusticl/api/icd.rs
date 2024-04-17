@@ -532,6 +532,9 @@ extern "C" fn cl_get_extension_function_address(
         "clSVMAllocARM" => cl_ext_func!(cl_svm_alloc: cl_api_clSVMAlloc),
         "clSVMFreeARM" => cl_ext_func!(cl_svm_free: cl_api_clSVMFree),
 
+        // cl_ext_buffer_device_address
+        "clSetKernelArgDevicePointerEXT" => cl_ext_func!(cl_set_kernel_arg_device_pointer: clSetKernelArgDevicePointerEXT_fn),
+
         // DPCPP bug https://github.com/intel/llvm/issues/9964
         "clSetProgramSpecializationConstant" => cl_ext_func!(cl_set_program_specialization_constant: cl_api_clSetProgramSpecializationConstant),
 

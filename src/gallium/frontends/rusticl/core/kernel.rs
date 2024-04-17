@@ -20,6 +20,7 @@ use rusticl_opencl_gen::*;
 
 use std::cmp;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::convert::TryInto;
 use std::os::raw::c_void;
 use std::ptr;
@@ -32,7 +33,7 @@ use std::sync::MutexGuard;
 #[derive(Clone)]
 pub enum KernelArgValue {
     None,
-    Buffer(Arc<Buffer>),
+    Buffer(Arc<Buffer>, u64),
     Constant(Vec<u8>),
     Image(Arc<Image>),
     LocalMem(usize),
@@ -301,6 +302,7 @@ pub struct Kernel {
     pub prog: Arc<Program>,
     pub name: String,
     values: Mutex<Vec<Option<KernelArgValue>>>,
+    pub bdas: Mutex<HashSet<Arc<Buffer>>>,
     builds: HashMap<&'static Device, Arc<NirKernelBuild>>,
     pub kernel_info: KernelInfo,
 }
@@ -826,6 +828,7 @@ impl Kernel {
             prog: prog.clone(),
             name: name,
             values: Mutex::new(values),
+            bdas: Mutex::new(HashSet::new()),
             builds: builds,
             kernel_info: kernel_info,
         })
@@ -942,9 +945,9 @@ impl Kernel {
             }
             match val.as_ref().unwrap() {
                 KernelArgValue::Constant(c) => input.extend_from_slice(c),
-                KernelArgValue::Buffer(buffer) => {
+                KernelArgValue::Buffer(buffer, offset) => {
                     let res = buffer.get_res_of_dev(q.device)?;
-                    let address = res.address() + buffer.offset;
+                    let address = res.address() + buffer.offset + offset;
                     if q.device.address_bits() == 64 {
                         input.extend_from_slice(&address.to_ne_bytes());
                     } else {
@@ -1093,6 +1096,14 @@ impl Kernel {
                 }
             }
         }
+
+        resources.extend(
+            self.bdas
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|buf| Arc::clone(buf.get_res_of_dev(q.device).unwrap())),
+        );
 
         Ok(Box::new(move |q, ctx| {
             let printf_format = &nir_kernel_build.printf_info;
@@ -1336,6 +1347,7 @@ impl Clone for Kernel {
             prog: self.prog.clone(),
             name: self.name.clone(),
             values: Mutex::new(self.arg_values().clone()),
+            bdas: Mutex::new(self.bdas.lock().unwrap().clone()),
             builds: self.builds.clone(),
             kernel_info: self.kernel_info.clone(),
         }

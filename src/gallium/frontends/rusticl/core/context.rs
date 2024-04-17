@@ -22,14 +22,21 @@ use std::ops::Add;
 use std::os::raw::c_void;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::Weak;
 
 pub trait AllocSize<P> {
-    fn size(&self) -> P;
+    fn size(&self) -> Option<P>;
 }
 
 impl AllocSize<usize> for Layout {
-    fn size(&self) -> usize {
-        Self::size(self)
+    fn size(&self) -> Option<usize> {
+        Some(Self::size(self))
+    }
+}
+
+impl AllocSize<u64> for Weak<Buffer> {
+    fn size(&self) -> Option<u64> {
+        Some(self.upgrade()?.size as u64)
     }
 }
 
@@ -43,7 +50,7 @@ where
 {
     pub fn find_alloc(&self, ptr: P) -> Option<(P, &T)> {
         if let Some((&base, val)) = self.ptrs.range(..=ptr).next_back() {
-            let size = val.size();
+            let size = val.size()?;
             // we check if ptr is within [base..base+size)
             // means we can check if ptr - (base + size) < 0
             if ptr < (base + size) {
@@ -73,6 +80,7 @@ pub struct Context {
     pub devs: Vec<&'static Device>,
     pub properties: Properties<cl_context_properties>,
     pub dtors: Mutex<Vec<DeleteContextCB>>,
+    bda_ptrs: Mutex<TrackedPointers<cl_mem_device_address_EXT, Weak<Buffer>>>,
     svm_ptrs: Mutex<TrackedPointers<usize, Layout>>,
     pub gl_ctx_manager: Option<GLCtxManager>,
 }
@@ -90,6 +98,7 @@ impl Context {
             devs: devs,
             properties: properties,
             dtors: Mutex::new(Vec::new()),
+            bda_ptrs: Mutex::new(TrackedPointers::new()),
             svm_ptrs: Mutex::new(TrackedPointers::new()),
             gl_ctx_manager: gl_ctx_manager,
         })
@@ -247,6 +256,23 @@ impl Context {
 
     pub fn remove_svm_ptr(&self, ptr: usize) -> Option<Layout> {
         self.svm_ptrs.lock().unwrap().remove(&ptr)
+    }
+
+    pub fn add_bda_ptr(&self, ptr: cl_mem_device_address_EXT, buffer: &Arc<Buffer>) {
+        self.bda_ptrs
+            .lock()
+            .unwrap()
+            .insert(ptr, Arc::downgrade(buffer));
+    }
+
+    pub fn find_bda_alloc(&self, ptr: cl_mem_device_address_EXT) -> Option<(cl_mem_device_address_EXT, Arc<Buffer>)> {
+        let lock = self.bda_ptrs.lock().unwrap();
+        let (base, mem) = lock.find_alloc(ptr)?;
+        mem.upgrade().map(|mem| (base, mem))
+    }
+
+    pub fn remove_bda_ptr(&self, ptr: cl_mem_device_address_EXT) {
+        self.bda_ptrs.lock().unwrap().remove(&ptr);
     }
 
     pub fn import_gl_buffer(

@@ -36,6 +36,8 @@ fn validate_mem_flags(flags: cl_mem_flags, images: bool) -> CLResult<()> {
     if !images {
         valid_flags |= cl_bitfield::from(
             CL_MEM_USE_HOST_PTR
+                | CL_MEM_DEVICE_ADDRESS_EXT
+                | CL_MEM_DEVICE_PRIVATE_EXT
                 | CL_MEM_ALLOC_HOST_PTR
                 | CL_MEM_COPY_HOST_PTR
                 | CL_MEM_HOST_WRITE_ONLY
@@ -231,6 +233,16 @@ impl CLInfo<cl_mem_info> for cl_mem {
                 let ptr = Arc::as_ptr(&mem.context);
                 cl_prop::<cl_context>(cl_context::from_ptr(ptr))
             }
+            CL_MEM_DEVICE_PTR_EXT => cl_prop::<cl_mem_device_address_EXT>({
+                let buffer = Buffer::ref_from_raw(*self)?;
+                if buffer.address == 0 {
+                    return Err(CL_INVALID_MEM_OBJECT);
+                };
+                buffer.address as _
+            }),
+            CL_MEM_DEVICE_PTRS_EXT => cl_prop::<Vec<cl_mem_device_address_pair_EXT>>(
+                Buffer::ref_from_raw(*self)?.get_address_of_res()?,
+            ),
             CL_MEM_FLAGS => cl_prop::<cl_mem_flags>(mem.flags),
             // TODO debugging feature
             CL_MEM_MAP_COUNT => cl_prop::<cl_uint>(0),

@@ -56,6 +56,7 @@ gen_cl_exts!([
     (1, 0, 0, "cl_khr_il_program"),
     (1, 0, 0, "cl_khr_spirv_no_integer_wrap_decoration"),
     (1, 0, 0, "cl_khr_suggested_local_work_size"),
+    (1, 0, 0, "cl_ext_buffer_device_address"),
 ]);
 
 static mut PLATFORM: Platform = Platform {

@@ -117,6 +117,15 @@ if with_tools.contains('etnaviv')
     command: [prog_python, prog_etnaviv_pest, '--xml', '@INPUT@', '--output', '@OUTPUT@'],
     depend_files: [isa_depend_files, prog_etnaviv_pest],
   )
+
+  prog_enum_rules = files('enum_rules.rs.py')
+  enum_rules_rs = custom_target(
+    'enum_rules.rs',
+    input: 'etnaviv.xml',
+    output: 'enum_rules.rs',
+    command: [prog_python, prog_enum_rules, '--xml', '@INPUT@', '--output', '@OUTPUT@'],
+    depend_files: [isa_depend_files, prog_enum_rules],
+  )
 endif
 
 subdir('tests')

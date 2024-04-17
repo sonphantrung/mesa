@@ -92,4 +92,22 @@ disasm = executable(
   install: false,
 )
 
+if with_tools.contains('etnaviv')
+  add_languages('rust', required: true)
+  rust = import('rust')
+
+  asm_bindings = rust.bindgen(
+    input : 'asm.h',
+    output : 'asm_bindings.rs',
+    include_directories : [inc_src],
+    args : [
+      '--disable-header-comment',
+      '--ignore-functions',
+      '--allowlist-type', 'etna_inst',
+      '--default-enum-style', 'rust',
+      '--with-derive-default',
+    ],
+  )
+endif
+
 subdir('tests')

@@ -144,6 +144,29 @@ if with_tools.contains('etnaviv')
     command: [prog_python, prog_parser, '--pest', '@INPUT0@',  '--output', '@OUTPUT@', '@INPUT1@', '@INPUT2@', '@INPUT3@'],
     depend_files: [isa_depend_files, prog_parser],
   )
+
+  dep_pest_derive = dependency('pest_derive',
+    version: '>= 2.7.6',
+    fallback: ['pest_derive', 'dep_pest_derive'],
+    required: true,
+  )
+
+  dep_pest = dependency('pest',
+    version: '>= 2.7.6',
+    fallback: ['pest', 'dep_pest'],
+    required: true,
+  )
+
+  libetnaviv_parser = static_library(
+    '_assembler_lib',
+    [parser_rs],
+    gnu_symbol_visibility: 'hidden',
+    rust_abi: 'c',
+    rust_args: [
+      '-Anon_camel_case_types',
+    ],
+    dependencies: [dep_pest, dep_pest_derive],
+  )
 endif
 
 subdir('tests')

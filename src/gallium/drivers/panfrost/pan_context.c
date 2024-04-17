@@ -805,38 +805,6 @@ panfrost_set_stream_output_targets(struct pipe_context *pctx,
 }
 
 static void
-panfrost_set_global_binding(struct pipe_context *pctx, unsigned first,
-                            unsigned count, struct pipe_resource **resources,
-                            uint32_t **handles)
-{
-   if (!resources)
-      return;
-
-   struct panfrost_context *ctx = pan_context(pctx);
-   struct panfrost_batch *batch = panfrost_get_batch_for_fbo(ctx);
-
-   for (unsigned i = first; i < first + count; ++i) {
-      struct panfrost_resource *rsrc = pan_resource(resources[i]);
-      panfrost_batch_write_rsrc(batch, rsrc, PIPE_SHADER_COMPUTE);
-
-      util_range_add(&rsrc->base, &rsrc->valid_buffer_range, 0,
-                     rsrc->base.width0);
-
-      /* The handle points to uint32_t, but space is allocated for 64
-       * bits. We need to respect the offset passed in. This interface
-       * is so bad.
-       */
-      mali_ptr addr = 0;
-      static_assert(sizeof(addr) == 8, "size out of sync");
-
-      memcpy(&addr, handles[i], sizeof(addr));
-      addr += rsrc->image.data.base;
-
-      memcpy(handles[i], &addr, sizeof(addr));
-   }
-}
-
-static void
 panfrost_memory_barrier(struct pipe_context *pctx, unsigned flags)
 {
    /* TODO: Be smart and only flush the minimum needed, maybe emitting a
@@ -937,7 +905,6 @@ panfrost_create_context(struct pipe_screen *screen, void *priv, unsigned flags)
 
    gallium->set_blend_color = panfrost_set_blend_color;
 
-   gallium->set_global_binding = panfrost_set_global_binding;
    gallium->memory_barrier = panfrost_memory_barrier;
 
    pan_screen(screen)->vtbl.context_populate_vtbl(gallium);

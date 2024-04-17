@@ -108,6 +108,15 @@ if with_tools.contains('etnaviv')
       '--with-derive-default',
     ],
   )
+
+  prog_etnaviv_pest = files('etnaviv.pest.py')
+  etnaviv_pest = custom_target(
+    'etnaviv.pest',
+    input: 'etnaviv.xml',
+    output: 'etnaviv.pest',
+    command: [prog_python, prog_etnaviv_pest, '--xml', '@INPUT@', '--output', '@OUTPUT@'],
+    depend_files: [isa_depend_files, prog_etnaviv_pest],
+  )
 endif
 
 subdir('tests')

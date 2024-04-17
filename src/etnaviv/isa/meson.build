@@ -126,6 +126,20 @@ if with_tools.contains('etnaviv')
     command: [prog_python, prog_enum_rules, '--xml', '@INPUT@', '--output', '@OUTPUT@'],
     depend_files: [isa_depend_files, prog_enum_rules],
   )
+
+  prog_parser = files('parser.rs.py')
+  parser_rs = custom_target(
+    'parser.rs',
+    input: [
+      etnaviv_pest,
+      asm_bindings,
+      enum_rules_rs,
+      join_paths(meson.current_source_dir(), 'asm.rs'),
+      ],
+    output: 'parser.rs',
+    command: [prog_python, prog_parser, '--pest', '@INPUT0@',  '--output', '@OUTPUT@', '@INPUT1@', '@INPUT2@', '@INPUT3@'],
+    depend_files: [isa_depend_files, prog_parser],
+  )
 endif
 
 subdir('tests')

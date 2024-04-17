@@ -12,4 +12,6 @@ struct etna_inst;
 
 void isa_assemble_instruction(uint32_t *out, const struct etna_inst *instr);
 
+extern bool isa_parse_str(const char *str, struct etna_inst *i, bool dual_16_mode);
+
 #endif /* _ISA_H_ */

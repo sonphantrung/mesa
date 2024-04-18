@@ -122,48 +122,106 @@ capture_vm_in_error_dump(struct anv_device *device, struct anv_bo *bo)
    return capture ? DRM_XE_VM_BIND_FLAG_DUMPABLE : 0;
 }
 
+static struct drm_xe_vm_bind_op
+anv_vm_bind_to_drm_xe_vm_bind(struct anv_device *device,
+                              struct anv_vm_bind *anv_bind)
+{
+   struct anv_bo *bo = anv_bind->bo;
+   uint16_t pat_index = bo ?
+      anv_device_get_pat_entry(device, bo->alloc_flags)->index : 0;
+
+   struct drm_xe_vm_bind_op xe_bind = {
+         .obj = 0,
+         .obj_offset = anv_bind->bo_offset,
+         .range = anv_bind->size,
+         .addr = intel_48b_address(anv_bind->address),
+         .op = DRM_XE_VM_BIND_OP_UNMAP,
+         .flags = capture_vm_in_error_dump(device, bo),
+         .prefetch_mem_region_instance = 0,
+         .pat_index = pat_index,
+   };
+
+   if (anv_bind->op == ANV_VM_BIND) {
+      if (!bo) {
+         xe_bind.op = DRM_XE_VM_BIND_OP_MAP;
+         xe_bind.flags |= DRM_XE_VM_BIND_FLAG_NULL;
+         assert(xe_bind.obj_offset == 0);
+      } else if (bo->from_host_ptr) {
+         xe_bind.op = DRM_XE_VM_BIND_OP_MAP_USERPTR;
+      } else {
+         xe_bind.op = DRM_XE_VM_BIND_OP_MAP;
+         xe_bind.obj = bo->gem_handle;
+      }
+   } else if (anv_bind->op == ANV_VM_UNBIND_ALL) {
+      xe_bind.op = DRM_XE_VM_BIND_OP_UNMAP_ALL;
+      xe_bind.obj = bo->gem_handle;
+      assert(anv_bind->address == 0);
+      assert(anv_bind->size == 0);
+   } else {
+      assert(anv_bind->op == ANV_VM_UNBIND);
+   }
+
+   /* userptr and bo_offset are an union! */
+   if (bo && bo->from_host_ptr)
+      xe_bind.userptr = (uintptr_t)bo->map;
+
+   return xe_bind;
+}
+
 static inline VkResult
 xe_vm_bind_op(struct anv_device *device,
               struct anv_sparse_submission *submit,
-              bool signal_bind_timeline)
+              enum anv_vm_bind_flags flags)
 {
+   struct anv_queue *queue = submit->queue;
    VkResult result = VK_SUCCESS;
+   int ret;
+   const bool has_queue_sync = queue && queue->sync;
+   const bool do_sync = flags & ANV_VM_BIND_FLAG_SYNC || has_queue_sync;
+   const bool signal_bind_timeline =
+      flags & ANV_VM_BIND_FLAG_SIGNAL_BIND_TIMELINE;
+
    int num_syncs = submit->wait_count + submit->signal_count +
-                   signal_bind_timeline;
+                   do_sync + signal_bind_timeline;
    STACK_ARRAY(struct drm_xe_sync, xe_syncs, num_syncs);
    if (!xe_syncs)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    int sync_idx = 0;
+   int timeline_sync_idx = -1, submit_sync_idx = -1;
    for (int s = 0; s < submit->wait_count; s++) {
-      const struct vk_drm_syncobj *syncobj =
-         vk_sync_as_drm_syncobj(submit->waits[s].sync);
-      assert(syncobj);
-      uint64_t val = submit->waits[s].wait_value;
-
-      xe_syncs[sync_idx++] = (struct drm_xe_sync) {
-         .type = val ? DRM_XE_SYNC_TYPE_TIMELINE_SYNCOBJ :
-                       DRM_XE_SYNC_TYPE_SYNCOBJ,
-         .flags = 0,
-         .handle = syncobj->syncobj,
-         .timeline_value = val,
-      };
+      xe_syncs[sync_idx++] =
+         vk_sync_to_drm_xe_sync(submit->waits[s].sync,
+                                submit->waits[s].wait_value,
+                                false);
    }
    for (int s = 0; s < submit->signal_count; s++) {
-      const struct vk_drm_syncobj *syncobj =
-         vk_sync_as_drm_syncobj(submit->signals[s].sync);
-      assert(syncobj);
-      uint64_t val = submit->signals[s].signal_value;
+      xe_syncs[sync_idx++] =
+         vk_sync_to_drm_xe_sync(submit->signals[s].sync,
+                                submit->signals[s].signal_value,
+                                true);
+   }
+   if (has_queue_sync) {
+      xe_syncs[sync_idx++] = vk_sync_to_drm_xe_sync(queue->sync, 0, true);
+   } else if (do_sync) {
+      struct drm_syncobj_create syncobj_create = {};
+      ret = intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_CREATE,
+                        &syncobj_create);
+      if (ret) {
+         result = vk_device_set_lost(&device->vk,
+                                     "syncobj create failed: %m");
+         goto out_syncs;
+      }
 
+      submit_sync_idx = sync_idx;
       xe_syncs[sync_idx++] = (struct drm_xe_sync) {
-         .type = val ? DRM_XE_SYNC_TYPE_TIMELINE_SYNCOBJ :
-                       DRM_XE_SYNC_TYPE_SYNCOBJ,
+         .type = DRM_XE_SYNC_TYPE_SYNCOBJ,
          .flags = DRM_XE_SYNC_FLAG_SIGNAL,
-         .handle = syncobj->syncobj,
-         .timeline_value = val,
+         .handle = syncobj_create.handle,
       };
    }
    if (signal_bind_timeline) {
+      timeline_sync_idx = sync_idx;
       xe_syncs[sync_idx++] = (struct drm_xe_sync) {
          .type = DRM_XE_SYNC_TYPE_TIMELINE_SYNCOBJ,
          .flags = DRM_XE_SYNC_FLAG_SIGNAL,
@@ -187,7 +245,7 @@ xe_vm_bind_op(struct anv_device *device,
    if (submit->binds_len > 1) {
       if (!xe_binds_stackarray) {
          result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-         goto out_syncs;
+         goto out_submit_sync;
       }
 
       xe_binds = xe_binds_stackarray;
@@ -196,68 +254,75 @@ xe_vm_bind_op(struct anv_device *device,
       xe_binds = &args.bind;
    }
 
-   for (int i = 0; i < submit->binds_len; i++) {
-      struct anv_vm_bind *bind = &submit->binds[i];
-      struct anv_bo *bo = bind->bo;
-      uint16_t pat_index = 0;
-
-      if (bo)
-         pat_index = anv_device_get_pat_entry(device, bo->alloc_flags)->index;
-
-      struct drm_xe_vm_bind_op *xe_bind = &xe_binds[i];
-      *xe_bind = (struct drm_xe_vm_bind_op) {
-         .obj = 0,
-         .obj_offset = bind->bo_offset,
-         .range = bind->size,
-         .addr = intel_48b_address(bind->address),
-         .op = DRM_XE_VM_BIND_OP_UNMAP,
-         .flags = capture_vm_in_error_dump(device, bo),
-         .prefetch_mem_region_instance = 0,
-         .pat_index = pat_index,
-      };
-
-      if (bind->op == ANV_VM_BIND) {
-         if (!bo) {
-            xe_bind->op = DRM_XE_VM_BIND_OP_MAP;
-            xe_bind->flags |= DRM_XE_VM_BIND_FLAG_NULL;
-            assert(xe_bind->obj_offset == 0);
-         } else if (bo->from_host_ptr) {
-            xe_bind->op = DRM_XE_VM_BIND_OP_MAP_USERPTR;
-         } else {
-            xe_bind->op = DRM_XE_VM_BIND_OP_MAP;
-            xe_bind->obj = bo->gem_handle;
-         }
-      } else if (bind->op == ANV_VM_UNBIND_ALL) {
-         xe_bind->op = DRM_XE_VM_BIND_OP_UNMAP_ALL;
-         xe_bind->obj = bo->gem_handle;
-         assert(bind->address == 0);
-         assert(bind->size == 0);
-      } else {
-         assert(bind->op == ANV_VM_UNBIND);
-      }
-
-      /* userptr and bo_offset are an union! */
-      if (bo && bo->from_host_ptr)
-         xe_bind->userptr = (uintptr_t)bo->map;
-   }
+   for (int i = 0; i < submit->binds_len; i++)
+      xe_binds[i] = anv_vm_bind_to_drm_xe_vm_bind(device, &submit->binds[i]);
 
    if (signal_bind_timeline) {
-      xe_syncs[num_syncs - 1].timeline_value =
+      xe_syncs[timeline_sync_idx].timeline_value =
          intel_bind_timeline_bind_begin(&device->bind_timeline);
    }
-   int ret = intel_ioctl(device->fd, DRM_IOCTL_XE_VM_BIND, &args);
+   ret = intel_ioctl(device->fd, DRM_IOCTL_XE_VM_BIND, &args);
+   int errno_ = errno;
    if (signal_bind_timeline)
       intel_bind_timeline_bind_end(&device->bind_timeline);
 
    if (ret) {
-      result = vk_device_set_lost(&device->vk, "vm_bind failed: %m");
+      /* These errors can happen during normal driver operation (i.e., they
+       * don't necessarily mean a bug in our driver):
+       *   ENOMEM: Out of Kernel memory.
+       *   EBUSY:  Temporarily out of resources for a multiple VM_BIND job.
+       *           Retry with lower number of VM_BIND operations. Does not
+       *           occur with single VM_BIND job.
+       *   ENOSPC: Graphics memory is overcommitted, unbind resources and then
+       *           retry.
+       *
+       * Both ENOMEM and EBUSY mean we're out of host memory, it's just that
+       * when we're guaranteed to not get EBUSY if we issue one bind per
+       * ioctl.
+       */
+      assert(errno_ != EINVAL);
+      if (errno_ == ENOMEM || errno_ == EBUSY)
+         result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      else if (errno_ == ENOSPC)
+         result = vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+      else
+         result = vk_device_set_lost(&device->vk,
+                                     "vm_bind failed with errno %d", errno_);
       goto out_stackarray;
+   }
+
+   if (has_queue_sync) {
+      result = vk_sync_wait(&device->vk, queue->sync, 0,
+                            VK_SYNC_WAIT_COMPLETE, UINT64_MAX);
+
+   } else if (do_sync) {
+      struct drm_syncobj_wait syncobj_wait = {
+         .handles = (intptr_t)&xe_syncs[submit_sync_idx].handle,
+         .timeout_nsec = INT64_MAX,
+         .count_handles = 1,
+         .flags = 0,
+      };
+      ret = intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_WAIT, &syncobj_wait);
+      if (ret)
+         result = vk_device_set_lost(&device->vk, "syncobj wait failed: %m");
    }
 
    ANV_RMV(vm_binds, device, submit->binds, submit->binds_len);
 
 out_stackarray:
    STACK_ARRAY_FINISH(xe_binds_stackarray);
+
+out_submit_sync:
+   if (do_sync && !has_queue_sync) {
+      struct drm_syncobj_destroy syncobj_destroy = {
+         .handle = xe_syncs[submit_sync_idx].handle,
+      };
+      ret = intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_DESTROY,
+                        &syncobj_destroy);
+      if (ret && result == VK_SUCCESS)
+         result = vk_device_set_lost(&device->vk, "syncobj destroy failed: %m");
+   }
+
 out_syncs:
    STACK_ARRAY_FINISH(xe_syncs);
 
@@ -265,9 +330,10 @@ out_syncs:
 }
 
 static VkResult
-xe_vm_bind(struct anv_device *device, struct anv_sparse_submission *submit)
+xe_vm_bind(struct anv_device *device, struct anv_sparse_submission *submit,
+           enum anv_vm_bind_flags flags)
 {
-   return xe_vm_bind_op(device, submit, false);
+   return xe_vm_bind_op(device, submit, flags);
 }
 
 static VkResult
@@ -288,7 +354,8 @@ xe_vm_bind_bo(struct anv_device *device, struct anv_bo *bo)
       .wait_count = 0,
       .signal_count = 0,
    };
-   return xe_vm_bind_op(device, &submit, true);
+   return xe_vm_bind_op(device, &submit,
+                        ANV_VM_BIND_FLAG_SIGNAL_BIND_TIMELINE);
 }
 
 static VkResult
@@ -314,7 +381,8 @@ xe_vm_unbind_bo(struct anv_device *device, struct anv_bo *bo)
       bind.size = bo->actual_size;
       bind.op = ANV_VM_UNBIND;
    }
-   return xe_vm_bind_op(device, &submit, true);
+   return xe_vm_bind_op(device, &submit,
+                        ANV_VM_BIND_FLAG_SIGNAL_BIND_TIMELINE);
 }
 
 static uint32_t

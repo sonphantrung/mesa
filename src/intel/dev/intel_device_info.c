@@ -1796,3 +1796,34 @@ intel_device_info_wa_stepping(struct intel_device_info *devinfo)
    return INTEL_STEPPING_RELEASE;
 }
 
+uint32_t
+intel_device_info_get_max_slm_size(const struct intel_device_info *devinfo)
+{
+   uint32_t k_bytes = 0;
+
+   if (devinfo->verx10 >= 200) {
+      k_bytes = intel_device_info_get_max_preferred_slm_size(devinfo);
+   } else {
+      k_bytes = 64;
+   }
+
+   return k_bytes * 1024;
+}
+
+uint32_t
+intel_device_info_get_max_preferred_slm_size(const struct intel_device_info *devinfo)
+{
+   uint32_t k_bytes = 0;
+
+   if (devinfo->verx10 >= 200) {
+#if INTEL_NEEDS_WA_16018610683
+      k_bytes = 128;
+#else
+      k_bytes = 160;
+#endif
+   } else {
+      k_bytes = 128;
+   }
+
+   return k_bytes * 1024;
+}

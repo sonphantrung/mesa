@@ -268,6 +268,11 @@ pub extern "C" fn nak_compile_shader(
         eprintln!("NAK IR after opt_bar_prop:\n{}", &s);
     }
 
+    s.opt_prmt();
+    if DEBUG.print() {
+        eprintln!("NAK IR after opt_prmt:\n{}", &s);
+    }
+
     s.opt_copy_prop();
     if DEBUG.print() {
         eprintln!("NAK IR after opt_copy_prop:\n{}", &s);

@@ -32,10 +32,10 @@ struct PACKED query_slot {
 
 struct PACKED occlusion_query_slot {
    struct query_slot common;
-   uint64_t _padding0;
+   uint64_t result_manual_sample_count;
 
    uint64_t begin;
-   uint64_t result;
+   uint64_t result_generated_sample_count;
    uint64_t end;
    uint64_t _padding1;
 };
@@ -103,6 +103,15 @@ struct PACKED primitives_generated_query_slot {
    query_iova(struct occlusion_query_slot, pool, query, field)
 #define occlusion_query_addr(pool, query, field)                     \
    query_addr(struct occlusion_query_slot, pool, query, field)
+
+#define occlusion_query_result_iova(device, pool, query, field)         \
+   (device->physical_device->info->a7xx.has_event_write_sample_count) ? \
+      occlusion_query_iova(pool, query, result_generated_sample_count) : \
+      occlusion_query_iova(pool, query, result_manual_sample_count)
+#define occlusion_query_result_addr(device, pool, query, field)         \
+   (device->physical_device->info->a7xx.has_event_write_sample_count) ? \
+      occlusion_query_addr(pool, query, result_generated_sample_count) : \
+      occlusion_query_addr(pool, query, result_manual_sample_count)
 
 #define pipeline_stat_query_iova(pool, query, field, idx)                    \
    pool->bo->iova + pool->stride * (query) +                                 \
@@ -529,7 +538,7 @@ get_query_pool_results(struct tu_device *device,
                result = query_result_addr(pool, query, struct perfcntr_query_slot, k);
             } else if (pool->type == VK_QUERY_TYPE_OCCLUSION) {
                assert(k == 0);
-               result = occlusion_query_addr(pool, query, result);
+               result = occlusion_query_result_addr(device, pool, query, result);
             } else {
                result = query_result_addr(pool, query, uint64_t, k);
             }
@@ -670,7 +679,8 @@ emit_copy_query_pool_results(struct tu_cmd_buffer *cmdbuf,
                                             struct perfcntr_query_slot, k);
          } else if (pool->type == VK_QUERY_TYPE_OCCLUSION) {
             assert(k == 0);
-            result_iova = occlusion_query_iova(pool, query, result);
+            result_iova = occlusion_query_result_iova(cmdbuf->device, pool,
+                                                      query, result);
          } else {
             result_iova = query_result_iova(pool, query, uint64_t, k);
          }
@@ -773,7 +783,8 @@ emit_reset_query_pool(struct tu_cmd_buffer *cmdbuf,
                                             struct perfcntr_query_slot, k);
          } else if (pool->type == VK_QUERY_TYPE_OCCLUSION) {
             assert(k == 0);
-            result_iova = occlusion_query_iova(pool, query, result);
+            result_iova = occlusion_query_result_iova(cmdbuf->device, pool,
+                                                      query, result);
          } else {
             result_iova = query_result_iova(pool, query, uint64_t, k);
          }
@@ -810,11 +821,12 @@ tu_CmdResetQueryPool(VkCommandBuffer commandBuffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-tu_ResetQueryPool(VkDevice device,
+tu_ResetQueryPool(VkDevice _device,
                   VkQueryPool queryPool,
                   uint32_t firstQuery,
                   uint32_t queryCount)
 {
+   TU_FROM_HANDLE(tu_device, device, _device);
    TU_FROM_HANDLE(tu_query_pool, pool, queryPool);
 
    for (uint32_t i = 0; i < queryCount; i++) {
@@ -829,7 +841,7 @@ tu_ResetQueryPool(VkDevice device,
                                     struct perfcntr_query_slot, k);
          } else if (pool->type == VK_QUERY_TYPE_OCCLUSION) {
             assert(k == 0);
-            res = occlusion_query_addr(pool, i + firstQuery, result);
+            res = occlusion_query_result_addr(device, pool, i + firstQuery, result);
          } else {
             res = query_result_addr(pool, i + firstQuery, uint64_t, k);
          }
@@ -1166,7 +1178,8 @@ emit_end_occlusion_query(struct tu_cmd_buffer *cmdbuf,
 
    uint64_t available_iova = query_available_iova(pool, query);
    uint64_t begin_iova = occlusion_query_iova(pool, query, begin);
-   uint64_t result_iova = occlusion_query_iova(pool, query, result);
+   uint64_t result_iova = occlusion_query_result_iova(cmdbuf->device, pool,
+                                                      query, result);
    uint64_t end_iova = occlusion_query_iova(pool, query, end);
    tu_cs_emit_pkt7(cs, CP_MEM_WRITE, 4);
    tu_cs_emit_qw(cs, end_iova);

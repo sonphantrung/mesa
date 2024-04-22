@@ -184,6 +184,11 @@ endif
 
 with_amdgpu_virtio = get_option('amdgpu-virtio')
 
+# native-context GL drivers needs virgl to be built
+if with_amdgpu_virtio and gallium_drivers.contains('radeonsi') and not gallium_drivers.contains('virgl')
+  gallium_drivers += ['virgl']
+endif
+
 with_gallium_radeonsi = gallium_drivers.contains('radeonsi')
 with_gallium_r300 = gallium_drivers.contains('r300')
 with_gallium_r600 = gallium_drivers.contains('r600')

@@ -13,6 +13,8 @@
 #include <inttypes.h>
 #include <stdio.h>
 
+#include "util/u_box.h"
+
 #include "amd/common/sid.h"
 
 /* Some BSDs don't define ENODATA (and ENODATA is replaced with different error
@@ -212,6 +214,12 @@ bool amdgpu_fence_wait(struct pipe_fence_handle *fence, uint64_t timeout,
                                                    abs_timeout, 0, NULL))
       return false;
 
+#if !defined(NDEBUG) && HAVE_AMDGPU_VIRTIO
+   /* Check that guest-side syncobj agrees with the user fence. */
+   if (user_fence_cpu && afence->ws->info.is_virtio)
+      assert(afence->seq_no <= *user_fence_cpu);
+#endif
+
    afence->signalled = true;
    return true;
 }
@@ -298,6 +306,7 @@ static struct radeon_winsys_ctx *amdgpu_ctx_create(struct radeon_winsys *rws,
       goto error_user_fence_alloc;
    }
 
+   ctx->user_fence_cpu_address_base = NULL;
    r = aws->libdrm_amdgpu->bo_cpu_map(buf_handle, (void**)&ctx->user_fence_cpu_address_base);
    if (r) {
       fprintf(stderr, "amdgpu: amdgpu_bo_cpu_map failed. (%i)\n", r);
@@ -1143,6 +1152,10 @@ static unsigned amdgpu_cs_get_buffer_list(struct radeon_cmdbuf *rcs,
 
     struct amdgpu_buffer_list *real_buffers = &cs->buffer_lists[AMDGPU_BO_REAL];
     unsigned num_real_buffers = real_buffers->num_buffers;
+
+#if HAVE_AMDGPU_VIRTIO
+    assert(!cs->ws->info.is_virtio);
+#endif
 
     if (list) {
         for (unsigned i = 0; i < num_real_buffers; i++) {

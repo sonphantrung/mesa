@@ -33,6 +33,10 @@
 
 #include "libdrm_amdgpu_loader.h"
 
+#if HAVE_AMDGPU_VIRTIO
+#include "virtio/virtio-gpu/drm_hw.h"
+#endif
+
 #include <xf86drm.h>
 
 static struct pipe_context *si_create_context(struct pipe_screen *screen, unsigned flags);
@@ -483,6 +487,15 @@ static void si_set_frontend_noop(struct pipe_context *ctx, bool enable)
 
    ctx->flush(ctx, NULL, PIPE_FLUSH_ASYNC);
    sctx->is_noop = enable;
+}
+
+bool si_probe_nctx(int fd, const struct virgl_renderer_capset_drm *caps)
+{
+   #ifdef HAVE_AMDGPU_VIRTIO
+   return caps->context_type == VIRTGPU_DRM_CONTEXT_AMDGPU;
+   #else
+   return false;
+   #endif
 }
 
 static struct pipe_context *si_create_context(struct pipe_screen *screen, unsigned flags)
@@ -1568,14 +1581,20 @@ struct pipe_screen *radeonsi_screen_create(int fd, const struct pipe_screen_conf
    driParseConfigFiles(config->options, config->options_info, 0, "radeonsi",
                        NULL, NULL, NULL, 0, NULL, 0);
 
-   switch (version->version_major) {
-   case 2:
-      rw = radeon_drm_winsys_create(fd, config, radeonsi_screen_create_impl);
-      break;
-   case 3:
-      ac_init_libdrm_amdgpu();
-      rw = amdgpu_winsys_create(fd, config, radeonsi_screen_create_impl);
-      break;
+#ifdef HAVE_AMDGPU_VIRTIO
+   if (strcmp(version->name, "virtio_gpu") == 0) {
+      rw = amdgpu_winsys_create(fd, config, radeonsi_screen_create_impl, true);
+   } else
+#endif
+   {
+      switch (version->version_major) {
+      case 2:
+         rw = radeon_drm_winsys_create(fd, config, radeonsi_screen_create_impl);
+         break;
+      case 3:
+         rw = amdgpu_winsys_create(fd, config, radeonsi_screen_create_impl, false);
+         break;
+      }
    }
 
    si_driver_ds_init();

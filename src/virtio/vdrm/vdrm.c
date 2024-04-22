@@ -131,6 +131,9 @@ vdrm_send_req(struct vdrm_device *vdev, struct vdrm_ccmd_req *req, bool sync)
 {
    MESA_TRACE_FUNC();
 
+   /* TODO: fix me */
+   sync = true;
+
    uintptr_t fence = 0;
    int ret = 0;
 

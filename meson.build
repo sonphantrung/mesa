@@ -182,6 +182,8 @@ elif gallium_drivers.contains('all')
    ]
 endif
 
+with_amdgpu_virtio = get_option('amdgpu-virtio')
+
 with_gallium_radeonsi = gallium_drivers.contains('radeonsi')
 with_gallium_r300 = gallium_drivers.contains('r300')
 with_gallium_r600 = gallium_drivers.contains('r600')
@@ -1646,7 +1648,7 @@ dep_libdrm_amdgpu = null_dep
 dep_libdrm_radeon = null_dep
 dep_libdrm_intel = null_dep
 
-_drm_amdgpu_ver = '2.4.119'
+_drm_amdgpu_ver = '2.4.121'
 _drm_radeon_ver = '2.4.71'
 _drm_intel_ver = '2.4.75'
 _drm_ver = '2.4.109'

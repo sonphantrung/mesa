@@ -59,7 +59,7 @@ static void si_emit_sqtt_start(struct si_context *sctx,
    radeon_begin(cs);
 
    for (unsigned se = 0; se < max_se; se++) {
-      uint64_t va = sctx->ws->buffer_get_virtual_address(sctx->sqtt->bo);
+      uint64_t va = sctx->ws->buffer_get_virtual_address(sctx->ws, sctx->sqtt->bo);
       uint64_t data_va =
          ac_sqtt_get_data_va(&sctx->screen->info, sctx->sqtt, va, se);
       uint64_t shifted_va = data_va >> SQTT_BUFFER_ALIGN_SHIFT;
@@ -267,7 +267,7 @@ static void si_copy_sqtt_info_regs(struct si_context *sctx,
    }
 
    /* Get the VA where the info struct is stored for this SE. */
-   uint64_t va = sctx->ws->buffer_get_virtual_address(sctx->sqtt->bo);
+   uint64_t va = sctx->ws->buffer_get_virtual_address(sctx->ws, sctx->sqtt->bo);
    uint64_t info_va = ac_sqtt_get_info_va(va, se_index);
 
    radeon_begin(cs);

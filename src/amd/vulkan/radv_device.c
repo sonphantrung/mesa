@@ -67,8 +67,8 @@ typedef void *drmDevicePtr;
 #include "vk_format.h"
 #include "vk_sync.h"
 #include "vk_sync_dummy.h"
-
 #include "aco_interface.h"
+#include "libdrm_amdgpu_loader.h"
 
 #if LLVM_AVAILABLE
 #include "ac_llvm_util.h"

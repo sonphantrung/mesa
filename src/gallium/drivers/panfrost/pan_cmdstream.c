@@ -2747,7 +2747,8 @@ panfrost_update_state_3d(struct panfrost_batch *batch)
 
 static void
 panfrost_launch_xfb(struct panfrost_batch *batch,
-                    const struct pipe_draw_info *info, unsigned count)
+                    const struct pipe_draw_info *info, unsigned count,
+                    const struct pipe_draw_indirect_info *indirect)
 {
    struct panfrost_context *ctx = batch->ctx;
 
@@ -2786,7 +2787,7 @@ panfrost_launch_xfb(struct panfrost_batch *batch,
                               &batch->push_uniforms[PIPE_SHADER_VERTEX],
                               &batch->nr_push_uniforms[PIPE_SHADER_VERTEX]);
 
-   JOBX(launch_xfb)(batch, info, count);
+   JOBX(launch_xfb)(batch, info, count, indirect);
    batch->compute_count++;
 
    ctx->uncompiled[PIPE_SHADER_VERTEX] = vs_uncompiled;
@@ -2882,7 +2883,7 @@ panfrost_draw_get_vertex_count(struct panfrost_batch *batch,
 }
 
 static void
-panfrost_direct_draw(struct panfrost_batch *batch,
+panfrost_single_direct_draw(struct panfrost_batch *batch,
                      const struct pipe_draw_info *info, unsigned drawid_offset,
                      const struct pipe_draw_start_count_bias *draw)
 {
@@ -2915,7 +2916,7 @@ panfrost_direct_draw(struct panfrost_batch *batch,
    panfrost_clean_state_3d(ctx);
 
    if (ctx->uncompiled[PIPE_SHADER_VERTEX]->xfb) {
-      panfrost_launch_xfb(batch, info, draw->count);
+      panfrost_launch_xfb(batch, info, draw->count, NULL);
    }
 
    /* Increment transform feedback offsets */
@@ -2935,6 +2936,49 @@ panfrost_direct_draw(struct panfrost_batch *batch,
 #endif
 
    JOBX(launch_draw)(batch, info, drawid_offset, draw, vertex_count);
+   batch->draw_count++;
+}
+
+static void
+panfrost_indirect_draw(struct panfrost_batch *batch,
+                       const struct pipe_draw_info *info,
+                       unsigned drawid_offset,
+                       const struct pipe_draw_indirect_info *indirect)
+{
+   struct panfrost_context *ctx = batch->ctx;
+
+   panfrost_batch_read_rsrc(batch, pan_resource(indirect->buffer), PIPE_SHADER_VERTEX);
+
+   panfrost_update_active_prim(ctx, info);
+
+   ctx->drawid = drawid_offset;
+
+   panfrost_update_state_3d(batch);
+   panfrost_update_shader_state(batch, PIPE_SHADER_VERTEX);
+   panfrost_update_shader_state(batch, PIPE_SHADER_FRAGMENT);
+   panfrost_clean_state_3d(ctx);
+
+   if (ctx->uncompiled[PIPE_SHADER_VERTEX]->xfb) {
+      panfrost_launch_xfb(batch, info, 0, indirect);
+   }
+
+   /* Increment transform feedback offsets */
+   panfrost_update_streamout_offsets(ctx);
+
+   /* Any side effects must be handled by the XFB shader, so we only need
+    * to run vertex shaders if we need rasterization.
+    */
+   if (panfrost_batch_skip_rasterization(batch))
+      return;
+
+#if PAN_ARCH <= 7
+   /* Emit all sort of descriptors. */
+   panfrost_emit_varying_descriptor(batch,
+                                    ctx->padded_count * ctx->instance_count,
+                                    info->mode == MESA_PRIM_POINTS);
+#endif
+
+   JOBX(launch_draw_indirect)(batch, info, drawid_offset, indirect);
    batch->draw_count++;
 }
 
@@ -2965,28 +3009,12 @@ panfrost_compatible_batch_state(struct panfrost_batch *batch,
       return pan_tristate_set(&batch->first_provoking_vertex, first);
 }
 
-static void
-panfrost_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
-                  unsigned drawid_offset,
-                  const struct pipe_draw_indirect_info *indirect,
-                  const struct pipe_draw_start_count_bias *draws,
-                  unsigned num_draws)
+static struct panfrost_batch *
+prepare_draw(struct pipe_context *pipe,
+             const struct pipe_draw_info *info)
 {
    struct panfrost_context *ctx = pan_context(pipe);
    struct panfrost_device *dev = pan_device(pipe->screen);
-
-   if (!panfrost_render_condition_check(ctx))
-      return;
-
-   ctx->draw_calls++;
-
-   /* Emulate indirect draws on JM */
-   if (indirect && indirect->buffer) {
-      assert(num_draws == 1);
-      util_draw_indirect(pipe, info, indirect);
-      perf_debug(dev, "Emulating indirect draw on the CPU");
-      return;
-   }
 
    /* Do some common setup */
    struct panfrost_batch *batch = panfrost_get_batch_for_fbo(ctx);
@@ -3023,16 +3051,72 @@ panfrost_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    /* Conservatively assume draw parameters always change */
    ctx->dirty |= PAN_DIRTY_PARAMS | PAN_DIRTY_DRAWID;
 
+   return batch;
+}
+
+static void
+panfrost_draw_indirect(struct pipe_context *pipe,
+                       const struct pipe_draw_info *info,
+                       unsigned drawid_offset,
+                       const struct pipe_draw_indirect_info *indirect)
+{
+   struct panfrost_device *dev = pan_device(pipe->screen);
+
+   if (!PAN_GPU_SUPPORTS_DRAW_INDIRECT) {
+      util_draw_indirect(pipe, info, indirect);
+      perf_debug(dev, "Emulating indirect draw on the CPU");
+      return;
+   }
+
+   struct panfrost_batch *batch = prepare_draw(pipe, info);
+   struct pipe_draw_info tmp_info = *info;
+   unsigned drawid = drawid_offset;
+
+   panfrost_indirect_draw(batch, &tmp_info, drawid, indirect);
+}
+
+static void
+panfrost_multi_draw_direct(struct pipe_context *pipe,
+                           const struct pipe_draw_info *info,
+                           unsigned drawid_offset,
+                           const struct pipe_draw_start_count_bias *draws,
+                           unsigned num_draws)
+{
+   struct panfrost_context *ctx = pan_context(pipe);
+   struct panfrost_batch *batch = prepare_draw(pipe, info);
    struct pipe_draw_info tmp_info = *info;
    unsigned drawid = drawid_offset;
 
    for (unsigned i = 0; i < num_draws; i++) {
-      panfrost_direct_draw(batch, &tmp_info, drawid, &draws[i]);
+      panfrost_single_direct_draw(batch, &tmp_info, drawid, &draws[i]);
 
       if (tmp_info.increment_draw_id) {
          ctx->dirty |= PAN_DIRTY_DRAWID;
          drawid++;
       }
+   }
+}
+
+static void
+panfrost_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
+                  unsigned drawid_offset,
+                  const struct pipe_draw_indirect_info *indirect,
+                  const struct pipe_draw_start_count_bias *draws,
+                  unsigned num_draws)
+{
+   struct panfrost_context *ctx = pan_context(pipe);
+
+   if (!panfrost_render_condition_check(ctx))
+      return;
+
+   ctx->draw_calls++;
+
+   /* Emulate indirect draws on JM */
+   if (indirect && indirect->buffer) {
+      assert(num_draws == 1);
+      panfrost_draw_indirect(pipe, info, drawid_offset, indirect);
+   } else {
+      panfrost_multi_draw_direct(pipe, info, drawid_offset, draws, num_draws);
    }
 }
 
@@ -3047,7 +3131,7 @@ panfrost_launch_grid_on_batch(struct pipe_context *pipe,
 {
    struct panfrost_context *ctx = pan_context(pipe);
 
-   if (info->indirect && !PAN_GPU_INDIRECTS) {
+   if (info->indirect && !PAN_GPU_SUPPORTS_DISPATCH_INDIRECT) {
       struct pipe_transfer *transfer;
       uint32_t *params =
          pipe_buffer_map_range(pipe, info->indirect, info->indirect_offset,
@@ -3812,7 +3896,7 @@ GENX(panfrost_cmdstream_screen_init)(struct panfrost_screen *screen)
    (&dev->blitter, panfrost_device_gpu_id(dev), &dev->blend_shaders,
     &screen->blitter.bin_pool.base, &screen->blitter.desc_pool.base);
 
-#if PAN_GPU_INDIRECTS
+#if PAN_GPU_SUPPORTS_DISPATCH_INDIRECT
    pan_indirect_dispatch_meta_init(
       &dev->indirect_dispatch, panfrost_device_gpu_id(dev),
       &screen->blitter.bin_pool.base, &screen->blitter.desc_pool.base);

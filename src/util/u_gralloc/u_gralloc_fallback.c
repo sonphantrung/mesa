@@ -128,7 +128,9 @@ fallback_gralloc_get_buffer_info(struct u_gralloc *gralloc,
     * color compression state buffer, but the rest of the code isn't ready
     * yet to deal with modifiers:
     */
-   num_planes = 1;
+   num_planes = get_native_buffer_fds(hnd->handle, fds);
+   if (num_planes == 0)
+      return -EINVAL;
 
    drm_fourcc = get_fourcc_from_hal_format(hnd->hal_format);
    if (drm_fourcc == -1) {
@@ -144,7 +146,7 @@ fallback_gralloc_get_buffer_info(struct u_gralloc *gralloc,
 
    out->drm_fourcc = drm_fourcc;
    out->modifier = DRM_FORMAT_MOD_INVALID;
-   out->num_planes = num_planes;
+   out->num_planes = 1;
    out->fds[0] = fds[0];
    out->strides[0] = stride;
 

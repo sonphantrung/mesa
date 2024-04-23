@@ -175,6 +175,6 @@ if with_tools.contains('etnaviv')
     dependencies: [ idep_libetnaviv_decode ],
     link_with: [libetnaviv_parser, libetnaviv_encode],
   )
-endif
 
-subdir('tests')
+  subdir('tests')
+endif

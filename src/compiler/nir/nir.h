@@ -3149,7 +3149,7 @@ typedef struct nir_if {
 typedef struct {
    nir_if *nif;
 
-   /** Instruction that generates nif::condition. */
+   /** Condition instruction that contains the induction variable */
    nir_instr *conditional_instr;
 
    /** Block within ::nif that has the break instruction. */

@@ -75,6 +75,9 @@ typedef struct {
     * them align with the `=` for instructions with destination.
     */
    unsigned padding_for_no_dest;
+
+   /* Set nir_instr::src_loc_index to the first character index. */
+   bool gather_src_locs;
 } print_state;
 
 static void
@@ -1952,9 +1955,13 @@ print_parallel_copy_instr(nir_parallel_copy_instr *instr, print_state *state)
 }
 
 static void
-print_instr(const nir_instr *instr, print_state *state, unsigned tabs)
+print_instr(nir_instr *instr, print_state *state, unsigned tabs)
 {
    FILE *fp = state->fp;
+
+   if (state->gather_src_locs)
+      instr->src_loc_index = ftell(fp);
+
    print_indentation(tabs, fp);
 
    switch (instr->type) {
@@ -2072,6 +2079,7 @@ static void
 print_block(nir_block *block, print_state *state, unsigned tabs)
 {
    FILE *fp = state->fp;
+   nir_shader *shader = state->shader;
 
    if (block_has_instruction_with_dest(block))
       state->padding_for_no_dest = calculate_padding_for_no_dest(state);
@@ -2099,9 +2107,29 @@ print_block(nir_block *block, print_state *state, unsigned tabs)
    print_block_preds(block, state);
    fprintf(fp, "\n");
 
+   uint32_t cur_src_loc_index = 0;
    nir_foreach_instr(instr, block) {
+      if (!state->gather_src_locs && shader->src_locs && cur_src_loc_index != instr->src_loc_index) {
+         print_indentation(tabs, fp);
+         fprintf(fp, "/* ");
+         if (instr->src_loc_index > 0) {
+            assert(instr->src_loc_index < shader->src_loc_count);
+            nir_src_loc src_loc = shader->src_locs[instr->src_loc_index];
+            fprintf(fp, "0x%zx ", src_loc.spirv_offset);
+            if (src_loc.file != NULL) {
+               fprintf(fp, "%s:%d:%d ", src_loc.file, src_loc.line, src_loc.col);
+            }
+         } else {
+            fprintf(fp, "no source location ");
+         }
+         fprintf(fp, "*/\n");
+
+         cur_src_loc_index = instr->src_loc_index;
+      }
+
       print_instr(instr, state, tabs);
       fprintf(fp, "\n");
+
       print_annotation(state, instr);
    }
 
@@ -2610,13 +2638,15 @@ print_shader_info(const struct shader_info *info, FILE *fp)
    }
 }
 
-void
-nir_print_shader_annotated(nir_shader *shader, FILE *fp,
-                           struct hash_table *annotations)
+static void
+_nir_print_shader_annotated(nir_shader *shader, FILE *fp,
+                            struct hash_table *annotations,
+                            bool gather_src_locs)
 {
    print_state state;
    init_print_state(&state, shader, fp);
    state.annotations = annotations;
+   state.gather_src_locs = gather_src_locs;
 
    print_shader_info(&shader->info, fp);
 
@@ -2658,21 +2688,29 @@ nir_print_shader_annotated(nir_shader *shader, FILE *fp,
 }
 
 void
+nir_print_shader_annotated(nir_shader *shader, FILE *fp,
+                           struct hash_table *annotations)
+{
+   _nir_print_shader_annotated(shader, fp, annotations, false);
+}
+
+void
 nir_print_shader(nir_shader *shader, FILE *fp)
 {
    nir_print_shader_annotated(shader, fp, NULL);
    fflush(fp);
 }
 
-char *
-nir_shader_as_str_annotated(nir_shader *nir, struct hash_table *annotations, void *mem_ctx)
+static char *
+_nir_shader_as_str_annotated(nir_shader *nir, struct hash_table *annotations, void *mem_ctx,
+                             bool gather_src_locs)
 {
    char *stream_data = NULL;
    size_t stream_size = 0;
    struct u_memstream mem;
    if (u_memstream_open(&mem, &stream_data, &stream_size)) {
       FILE *const stream = u_memstream_get(&mem);
-      nir_print_shader_annotated(nir, stream, annotations);
+      _nir_print_shader_annotated(nir, stream, annotations, gather_src_locs);
       u_memstream_close(&mem);
    }
 
@@ -2683,6 +2721,12 @@ nir_shader_as_str_annotated(nir_shader *nir, struct hash_table *annotations, voi
    free(stream_data);
 
    return str;
+}
+
+char *
+nir_shader_as_str_annotated(nir_shader *nir, struct hash_table *annotations, void *mem_ctx)
+{
+   return _nir_shader_as_str_annotated(nir, annotations, mem_ctx, false);
 }
 
 char *
@@ -2702,7 +2746,7 @@ nir_print_instr(const nir_instr *instr, FILE *fp)
       state.shader = impl->function->shader;
    }
 
-   print_instr(instr, &state, 0);
+   print_instr((nir_instr *)instr, &state, 0);
 }
 
 char *
@@ -2742,4 +2786,51 @@ nir_log_shader_annotated_tagged(enum mesa_log_level level, const char *tag,
    char *str = nir_shader_as_str_annotated(shader, annotations, NULL);
    _mesa_log_multiline(level, tag, str);
    ralloc_free(str);
+}
+
+char *
+nir_shader_gather_src_locs(nir_shader *shader, const char *_filename)
+{
+   if (shader->src_loc_count)
+      return NULL;
+
+   char *str = _nir_shader_as_str_annotated(shader, NULL, NULL, true);
+
+   const char *filename = ralloc_strdup(shader, _filename);
+
+   uint32_t line = 1;
+   uint32_t character_index = 0;
+   uint32_t src_loc_index = 1;
+
+   uint32_t src_loc_count = 1;
+   nir_foreach_function_impl(impl, shader)
+      nir_foreach_block(block, impl)
+         nir_foreach_instr(instr, block)
+            src_loc_count++;
+
+   nir_src_loc *src_locs = ralloc_array(shader, nir_src_loc, src_loc_count);
+
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            while (character_index < instr->src_loc_index) {
+               if (str[character_index] == '\n')
+                  line++;
+               character_index++;
+            }
+            nir_src_loc src_loc = {
+               .file = filename,
+               .line = line,
+            };
+            src_locs[src_loc_index] = src_loc;
+            instr->src_loc_index = src_loc_index;
+            src_loc_index++;
+         }
+      }
+   }
+
+   shader->src_locs = src_locs;
+   shader->src_loc_count = src_loc_count;
+
+   return str;
 }

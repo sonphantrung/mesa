@@ -79,6 +79,7 @@ static const struct debug_named_value lp_bld_debug_flags[] = {
 #if MESA_DEBUG
    { "dumpbc", GALLIVM_DEBUG_DUMP_BC, NULL },
 #endif
+   { "symbols", GALLIVM_DEBUG_SYMBOLS, NULL },
    DEBUG_NAMED_VALUE_END
 };
 
@@ -214,8 +215,11 @@ gallivm_free_ir(struct gallivm_state *gallivm)
 #endif
 
    if (gallivm->engine) {
-      /* This will already destroy any associated module */
-      LLVMDisposeExecutionEngine(gallivm->engine);
+      /* This will already destroy any associated module.
+       *Destroy the execution engine later if we need to keep debug info around.
+       */
+      if (!(gallivm_debug & GALLIVM_DEBUG_SYMBOLS))
+         LLVMDisposeExecutionEngine(gallivm->engine);
    } else if (gallivm->module) {
       LLVMDisposeModule(gallivm->module);
    }
@@ -225,6 +229,7 @@ gallivm_free_ir(struct gallivm_state *gallivm)
       free(gallivm->cache->data);
    }
    FREE(gallivm->module_name);
+   FREE(gallivm->file_name);
 
    if (gallivm->target) {
       LLVMDisposeTargetData(gallivm->target);
@@ -233,12 +238,16 @@ gallivm_free_ir(struct gallivm_state *gallivm)
    if (gallivm->builder)
       LLVMDisposeBuilder(gallivm->builder);
 
+   if (gallivm->di_builder)
+      LLVMDisposeDIBuilder(gallivm->di_builder);
+
    /* The LLVMContext should be owned by the parent of gallivm. */
 
    gallivm->engine = NULL;
    gallivm->target = NULL;
    gallivm->module = NULL;
    gallivm->module_name = NULL;
+   gallivm->file_name = NULL;
 #if GALLIVM_USE_NEW_PASS == 0
 #if GALLIVM_HAVE_CORO == 1
    gallivm->cgpassmgr = NULL;
@@ -411,6 +420,9 @@ init_gallivm_state(struct gallivm_state *gallivm, const char *name,
    if (!create_pass_manager(gallivm))
       goto fail;
 
+   if (gallivm_debug & GALLIVM_DEBUG_SYMBOLS)
+      gallivm->di_builder = LLVMCreateDIBuilder(gallivm->module);
+
    lp_build_coro_declare_malloc_hooks(gallivm);
    return true;
 
@@ -511,6 +523,8 @@ void
 gallivm_destroy(struct gallivm_state *gallivm)
 {
    gallivm_free_ir(gallivm);
+   if (gallivm->engine)
+      LLVMDisposeExecutionEngine(gallivm->engine);
    gallivm_free_code(gallivm);
    FREE(gallivm);
 }
@@ -565,6 +579,12 @@ gallivm_compile_module(struct gallivm_state *gallivm)
       gallivm->builder = NULL;
    }
 
+   if (gallivm->di_builder) {
+      LLVMDIBuilderFinalize(gallivm->di_builder);
+      LLVMDisposeDIBuilder(gallivm->di_builder);
+      gallivm->di_builder = NULL;
+   }
+
    LLVMSetDataLayout(gallivm->module, "");
    assert(!gallivm->engine);
    if (!init_gallivm_engine(gallivm)) {
@@ -608,16 +628,16 @@ gallivm_compile_module(struct gallivm_state *gallivm)
    LLVMPassBuilderOptionsRef opts = LLVMCreatePassBuilderOptions();
    LLVMRunPasses(gallivm->module, passes, LLVMGetExecutionEngineTargetMachine(gallivm->engine), opts);
 
-   if (!(gallivm_perf & GALLIVM_PERF_NO_OPT))
+   if (!(gallivm_perf & GALLIVM_PERF_NO_OPT) && !(gallivm_debug & GALLIVM_DEBUG_SYMBOLS)) {
 #if LLVM_VERSION_MAJOR >= 18
       strcpy(passes, "sroa,early-cse,simplifycfg,reassociate,mem2reg,instsimplify,instcombine<no-verify-fixpoint>");
 #else
       strcpy(passes, "sroa,early-cse,simplifycfg,reassociate,mem2reg,instsimplify,instcombine");
 #endif
-   else
-      strcpy(passes, "mem2reg");
 
-   LLVMRunPasses(gallivm->module, passes, LLVMGetExecutionEngineTargetMachine(gallivm->engine), opts);
+      LLVMRunPasses(gallivm->module, passes, LLVMGetExecutionEngineTargetMachine(gallivm->engine), opts);
+   }
+
    LLVMDisposePassBuilderOptions(opts);
 #else
 #if GALLIVM_HAVE_CORO == 1

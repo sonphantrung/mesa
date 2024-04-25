@@ -2998,7 +2998,7 @@ lower_to_hw_instr(Program* program)
             bld.insert(std::move(instr));
             if (emit_s_barrier)
                bld.sopp(aco_opcode::s_barrier);
-         } else if (instr->opcode == aco_opcode::p_cvt_f16_f32_rtne) {
+         } else if (instr->opcode == aco_opcode::v_cvt_f16_f32_rtne_pseudo) {
             float_mode new_mode = block->fp_mode;
             new_mode.round16_64 = fp_round_ne;
             bool set_round = new_mode.round != block->fp_mode.round;

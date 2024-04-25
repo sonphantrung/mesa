@@ -289,6 +289,19 @@ virtio_device_get_suspend_count(struct tu_device *dev, uint64_t *suspend_count)
    return ret;
 }
 
+
+static bool
+tu_drm_get_raytracing(struct vdrm_device *vdrm)
+{
+   uint64_t value;
+   int ret = tu_drm_get_param(vdrm, MSM_PARAM_RAYTRACING, &value);
+   if (ret)
+      return false;
+
+   return value;
+}
+
+
 static VkResult
 virtio_device_check_status(struct tu_device *device)
 {
@@ -1314,6 +1327,9 @@ tu_knl_drm_virtio_load(struct tu_instance *instance,
    device->has_cached_coherent_memory = caps.u.msm.has_cached_coherent;
 
    device->submitqueue_priority_count = caps.u.msm.priorities;
+
+   /* TODO add a cap for this */
+   device->has_raytracing = tu_drm_get_raytracing(device);
 
    device->syncobj_type = vk_drm_syncobj_get_type(fd);
    /* we don't support DRM_CAP_SYNCOBJ_TIMELINE, but drm-shim does */

@@ -2227,6 +2227,12 @@ optimizations.extend([
      'options->lower_pack_unorm_2x16'),
 
     (('pack_unorm_4x8', 'v'),
+     ('ior',
+      ('pack_unorm_2x16', ('fmul', ('fsat', ('vec2', 'v.x', 'v.z')), 255.0 / 65535.0)),
+      ('ishl', ('pack_unorm_2x16', ('fmul', ('fsat', ('vec2', 'v.y', 'v.w')), 255.0 / 65535.0)), 8)),
+     'options->lower_pack_unorm_4x8 && !options->lower_pack_unorm_2x16'),
+
+    (('pack_unorm_4x8', 'v'),
      ('pack_uvec4_to_uint',
         ('f2u32', ('fround_even', ('fmul', ('fsat', 'v'), 255.0)))),
      'options->lower_pack_unorm_4x8'),
@@ -2235,6 +2241,14 @@ optimizations.extend([
      ('pack_uvec2_to_uint',
         ('f2i32', ('fround_even', ('fmul', ('fmin', 1.0, ('fmax', -1.0, 'v')), 32767.0)))),
      'options->lower_pack_snorm_2x16'),
+
+    (('pack_snorm_4x8', 'v'),
+     ('bitfield_select', 0x00ff00ff,
+      ('pack_snorm_2x16', ('fmul', ('fmin', 1.0, ('fmax', -1.0, ('vec2', 'v.x', 'v.z'))),
+                           127.0 / 32767.0)),
+      ('ishl', ('pack_snorm_2x16', ('fmul', ('fmin', 1.0, ('fmax', -1.0, ('vec2', 'v.y', 'v.w'))),
+                                    127.0 / 32767.0)), 8)),
+     'options->lower_pack_snorm_4x8 && !options->lower_pack_snorm_2x16 && options->has_bitfield_select'),
 
     (('pack_snorm_4x8', 'v'),
      ('pack_uvec4_to_uint',

@@ -3204,31 +3204,7 @@ anv_device_finish_trtt(struct anv_device *device)
 {
    struct anv_trtt *trtt = &device->trtt;
 
-   if (trtt->timeline_val > 0) {
-      struct drm_syncobj_timeline_wait wait = {
-         .handles = (uintptr_t)&trtt->timeline_handle,
-         .points = (uintptr_t)&trtt->timeline_val,
-         .timeout_nsec = INT64_MAX,
-         .count_handles = 1,
-         .flags = DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL,
-         .first_signaled = false,
-      };
-      if (intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT, &wait))
-         fprintf(stderr, "TR-TT syncobj wait failed!\n");
-
-      list_for_each_entry_safe(struct anv_trtt_batch_bo, trtt_bbo,
-                               &trtt->in_flight_batches, link)
-         anv_trtt_batch_bo_free(device, trtt_bbo);
-
-   }
-
-   if (trtt->timeline_handle > 0) {
-      struct drm_syncobj_destroy destroy = {
-         .handle = trtt->timeline_handle,
-      };
-      if (intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_DESTROY, &destroy))
-         fprintf(stderr, "TR-TT syncobj destroy failed!\n");
-   }
+   anv_sparse_trtt_garbage_collect_batches(device, true);
 
    simple_mtx_destroy(&trtt->mutex);
 
@@ -4027,6 +4003,7 @@ void anv_DestroyDevice(
 
    struct anv_physical_device *pdevice = device->physical;
 
+   /* Do TRTT batch garbage collection before destroying queues. */
    anv_device_finish_trtt(device);
 
    for (uint32_t i = 0; i < device->queue_count; i++)

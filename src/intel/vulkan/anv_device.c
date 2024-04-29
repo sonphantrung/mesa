@@ -3351,21 +3351,6 @@ VkResult anv_CreateDevice(
       goto fail_context_id;
    }
 
-   device->queue_count = 0;
-   for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
-      const VkDeviceQueueCreateInfo *queueCreateInfo =
-         &pCreateInfo->pQueueCreateInfos[i];
-
-      for (uint32_t j = 0; j < queueCreateInfo->queueCount; j++) {
-         result = anv_queue_init(device, &device->queues[device->queue_count],
-                                 queueCreateInfo, j);
-         if (result != VK_SUCCESS)
-            goto fail_queues;
-
-         device->queue_count++;
-      }
-   }
-
    if (pthread_mutex_init(&device->vma_mutex, NULL) != 0) {
       result = vk_error(device, VK_ERROR_INITIALIZATION_FAILED);
       goto fail_queues;
@@ -3878,6 +3863,21 @@ VkResult anv_CreateDevice(
    if (device->info->ver > 9)
       BITSET_CLEAR(device->gfx_dirty_state, ANV_GFX_STATE_PMA_FIX);
 
+   device->queue_count = 0;
+   for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
+      const VkDeviceQueueCreateInfo *queueCreateInfo =
+         &pCreateInfo->pQueueCreateInfos[i];
+
+      for (uint32_t j = 0; j < queueCreateInfo->queueCount; j++) {
+         result = anv_queue_init(device, &device->queues[device->queue_count],
+                                 queueCreateInfo, j);
+         if (result != VK_SUCCESS)
+            goto fail_companion_cmd_pool;
+
+         device->queue_count++;
+      }
+   }
+
    result = anv_genX(device->info, init_device_state)(device);
    if (result != VK_SUCCESS)
       goto fail_companion_cmd_pool;
@@ -3888,6 +3888,8 @@ VkResult anv_CreateDevice(
 
  fail_companion_cmd_pool:
    anv_device_finish_trtt(device);
+   for (uint32_t i = 0; i < device->queue_count; i++)
+      anv_queue_finish(&device->queues[i]);
    anv_device_finish_embedded_samplers(device);
    anv_device_utrace_finish(device);
    anv_device_finish_blorp(device);
@@ -3975,8 +3977,6 @@ VkResult anv_CreateDevice(
    util_vma_heap_finish(&device->vma_lo);
    pthread_mutex_destroy(&device->vma_mutex);
  fail_queues:
-   for (uint32_t i = 0; i < device->queue_count; i++)
-      anv_queue_finish(&device->queues[i]);
    vk_free(&device->vk.alloc, device->queues);
  fail_context_id:
    anv_device_destroy_context_or_vm(device);

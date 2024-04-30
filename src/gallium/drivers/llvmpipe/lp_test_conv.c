@@ -157,7 +157,11 @@ test_one(unsigned verbose,
          struct lp_type src_type,
          struct lp_type dst_type)
 {
+#if GALLIVM_USE_ORCJIT == 1
+   LLVMOrcThreadSafeContextRef context;
+#else
    LLVMContextRef context;
+#endif
    struct gallivm_state *gallivm;
    LLVMValueRef func = NULL;
    conv_test_ptr_t conv_test_ptr;
@@ -222,9 +226,16 @@ test_one(unsigned verbose,
       eps *= 2;
    }
 
+#if GALLIVM_USE_ORCJIT == 1
+   context = LLVMOrcCreateNewThreadSafeContext();
+#if LLVM_VERSION_MAJOR == 15
+   LLVMContextSetOpaquePointers(LLVMOrcThreadSafeContextGetContext(context), false);
+#endif
+#else
    context = LLVMContextCreate();
 #if LLVM_VERSION_MAJOR == 15
    LLVMContextSetOpaquePointers(context, false);
+#endif
 #endif
    gallivm = gallivm_create("test_module", context, NULL);
 
@@ -232,7 +243,8 @@ test_one(unsigned verbose,
 
    gallivm_compile_module(gallivm);
 
-   conv_test_ptr = (conv_test_ptr_t)gallivm_jit_function(gallivm, func);
+   conv_test_ptr = (conv_test_ptr_t)gallivm_jit_function(gallivm, func, 
+                                                         "test");
 
    gallivm_free_ir(gallivm);
 
@@ -337,7 +349,11 @@ test_one(unsigned verbose,
       write_tsv_row(fp, src_type, dst_type, cycles_avg, success);
 
    gallivm_destroy(gallivm);
+#if GALLIVM_USE_ORCJIT == 1
+   LLVMOrcDisposeThreadSafeContext(context);
+#else
    LLVMContextDispose(context);
+#endif
 
    return success;
 }

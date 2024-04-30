@@ -135,7 +135,7 @@ radv_probe_video_encode(struct radv_physical_device *pdev)
    }
 
    struct radv_instance *instance = radv_physical_device_instance(pdev);
-   pdev->video_encode_enabled = !!(instance->perftest_flags & RADV_PERFTEST_VIDEO_ENCODE);
+   pdev->video_encode_enabled = !(instance->debug_flags & RADV_DEBUG_NO_VIDEO);
 }
 
 void

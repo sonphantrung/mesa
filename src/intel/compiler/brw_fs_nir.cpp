@@ -4573,6 +4573,15 @@ try_rebuild_resource(nir_to_brw_state &ntb, const brw::fs_builder &bld, nir_def 
             return src;
          }
 
+         case nir_intrinsic_load_driver_uniform_intel: {
+            unsigned base_offset = nir_intrinsic_base(intrin);
+            unsigned load_offset = nir_src_as_uint(intrin->src[0]);
+            return ntb.s.uniform_reg(BRW_UBO_RANGE_DRIVER_INTERNAL,
+                                     base_offset + load_offset,
+                                     nir_intrinsic_range(intrin),
+                                     BRW_TYPE_UD);
+         }
+
          default:
             /* Execute the code below, since we have to generate new
              * instructions.
@@ -4681,6 +4690,19 @@ try_rebuild_resource(nir_to_brw_state &ntb, const brw::fs_builder &bld, nir_def 
             unsigned load_offset = nir_src_as_uint(intrin->src[0]);
             fs_reg src = ntb.s.uniform_reg(BRW_UBO_RANGE_PUSH_CONSTANT,
                                            load_offset + base_offset, 4,
+                                           BRW_TYPE_UD);
+            ubld8.MOV(src, &ntb.resource_insts[def->index]);
+            break;
+         }
+
+         case nir_intrinsic_load_driver_uniform_intel: {
+            if (!nir_src_is_const(intrin->src[0]))
+               break;
+
+            unsigned base_offset = nir_intrinsic_base(intrin);
+            unsigned load_offset = nir_src_as_uint(intrin->src[0]);
+            fs_reg src = ntb.s.uniform_reg(BRW_UBO_RANGE_DRIVER_INTERNAL,
+                                           base_offset + load_offset, 4,
                                            BRW_TYPE_UD);
             ubld8.MOV(src, &ntb.resource_insts[def->index]);
             break;
@@ -6067,17 +6089,21 @@ fs_nir_emit_intrinsic(nir_to_brw_state &ntb,
       break;
    }
 
-   case nir_intrinsic_load_uniform: {
+   case nir_intrinsic_load_uniform:
+   case nir_intrinsic_load_driver_uniform_intel: {
       /* Offsets are in bytes but they should always aligned to
        * the type size
        */
       unsigned base_offset = nir_intrinsic_base(instr);
       assert(base_offset % 4 == 0 || base_offset % brw_type_size_bytes(dest.type) == 0);
 
-      fs_reg src = s.uniform_reg(BRW_UBO_RANGE_PUSH_CONSTANT,
-                                 base_offset,
-                                 nir_intrinsic_range(instr),
-                                 dest.type);
+      fs_reg src = s.uniform_reg(
+         instr->intrinsic == nir_intrinsic_load_uniform ?
+         BRW_UBO_RANGE_PUSH_CONSTANT :
+         BRW_UBO_RANGE_DRIVER_INTERNAL,
+         base_offset,
+         nir_intrinsic_range(instr),
+         dest.type);
       assert(src.file != BAD_FILE);
 
       if (nir_src_is_const(instr->src[0])) {

@@ -192,6 +192,27 @@ brw_shader_stage_push_constant_alignment(const struct intel_device_info *devinfo
    return 32;
 }
 
+static inline uint32_t
+brw_shader_stage_driver_constant_alignment(const struct intel_device_info *devinfo,
+                                           gl_shader_stage stage)
+{
+   if (devinfo->verx10 >= 125) {
+      /* Requirement from COMPUTE_WALKER, 3DSTATE_MESH_SHADER_DATA &
+       * 3DSTATE_TASK_SHADER_DATA
+       */
+      if (gl_shader_stage_is_compute(stage) ||
+          gl_shader_stage_is_mesh(stage))
+         return 64;
+
+      /* We're using A64 message with an 128B offset from the base pointer. */
+      if (gl_shader_stage_is_rt(stage))
+         return 64;
+   }
+
+   /* Requirements from 3DSTATE_CONSTANT_* instructions */
+   return 32;
+}
+
 /**
  * Program key structures.
  *
@@ -404,6 +425,7 @@ PRAGMA_DIAGNOSTIC_POP
 
 /** Indicates that the range is pointing at driver internal push constants. */
 #define BRW_UBO_RANGE_PUSH_CONSTANT   (UINT16_MAX - 0)
+#define BRW_UBO_RANGE_DRIVER_INTERNAL (UINT16_MAX - 1)
 
 struct brw_ubo_range
 {

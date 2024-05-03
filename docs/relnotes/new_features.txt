@@ -1,3 +1,4 @@
 VK_KHR_dynamic_rendering_local_read on RADV
 VK_EXT_legacy_vertex_attributes on lavapipe
 VK_EXT_queue_family_foreign on NVK
+VK_EXT_image_drm_format_modifier on NVK

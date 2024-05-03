@@ -200,6 +200,10 @@ subdir('layers')
 radv_deps = []
 radv_flags = cc.get_supported_arguments(['-Wimplicit-fallthrough', '-Wshadow'])
 
+if with_amdgpu_virtio
+  radv_flags += '-DHAVE_AMDGPU_VIRTIO'
+endif
+
 if with_platform_x11
   radv_deps += dep_xcb_dri3
 endif
@@ -226,7 +230,8 @@ libvulkan_radeon = shared_library(
   [libradv_files, radv_entrypoints, sha1_h, radix_sort_spv, bvh_spv, radv_annotate_layer],
   vs_module_defs : vulkan_api_def,
   include_directories : [
-    inc_include, inc_src, inc_amd, inc_amd_common, inc_amd_common_llvm, inc_util,
+    inc_include, inc_src, inc_amd, inc_amd_common, inc_amd_common_llvm,
+    inc_util, inc_virtio_gpu
   ],
   link_with : [
     libamd_common, libamd_common_llvm, libamdgpu_addrlib,

@@ -694,6 +694,12 @@ lower_ucp_vs(struct ir3_shader_variant *so)
    return so->type == last_geom_stage;
 }
 
+static bool
+atomic_64b_supported(const nir_instr * instr, const void * data) {
+   /* No atomic 64b arithmetic is supported in A7XX so far */
+   return false;
+}
+
 void
 ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
 {
@@ -774,6 +780,7 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
 
    /* Lower scratch writemasks */
    progress |= OPT(s, nir_lower_wrmasks, should_split_wrmask, s);
+   progress |= OPT(s, nir_emulate_64b_atomics, atomic_64b_supported);
 
    if (OPT(s, nir_lower_locals_to_regs, 1)) {
       progress = true;

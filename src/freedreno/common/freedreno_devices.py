@@ -803,6 +803,7 @@ a7xx_740 = A7XXProps(
         stsc_duplication_quirk = True,
         has_event_write_sample_count = True,
         ubwc_unorm_snorm_int_compatible = True,
+        has_64b_ssbo_atomics = True,
     )
 
 a7xx_750 = A7XXProps(
@@ -813,6 +814,7 @@ a7xx_750 = A7XXProps(
         sysmem_vpc_attr_buf_size = 0x20000,
         gmem_vpc_attr_buf_size = 0xc000,
         ubwc_unorm_snorm_int_compatible = True,
+        has_64b_ssbo_atomics = True,
     )
 
 a730_magic_regs = dict(

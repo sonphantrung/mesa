@@ -3189,17 +3189,14 @@ anv_device_destroy_context_or_vm(struct anv_device *device)
    }
 }
 
-static VkResult
+static void
 anv_device_init_trtt(struct anv_device *device)
 {
    struct anv_trtt *trtt = &device->trtt;
 
-   if (pthread_mutex_init(&trtt->mutex, NULL) != 0)
-      return vk_error(device, VK_ERROR_INITIALIZATION_FAILED);
+   simple_mtx_init(&trtt->mutex, mtx_plain);
 
    list_inithead(&trtt->in_flight_batches);
-
-   return VK_SUCCESS;
 }
 
 static void
@@ -3233,7 +3230,7 @@ anv_device_finish_trtt(struct anv_device *device)
          fprintf(stderr, "TR-TT syncobj destroy failed!\n");
    }
 
-   pthread_mutex_destroy(&trtt->mutex);
+   simple_mtx_destroy(&trtt->mutex);
 
    vk_free(&device->vk.alloc, trtt->l3_mirror);
    vk_free(&device->vk.alloc, trtt->l2_mirror);
@@ -3792,16 +3789,12 @@ VkResult anv_CreateDevice(
          goto fail_trivial_batch_bo_and_scratch_pool;
    }
 
-   result = anv_device_init_trtt(device);
-   if (result != VK_SUCCESS)
-      goto fail_btd_fifo_bo;
-
    struct vk_pipeline_cache_create_info pcc_info = { };
    device->default_pipeline_cache =
       vk_pipeline_cache_create(&device->vk, &pcc_info, NULL);
    if (!device->default_pipeline_cache) {
       result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-      goto fail_trtt;
+      goto fail_btd_fifo_bo;
    }
 
    /* Internal shaders need their own pipeline cache because, unlike the rest
@@ -3876,6 +3869,8 @@ VkResult anv_CreateDevice(
 
    anv_device_init_embedded_samplers(device);
 
+   anv_device_init_trtt(device);
+
    BITSET_ONES(device->gfx_dirty_state);
    BITSET_CLEAR(device->gfx_dirty_state, ANV_GFX_STATE_INDEX_BUFFER);
    BITSET_CLEAR(device->gfx_dirty_state, ANV_GFX_STATE_SO_DECL_LIST);
@@ -3913,6 +3908,7 @@ VkResult anv_CreateDevice(
    return VK_SUCCESS;
 
  fail_companion_cmd_pool:
+   anv_device_finish_trtt(device);
    anv_device_finish_embedded_samplers(device);
    anv_device_utrace_finish(device);
    anv_device_finish_blorp(device);
@@ -3931,8 +3927,6 @@ VkResult anv_CreateDevice(
    vk_pipeline_cache_destroy(device->internal_cache, NULL);
  fail_default_pipeline_cache:
    vk_pipeline_cache_destroy(device->default_pipeline_cache, NULL);
- fail_trtt:
-   anv_device_finish_trtt(device);
  fail_btd_fifo_bo:
    if (ANV_SUPPORT_RT && device->info->has_ray_tracing)
       anv_device_release_bo(device, device->btd_fifo_bo);
@@ -4033,6 +4027,8 @@ void anv_DestroyDevice(
 
    struct anv_physical_device *pdevice = device->physical;
 
+   anv_device_finish_trtt(device);
+
    for (uint32_t i = 0; i < device->queue_count; i++)
       anv_queue_finish(&device->queues[i]);
    vk_free(&device->vk.alloc, device->queues);
@@ -4054,8 +4050,6 @@ void anv_DestroyDevice(
    vk_pipeline_cache_destroy(device->default_pipeline_cache, NULL);
 
    anv_device_finish_embedded_samplers(device);
-
-   anv_device_finish_trtt(device);
 
    if (ANV_SUPPORT_RT && device->info->has_ray_tracing)
       anv_device_release_bo(device, device->btd_fifo_bo);

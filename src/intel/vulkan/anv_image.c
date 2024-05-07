@@ -2053,13 +2053,18 @@ anv_image_get_memory_requirements(struct anv_device *device,
     * So for Images is up to applications to choose a memory type that matches
     * VK_IMAGE_CREATE_PROTECTED_BIT value.
     */
-   uint32_t memory_types;
+   uint32_t memory_types = device->physical->memory.protected_mem_types |
+                           device->physical->memory.default_buffer_mem_types;
 
+   /* Compressed memory types are not CPU visible and Vulkan specification
+    * don't have any requirement about that but some applications fails to
+    * run without a host visible option, so here appending
+    * default_buffer_mem_types and compressed_mem_types.
+    * To increase memory compression usage the compressed memory type should
+    * be the first ones.
+    */
    if (anv_image_supports_pat_compression(device, image))
-      memory_types = device->physical->memory.compressed_mem_types;
-   else
-      memory_types = device->physical->memory.protected_mem_types |
-                     device->physical->memory.default_buffer_mem_types;
+      memory_types |= device->physical->memory.compressed_mem_types;
 
    vk_foreach_struct(ext, pMemoryRequirements->pNext) {
       switch (ext->sType) {

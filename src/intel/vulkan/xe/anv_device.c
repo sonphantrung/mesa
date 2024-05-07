@@ -99,6 +99,7 @@ anv_xe_physical_device_init_memory_types(struct anv_physical_device *device)
 {
    if (anv_physical_device_has_vram(device)) {
       if (device->info.ver >= 20) {
+         /* needs to be this first one to increase compressed memory usage */
          device->memory.types[device->memory.type_count++] = (struct anv_memory_type) {
             .propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             .heapIndex = 0,
@@ -149,6 +150,7 @@ anv_xe_physical_device_init_memory_types(struct anv_physical_device *device)
       };
    } else {
       if (device->info.ver >= 20) {
+         /* needs to be this first one to increase compressed memory usage */
          device->memory.types[device->memory.type_count++] = (struct anv_memory_type) {
             .propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             .heapIndex = 0,

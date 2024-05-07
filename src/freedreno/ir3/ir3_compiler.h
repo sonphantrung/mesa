@@ -276,6 +276,13 @@ struct ir3_compiler {
     * register.
     */
    bool has_scalar_alu;
+
+   /* On all generations that support scalar ALU, there is also a copy of the
+    * scalar ALU and some other HW units in HLSQ that can execute preambles
+    * before work is dispatched to the SPs, called "early preamble". We detect
+    * whether the shader can use early preamble in ir3.
+    */
+   bool has_early_preamble;
 };
 
 void ir3_compiler_destroy(struct ir3_compiler *compiler);
@@ -328,6 +335,7 @@ enum ir3_shader_debug {
    IR3_DBG_SHADER_INTERNAL = BITFIELD_BIT(14),
    IR3_DBG_FULLSYNC = BITFIELD_BIT(15),
    IR3_DBG_FULLNOP = BITFIELD_BIT(16),
+   IR3_DBG_NOEARLYPREAMBLE = BITFIELD_BIT(17),
 
    /* MESA_DEBUG-only options: */
    IR3_DBG_SCHEDMSGS = BITFIELD_BIT(20),

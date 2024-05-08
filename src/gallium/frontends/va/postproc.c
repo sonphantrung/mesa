@@ -78,8 +78,24 @@ vlVaPostProcCompositor(vlVaDriver *drv, vlVaContext *context,
    dst_rect.y1 = dst_region->y + dst_region->height;
 
    vl_compositor_clear_layers(&drv->cstate);
-   vl_compositor_set_buffer_layer(&drv->cstate, &drv->compositor, 0, src,
-				  &src_rect, NULL, deinterlace);
+
+   if (src->buffer_format == PIPE_FORMAT_B8G8R8X8_UNORM ||
+       src->buffer_format == PIPE_FORMAT_B8G8R8A8_UNORM ||
+       src->buffer_format == PIPE_FORMAT_R8G8B8X8_UNORM ||
+       src->buffer_format == PIPE_FORMAT_R8G8B8A8_UNORM ||
+       src->buffer_format == PIPE_FORMAT_B10G10R10X2_UNORM ||
+       src->buffer_format == PIPE_FORMAT_B10G10R10A2_UNORM ||
+       src->buffer_format == PIPE_FORMAT_R10G10B10X2_UNORM ||
+       src->buffer_format == PIPE_FORMAT_R10G10B10A2_UNORM) {
+      struct pipe_sampler_view **views;
+
+      views = src->get_sampler_view_planes(src);
+      vl_compositor_set_rgba_layer(&drv->cstate, &drv->compositor, 0, views[0],
+                                   &src_rect, NULL, NULL);
+   } else
+      vl_compositor_set_buffer_layer(&drv->cstate, &drv->compositor, 0, src,
+                                     &src_rect, NULL, deinterlace);
+
    vl_compositor_set_layer_dst_area(&drv->cstate, 0, &dst_rect);
    vl_compositor_render(&drv->cstate, &drv->compositor, surfaces[0], NULL, false);
 
@@ -352,7 +368,11 @@ static VAStatus vlVaPostProcBlit(vlVaDriver *drv, vlVaContext *context,
    if ((src->buffer_format == PIPE_FORMAT_B8G8R8X8_UNORM ||
         src->buffer_format == PIPE_FORMAT_B8G8R8A8_UNORM ||
         src->buffer_format == PIPE_FORMAT_R8G8B8X8_UNORM ||
-        src->buffer_format == PIPE_FORMAT_R8G8B8A8_UNORM) &&
+        src->buffer_format == PIPE_FORMAT_R8G8B8A8_UNORM ||
+        src->buffer_format == PIPE_FORMAT_B10G10R10X2_UNORM ||
+        src->buffer_format == PIPE_FORMAT_B10G10R10A2_UNORM ||
+        src->buffer_format == PIPE_FORMAT_R10G10B10X2_UNORM ||
+        src->buffer_format == PIPE_FORMAT_R10G10B10A2_UNORM) &&
        !src->interlaced)
       grab = true;
 

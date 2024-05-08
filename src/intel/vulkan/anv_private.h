@@ -2964,6 +2964,7 @@ anv_descriptor_set_write_template(struct anv_device *device,
                                   const struct vk_descriptor_update_template *template,
                                   const void *data);
 
+#define ANV_DESCRIPTOR_SET_DRIVER_CONSTANTS   (UINT8_MAX - 6)
 #define ANV_DESCRIPTOR_SET_DESCRIPTORS_BUFFER (UINT8_MAX - 5)
 #define ANV_DESCRIPTOR_SET_NULL               (UINT8_MAX - 4)
 #define ANV_DESCRIPTOR_SET_PUSH_CONSTANTS     (UINT8_MAX - 3)
@@ -3656,8 +3657,11 @@ struct anv_cmd_pipeline_state {
    /** Tracks whether the driver constant data has changed and need to be reemitted */
    bool                                         driver_constants_data_dirty;
 
-   /* Push constant state allocated when flushing push constants. */
+   /** Push constant state allocated when flushing push constants. */
    struct anv_state                             push_constants_state;
+
+   /** Driver constant state allocated when flushing driver constants. */
+   struct anv_state                             driver_constants_state;
 
    /**
     * Dynamic buffer offsets.
@@ -4278,9 +4282,14 @@ anv_cmd_buffer_new_binding_table_block(struct anv_cmd_buffer *cmd_buffer);
 void anv_cmd_buffer_emit_bt_pool_base_address(struct anv_cmd_buffer *cmd_buffer);
 
 struct anv_state
-anv_cmd_buffer_gfx_push_constants(struct anv_cmd_buffer *cmd_buffer);
+anv_cmd_buffer_push_constants(struct anv_cmd_buffer *cmd_buffer,
+                              struct anv_cmd_pipeline_state *pipe_state,
+                              uint32_t alignment);
 struct anv_state
-anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer);
+anv_cmd_buffer_combined_push_constants(struct anv_cmd_buffer *cmd_buffer);
+struct anv_state
+anv_cmd_buffer_driver_constants(struct anv_cmd_buffer *cmd_buffer,
+                                struct anv_cmd_pipeline_state *pipe_state);
 
 VkResult
 anv_cmd_buffer_alloc_blorp_binding_table(struct anv_cmd_buffer *cmd_buffer,
@@ -4383,6 +4392,22 @@ struct anv_pipeline_bind_map {
 
    struct anv_push_range                        push_ranges[4];
 };
+
+static inline const struct anv_push_range *
+anv_pipeline_bind_map_get_push_constant_range(const struct anv_pipeline_bind_map *bind_map)
+{
+   return bind_map->push_ranges[0].set == ANV_DESCRIPTOR_SET_PUSH_CONSTANTS ?
+          &bind_map->push_ranges[0] : NULL;
+}
+
+static inline const struct anv_push_range *
+anv_pipeline_bind_map_get_driver_constant_range(const struct anv_pipeline_bind_map *bind_map)
+{
+   return bind_map->push_ranges[0].set == ANV_DESCRIPTOR_SET_DRIVER_CONSTANTS ?
+          &bind_map->push_ranges[0] :
+          bind_map->push_ranges[1].set == ANV_DESCRIPTOR_SET_DRIVER_CONSTANTS ?
+          &bind_map->push_ranges[1] : NULL;
+}
 
 struct anv_push_descriptor_info {
    /* A bitfield of descriptors used. */

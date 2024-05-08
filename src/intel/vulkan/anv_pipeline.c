@@ -862,7 +862,7 @@ anv_nir_compute_dynamic_push_bits(nir_shader *shader)
                continue;
 
             nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-            if (intrin->intrinsic != nir_intrinsic_load_push_constant)
+            if (intrin->intrinsic != nir_intrinsic_load_driver_uniform_intel)
                continue;
 
             switch (nir_intrinsic_base(intrin)) {

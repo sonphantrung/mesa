@@ -1200,37 +1200,58 @@ anv_cmd_buffer_merge_dynamic(struct anv_cmd_buffer *cmd_buffer,
    return state;
 }
 
+/* Allocate only application push constants */
 struct anv_state
-anv_cmd_buffer_gfx_push_constants(struct anv_cmd_buffer *cmd_buffer)
+anv_cmd_buffer_push_constants(struct anv_cmd_buffer *cmd_buffer,
+                              struct anv_cmd_pipeline_state *pipe_state,
+                              uint32_t alignment)
 {
-   struct anv_cmd_pipeline_state *pipe_state = &cmd_buffer->state.gfx.base;
-
    struct anv_state state =
       anv_cmd_buffer_alloc_temporary_state(cmd_buffer,
-                                           sizeof(pipe_state->push_constants) +
-                                           sizeof(pipe_state->driver_constants),
-                                           32 /* bottom 5 bits MBZ */);
+                                           sizeof(pipe_state->push_constants),
+                                           alignment);
    if (state.alloc_size == 0)
       return state;
 
-   /* Copy the application push constants and the driver constants behind
-    * it.
-    */
    memcpy(state.map, pipe_state->push_constants,
           sizeof(pipe_state->push_constants));
-   memcpy(state.map + sizeof(pipe_state->push_constants),
-          &pipe_state->driver_constants,
-          sizeof(pipe_state->driver_constants));
 
    return state;
 }
 
+static void *
+copy_combined_constant(void *dst, struct anv_cmd_pipeline_state *pipe_state,
+                       uint32_t offset_B, uint32_t length_B)
+{
+   uint32_t push_offset_B = offset_B;
+   uint32_t push_length_B = offset_B < sizeof(pipe_state->push_constants) ?
+      MIN2(sizeof(pipe_state->push_constants) - offset_B, length_B) : 0;
+   if (push_length_B > 0) {
+      const uint8_t *src = pipe_state->push_constants + push_offset_B;
+      memcpy(dst, src, push_length_B);
+      dst += push_length_B;
+   }
+   uint32_t driver_offset_B =
+      MAX2(offset_B, sizeof(pipe_state->push_constants)) -
+      sizeof(pipe_state->push_constants);
+   uint32_t driver_length_B =
+      (offset_B + length_B) <= sizeof(pipe_state->push_constants) ?
+      0 : (length_B - push_length_B);
+   if (driver_length_B > 0) {
+      const uint8_t *src = ((const uint8_t *) &pipe_state->driver_constants) + driver_offset_B;
+      memcpy(dst, src, driver_length_B);
+      dst += driver_length_B;
+   }
+
+   return dst;
+}
+
+/* Allocate push & driver constants combined */
 struct anv_state
-anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
+anv_cmd_buffer_combined_push_constants(struct anv_cmd_buffer *cmd_buffer)
 {
    const struct intel_device_info *devinfo = cmd_buffer->device->info;
    struct anv_cmd_pipeline_state *pipe_state = &cmd_buffer->state.compute.base;
-   const uint8_t *data = pipe_state->push_constants;
    struct anv_compute_pipeline *pipeline =
       anv_pipeline_to_compute(cmd_buffer->state.compute.base.pipeline);
    const struct brw_cs_prog_data *cs_prog_data = get_cs_prog_data(pipeline);
@@ -1260,17 +1281,18 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
       return state;
 
    void *dst = state.map;
-   const void *src = (char *)data + range->start_B;
+   uint32_t src_offset_B = range->start_B;
 
    if (cs_prog_data->push.cross_thread.size > 0) {
-      memcpy(dst, src, cs_prog_data->push.cross_thread.size);
-      dst += cs_prog_data->push.cross_thread.size;
-      src += cs_prog_data->push.cross_thread.size;
+      dst = copy_combined_constant(dst, pipe_state, src_offset_B,
+                                   cs_prog_data->push.cross_thread.size);
+      src_offset_B += cs_prog_data->push.cross_thread.size;
    }
 
    if (cs_prog_data->push.per_thread.size > 0) {
       for (unsigned t = 0; t < dispatch.threads; t++) {
-         memcpy(dst, src, cs_prog_data->push.per_thread.size);
+         copy_combined_constant(dst, pipe_state, src_offset_B,
+                                cs_prog_data->push.per_thread.size);
 
          uint32_t *subgroup_id = dst +
             (sizeof(pipe_state->push_constants) +
@@ -1281,6 +1303,34 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
          dst += cs_prog_data->push.per_thread.size;
       }
    }
+
+   return state;
+}
+
+/* Allocate only driver push constants */
+struct anv_state
+anv_cmd_buffer_driver_constants(struct anv_cmd_buffer *cmd_buffer,
+                                struct anv_cmd_pipeline_state *pipe_state)
+{
+   /* This function should only be called in the following cases :
+    *
+    *    - on Gfx12.0 and prior, for graphics stages only, where the alignment
+    *      requirement is 32bytes (3DSTATE_CONSTANT_*)
+    *
+    *    - on Gfx12.5+ for all stages except RT, where the maximum alignment
+    *      requirement is 64bytes for COMPUTE_WALKER, 3DSTATE_MESH_SHADER_DATA
+    *      & 3DSTATE_TASK_SHADER_DATA
+    */
+   const uint32_t alignment = cmd_buffer->device->info->verx10 >= 125 ? 64 : 32;
+   struct anv_state state =
+      anv_state_stream_alloc(&cmd_buffer->general_state_stream,
+                             align(sizeof(pipe_state->driver_constants), alignment),
+                             alignment);
+   if (state.map == NULL)
+      return state;
+
+   memcpy(state.map, &pipe_state->driver_constants,
+          sizeof(pipe_state->driver_constants));
 
    return state;
 }

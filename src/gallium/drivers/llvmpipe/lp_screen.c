@@ -598,7 +598,7 @@ static void
 llvmpipe_get_device_uuid(struct pipe_screen *pscreen, char *uuid)
 {
    memset(uuid, 0, PIPE_UUID_SIZE);
-   snprintf(uuid, PIPE_UUID_SIZE, "mesa" PACKAGE_VERSION);
+   strncpy(uuid, "mesa" PACKAGE_VERSION, PIPE_UUID_SIZE);
 }
 
 

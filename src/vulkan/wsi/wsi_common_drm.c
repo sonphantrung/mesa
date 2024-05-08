@@ -836,22 +836,17 @@ wsi_drm_configure_image(const struct wsi_swapchain *chain,
 
 enum wsi_explicit_sync_state_flags
 {
-   WSI_ES_STATE_RELEASE_MATERIALIZED = (1u << 0),
-   WSI_ES_STATE_RELEASE_SIGNALLED    = (1u << 1),
-   WSI_ES_STATE_ACQUIRE_SIGNALLED    = (1u << 2),
+   WSI_ES_STATE_RELEASE_SIGNALLED    = (1u << 0),
+   WSI_ES_STATE_ACQUIRE_SIGNALLED    = (1u << 1),
 };
 
 /* Levels of "freeness"
  * 0 -> Acquire Signalled + Release Signalled
  * 1 -> Release Signalled
- * 2 -> Acquire Signalled + Release Materialized
- * 3 -> Release Materialized
  */
 static const uint32_t wsi_explicit_sync_free_levels[] = {
-   (WSI_ES_STATE_RELEASE_SIGNALLED | WSI_ES_STATE_RELEASE_MATERIALIZED | WSI_ES_STATE_ACQUIRE_SIGNALLED),
-   (WSI_ES_STATE_RELEASE_MATERIALIZED | WSI_ES_STATE_RELEASE_SIGNALLED),
-   (WSI_ES_STATE_RELEASE_MATERIALIZED | WSI_ES_STATE_ACQUIRE_SIGNALLED),
-   (WSI_ES_STATE_RELEASE_MATERIALIZED),
+   WSI_ES_STATE_RELEASE_SIGNALLED | WSI_ES_STATE_ACQUIRE_SIGNALLED,
+   WSI_ES_STATE_RELEASE_SIGNALLED,
 };
 
 static void
@@ -868,7 +863,7 @@ wsi_drm_images_explicit_sync_state(struct vk_device *device, int count, uint32_t
          /* This image has never been used in a timeline.
           * It must be free.
           */
-         flags[i] = WSI_ES_STATE_RELEASE_SIGNALLED | WSI_ES_STATE_RELEASE_MATERIALIZED | WSI_ES_STATE_ACQUIRE_SIGNALLED;
+         flags[i] = WSI_ES_STATE_RELEASE_SIGNALLED | WSI_ES_STATE_ACQUIRE_SIGNALLED;
          return;
       }
    }
@@ -896,14 +891,7 @@ wsi_drm_images_explicit_sync_state(struct vk_device *device, int count, uint32_t
          flags[i] |= WSI_ES_STATE_ACQUIRE_SIGNALLED;
 
       if (points[i * WSI_ES_COUNT + WSI_ES_RELEASE] >= image->explicit_sync[WSI_ES_RELEASE].timeline) {
-         flags[i] |= WSI_ES_STATE_RELEASE_SIGNALLED | WSI_ES_STATE_RELEASE_MATERIALIZED;
-      } else {
-         uint32_t first_signalled;
-         ret = drmSyncobjTimelineWait(device->drm_fd, &handles[i * WSI_ES_COUNT + WSI_ES_RELEASE],
-                                      &image->explicit_sync[WSI_ES_RELEASE].timeline, 1, 0,
-                                      DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE, &first_signalled);
-         if (ret == 0)
-            flags[i] |= WSI_ES_STATE_RELEASE_MATERIALIZED;
+         flags[i] |= WSI_ES_STATE_RELEASE_SIGNALLED;
       }
    }
 

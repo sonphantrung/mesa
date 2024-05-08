@@ -72,7 +72,7 @@ __gen_unpack_uint(const uint32_t *restrict cl, uint32_t start, uint32_t end)
    const int width = end - start + 1;
    const uint64_t mask = (width == 64 ? ~0 : (1ull << width) - 1 );
 
-   for (unsigned word = start / 32; word <= end / 32; word++) {
+   for (unsigned word = start / 32; word < (end / 32) + 1; word++) {
       val |= ((uint64_t) cl[word]) << ((word - start / 32) * 32);
    }
 

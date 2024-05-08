@@ -120,6 +120,9 @@ struct radv_graphics_pipeline {
    /* Whether the pipeline uses a VRS attachment. */
    bool uses_vrs_attachment;
 
+   /* Whether the pipeline uses RB+ for depth-only rendering. */
+   bool rbplus_depth_only_enabled;
+
    /* For graphics pipeline library */
    bool retain_shaders;
 
@@ -640,6 +643,9 @@ uint32_t radv_get_vgt_gs_out(struct radv_shader **shaders, uint32_t primitive_to
 
 bool radv_needs_null_export_workaround(const struct radv_device *device, const struct radv_shader *ps,
                                        unsigned custom_blend_mode);
+
+bool radv_can_enable_rbplus_depth_only(const struct radv_device *device, const struct radv_shader *ps,
+                                       uint32_t custom_blend_mode);
 
 struct radv_graphics_pipeline_create_info {
    bool use_rectlist;

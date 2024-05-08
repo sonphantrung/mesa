@@ -3947,6 +3947,25 @@ radv_needs_null_export_workaround(const struct radv_device *device, const struct
           !ps->info.ps.writes_z && !ps->info.ps.writes_stencil && !ps->info.ps.writes_sample_mask;
 }
 
+bool
+radv_can_enable_rbplus_depth_only(const struct radv_device *device, const struct radv_shader *ps,
+                                  uint32_t custom_blend_mode)
+{
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+
+   /* Enable RB+ for depth-only rendering. Registers must be programmed as follows:
+    *    CB_COLOR_CONTROL.MODE = CB_DISABLE
+    *    CB_COLOR0_INFO.FORMAT = COLOR_32
+    *    CB_COLOR0_INFO.NUMBER_TYPE = NUMBER_FLOAT
+    *    SPI_SHADER_COL_FORMAT.COL0_EXPORT_FORMAT = SPI_SHADER_32_R
+    *    SX_PS_DOWNCONVERT.MRT0 = SX_RT_EXPORT_32_R
+    *
+    * spi_shader_col_format == 0 implies no color outputs written and no alpha to coverage.
+    */
+   return pdev->info.rbplus_allowed && !custom_blend_mode &&
+          (!ps || (!ps->info.ps.colors_written && !ps->info.ps.writes_memory));
+}
+
 static VkResult
 radv_graphics_pipeline_init(struct radv_graphics_pipeline *pipeline, struct radv_device *device,
                             struct vk_pipeline_cache *cache, const VkGraphicsPipelineCreateInfo *pCreateInfo,
@@ -4023,7 +4042,10 @@ radv_graphics_pipeline_init(struct radv_graphics_pipeline *pipeline, struct radv
    }
 
    unsigned custom_blend_mode = extra ? extra->custom_blend_mode : 0;
-   if (radv_needs_null_export_workaround(device, ps, custom_blend_mode) && !pipeline->spi_shader_col_format) {
+   const bool rbplus_depth_only_enabled = radv_can_enable_rbplus_depth_only(device, ps, custom_blend_mode);
+
+   if ((radv_needs_null_export_workaround(device, ps, custom_blend_mode) || rbplus_depth_only_enabled) &&
+       !pipeline->spi_shader_col_format) {
       pipeline->spi_shader_col_format = V_028714_SPI_SHADER_32_R;
    }
 
@@ -4039,6 +4061,7 @@ radv_graphics_pipeline_init(struct radv_graphics_pipeline *pipeline, struct radv
    pipeline->rast_prim = vgt_gs_out_prim_type;
    pipeline->uses_out_of_order_rast = state.rs->rasterization_order_amd == VK_RASTERIZATION_ORDER_RELAXED_AMD;
    pipeline->uses_vrs_attachment = radv_pipeline_uses_vrs_attachment(pipeline, &state);
+   pipeline->rbplus_depth_only_enabled = rbplus_depth_only_enabled;
 
    pipeline->base.push_constant_size = pipeline->layout.push_constant_size;
    pipeline->base.dynamic_offset_count = pipeline->layout.dynamic_offset_count;

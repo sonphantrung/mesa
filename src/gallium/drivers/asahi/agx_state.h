@@ -682,9 +682,6 @@ struct agx_context {
     */
    struct util_dynarray writer;
 
-   /* Bound CL global buffers */
-   struct util_dynarray global_buffers;
-
    struct hash_table *generic_meta;
    struct agx_meta_cache meta;
 

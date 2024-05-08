@@ -367,6 +367,13 @@ struct pipe_screen {
                              unsigned *offset);
 
    /**
+    * Returns the GPU's address to this resource. Calling this function
+    * also effectively pins the address.
+    */
+   uint64_t (*resource_get_address)(struct pipe_screen *screen,
+                                    struct pipe_resource *);
+
+   /**
     * Mark the resource as changed so derived internal resources will be
     * recreated on next use.
     *

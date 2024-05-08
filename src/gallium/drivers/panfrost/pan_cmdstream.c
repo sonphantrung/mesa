@@ -3050,6 +3050,13 @@ panfrost_launch_grid_on_batch(struct pipe_context *pipe,
 {
    struct panfrost_context *ctx = pan_context(pipe);
 
+   for (int i = 0; i < info->num_globals; i++) {
+      struct panfrost_resource *rsrc = pan_resource(info->globals[i]);
+      panfrost_batch_write_rsrc(batch, rsrc, PIPE_SHADER_COMPUTE);
+      util_range_add(&rsrc->base, &rsrc->valid_buffer_range, 0,
+                     rsrc->base.width0);
+   }
+
    if (info->indirect && !PAN_GPU_INDIRECTS) {
       struct pipe_transfer *transfer;
       uint32_t *params =

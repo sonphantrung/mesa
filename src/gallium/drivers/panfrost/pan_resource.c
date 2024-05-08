@@ -790,6 +790,13 @@ panfrost_resource_create_with_modifiers(struct pipe_screen *screen,
    return panfrost_resource_create(screen, template);
 }
 
+static uint64_t
+panfrost_resource_get_address(struct pipe_screen *screen,
+                              struct pipe_resource *resource)
+{
+   return pan_resource(resource)->image.data.base;
+}
+
 static void
 panfrost_resource_destroy(struct pipe_screen *screen, struct pipe_resource *pt)
 {
@@ -1794,6 +1801,7 @@ panfrost_resource_screen_init(struct pipe_screen *pscreen)
    pscreen->resource_from_handle = panfrost_resource_from_handle;
    pscreen->resource_get_handle = panfrost_resource_get_handle;
    pscreen->resource_get_param = panfrost_resource_get_param;
+   pscreen->resource_get_address = panfrost_resource_get_address;
    pscreen->transfer_helper = u_transfer_helper_create(
       &transfer_vtbl,
       U_TRANSFER_HELPER_SEPARATE_Z32S8 | U_TRANSFER_HELPER_MSAA_MAP);

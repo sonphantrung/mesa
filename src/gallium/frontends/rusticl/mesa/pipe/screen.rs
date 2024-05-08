@@ -126,11 +126,19 @@ impl PipeScreen {
         )
     }
 
+    pub fn resource_get_address(&self, res: *mut pipe_resource) -> u64 {
+        unsafe {
+            if (*res).target() == pipe_texture_target::PIPE_BUFFER {
+                self.screen().resource_get_address.unwrap()(self.screen.as_ptr(), res)
+            } else {
+                0
+            }
+        }
+    }
+
     fn resource_create(&self, tmpl: &pipe_resource) -> Option<PipeResource> {
-        PipeResource::new(
-            unsafe { self.screen().resource_create.unwrap()(self.screen.as_ptr(), tmpl) },
-            false,
-        )
+        let res = unsafe { self.screen().resource_create.unwrap()(self.screen.as_ptr(), tmpl) };
+        PipeResource::new(res, self.resource_get_address(res), false)
     }
 
     fn resource_create_from_user(
@@ -138,10 +146,9 @@ impl PipeScreen {
         tmpl: &pipe_resource,
         mem: *mut c_void,
     ) -> Option<PipeResource> {
-        PipeResource::new(
-            unsafe { self.screen().resource_from_user_memory?(self.screen.as_ptr(), tmpl, mem) },
-            true,
-        )
+        let res =
+            unsafe { self.screen().resource_from_user_memory?(self.screen.as_ptr(), tmpl, mem) };
+        PipeResource::new(res, self.resource_get_address(res), true)
     }
 
     pub fn resource_create_buffer(
@@ -269,17 +276,10 @@ impl PipeScreen {
         tmpl.depth0 = depth;
         tmpl.array_size = array_size;
 
-        unsafe {
-            PipeResource::new(
-                self.screen().resource_from_handle.unwrap()(
-                    self.screen.as_ptr(),
-                    &tmpl,
-                    &mut handle,
-                    0,
-                ),
-                false,
-            )
-        }
+        let res = unsafe {
+            self.screen().resource_from_handle.unwrap()(self.screen.as_ptr(), &tmpl, &mut handle, 0)
+        };
+        PipeResource::new(res, self.resource_get_address(res), false)
     }
 
     pub fn param(&self, cap: pipe_cap) -> i32 {
@@ -481,4 +481,5 @@ fn has_required_cbs(screen: *mut pipe_screen) -> bool {
         & has_required_feature!(screen, get_timestamp)
         & has_required_feature!(screen, is_format_supported)
         & has_required_feature!(screen, resource_create)
+        & has_required_feature!(screen, resource_get_address)
 }

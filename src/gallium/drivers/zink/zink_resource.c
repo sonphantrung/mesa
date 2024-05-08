@@ -3099,6 +3099,12 @@ zink_resource_get_address(struct zink_screen *screen, struct zink_resource *res)
    return res->obj->bda;
 }
 
+static uint64_t
+zink_resource_get_address_gallium(struct pipe_screen *screen, struct pipe_resource *pres)
+{
+   return zink_resource_get_address(zink_screen(screen), zink_resource(pres));
+}
+
 void
 zink_resource_setup_transfer_layouts(struct zink_context *ctx, struct zink_resource *src, struct zink_resource *dst)
 {
@@ -3189,6 +3195,8 @@ zink_screen_resource_init(struct pipe_screen *pscreen)
    pscreen->resource_create = u_transfer_helper_resource_create;
    pscreen->resource_create_with_modifiers = zink_resource_create_with_modifiers;
    pscreen->resource_create_drawable = zink_resource_create_drawable;
+   if (screen->info.have_KHR_buffer_device_address)
+      pscreen->resource_get_address = zink_resource_get_address_gallium;
    pscreen->resource_destroy = u_transfer_helper_resource_destroy;
    pscreen->transfer_helper = u_transfer_helper_create(&transfer_vtbl,
       U_TRANSFER_HELPER_SEPARATE_Z32S8 | U_TRANSFER_HELPER_SEPARATE_STENCIL |

@@ -708,6 +708,12 @@ static struct pipe_resource *si_resource_create(struct pipe_screen *screen,
    }
 }
 
+static uint64_t si_resource_get_address(struct pipe_screen *screen,
+                                        struct pipe_resource *res)
+{
+   return si_resource(res)->gpu_address;
+}
+
 static bool si_buffer_commit(struct si_context *ctx, struct si_resource *res,
                              struct pipe_box *box, bool commit)
 {
@@ -742,6 +748,7 @@ static bool si_resource_commit(struct pipe_context *pctx, struct pipe_resource *
 void si_init_screen_buffer_functions(struct si_screen *sscreen)
 {
    sscreen->b.resource_create = si_resource_create;
+   sscreen->b.resource_get_address = si_resource_get_address;
    sscreen->b.resource_destroy = si_resource_destroy;
    sscreen->b.resource_from_user_memory = si_buffer_from_user_memory;
 }

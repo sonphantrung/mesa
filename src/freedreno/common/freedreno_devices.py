@@ -810,6 +810,7 @@ a7xx_740 = A7XXProps(
         has_event_write_sample_count = True,
         ubwc_unorm_snorm_int_compatible = True,
         supports_ibo_ubwc = True,
+        has_ray_intersection = True,
     )
 
 a7xx_750 = A7XXProps(
@@ -825,6 +826,8 @@ a7xx_750 = A7XXProps(
         # example dEQP-VK.image.load_store.with_format.2d.*. Disable this for
         # now.
         #supports_ibo_ubwc = True,
+        has_ray_intersection = True,
+        has_sw_fuse = True,
     )
 
 a730_magic_regs = dict(

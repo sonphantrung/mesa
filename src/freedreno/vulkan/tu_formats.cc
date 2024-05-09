@@ -10,6 +10,7 @@
 
 #include "vk_enum_defines.h"
 #include "vk_util.h"
+#include "vk_acceleration_structure.h"
 #include "drm-uapi/drm_fourcc.h"
 
 #include "tu_device.h"
@@ -389,6 +390,9 @@ tu_physical_device_get_format_properties(
     */
    if (vk_format == VK_FORMAT_D32_SFLOAT_S8_UINT)
       linear = 0;
+
+   if (vk_acceleration_struct_vtx_format_supported(vk_format))
+      buffer |= VK_FORMAT_FEATURE_2_ACCELERATION_STRUCTURE_VERTEX_BUFFER_BIT_KHR;
 
 end:
    out_properties->linearTilingFeatures = linear;

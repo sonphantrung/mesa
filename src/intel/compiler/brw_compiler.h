@@ -1355,6 +1355,8 @@ struct brw_compile_params {
    uint64_t debug_flag;
 
    uint32_t source_hash;
+
+   struct archive_writer *debug_writer;
 };
 
 /**

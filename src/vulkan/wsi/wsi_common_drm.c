@@ -843,14 +843,14 @@ enum wsi_explicit_sync_state_flags
 
 /* Levels of "freeness"
  * 0 -> Acquire Signalled + Release Signalled
- * 1 -> Acquire Signalled + Release Materialized
- * 2 -> Release Signalled
+ * 1 -> Release Signalled
+ * 2 -> Acquire Signalled + Release Materialized
  * 3 -> Release Materialized
  */
 static const uint32_t wsi_explicit_sync_free_levels[] = {
    (WSI_ES_STATE_RELEASE_SIGNALLED | WSI_ES_STATE_RELEASE_MATERIALIZED | WSI_ES_STATE_ACQUIRE_SIGNALLED),
-   (WSI_ES_STATE_RELEASE_MATERIALIZED | WSI_ES_STATE_ACQUIRE_SIGNALLED),
    (WSI_ES_STATE_RELEASE_MATERIALIZED | WSI_ES_STATE_RELEASE_SIGNALLED),
+   (WSI_ES_STATE_RELEASE_MATERIALIZED | WSI_ES_STATE_ACQUIRE_SIGNALLED),
    (WSI_ES_STATE_RELEASE_MATERIALIZED),
 };
 

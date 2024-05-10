@@ -48,6 +48,7 @@
 
 .radv-collabora-rules-restricted:
   stage: amd
+  extends: .restricted-rules
   rules:
     - !reference [.test, rules]
     - !reference [.restricted-rules, rules]

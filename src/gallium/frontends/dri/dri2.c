@@ -2345,7 +2345,7 @@ dri2_init_screen(struct dri_screen *screen, bool driver_name_is_inferred)
 #endif
 
    if (!pscreen)
-       goto fail;
+       goto release_pipe;
 
    dri_init_options(screen);
    screen->throttle = pscreen->get_param(pscreen, PIPE_CAP_THROTTLE);
@@ -2381,6 +2381,12 @@ dri2_init_screen(struct dri_screen *screen, bool driver_name_is_inferred)
 fail:
    dri_release_screen(screen);
 
+release_pipe:
+#ifdef HAVE_LIBDRM
+   if (screen->dev)
+      pipe_loader_release(&screen->dev, 1);
+#endif
+
    return NULL;
 }
 
@@ -2402,7 +2408,7 @@ dri_swrast_kms_init_screen(struct dri_screen *screen, bool driver_name_is_inferr
 #endif
 
    if (!pscreen)
-       goto fail;
+       goto release_pipe;
 
    dri_init_options(screen);
    dri2_init_screen_extensions(screen, pscreen, true);
@@ -2432,6 +2438,12 @@ dri_swrast_kms_init_screen(struct dri_screen *screen, bool driver_name_is_inferr
 
 fail:
    dri_release_screen(screen);
+
+release_pipe:
+#ifdef HAVE_DRISW_KMS
+   if (screen->dev)
+      pipe_loader_release(&screen->dev, 1);
+#endif
 
 #endif // GALLIUM_SOFTPIPE
    return NULL;

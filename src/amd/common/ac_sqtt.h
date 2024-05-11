@@ -35,6 +35,7 @@ struct ac_sqtt {
    struct radeon_cmdbuf *stop_cs[2];
    /* struct radeon_winsys_bo or struct pb_buffer */
    void *bo;
+   uint64_t bo_va;
    void *ptr;
    uint32_t buffer_size;
    int start_frame;
@@ -52,6 +53,10 @@ struct ac_sqtt {
    struct rgp_clock_calibration rgp_clock_calibration;
 
    struct hash_table_u64 *pipeline_bos;
+
+   struct {
+      bool instructions_timing;
+   } options;
 };
 
 #define SQTT_BUFFER_ALIGN_SHIFT 12
@@ -90,10 +95,6 @@ uint64_t ac_sqtt_get_info_offset(unsigned se);
 
 uint64_t ac_sqtt_get_data_offset(const struct radeon_info *rad_info, const struct ac_sqtt *sqtt,
                                  unsigned se);
-uint64_t ac_sqtt_get_info_va(uint64_t va, unsigned se);
-
-uint64_t ac_sqtt_get_data_va(const struct radeon_info *rad_info, const struct ac_sqtt *sqtt,
-                             uint64_t va, unsigned se);
 
 void ac_sqtt_init(struct ac_sqtt *data);
 
@@ -533,6 +534,8 @@ struct rgp_sqtt_marker_pipeline_bind {
    };
 };
 
+struct util_dynarray;
+
 static_assert(sizeof(struct rgp_sqtt_marker_pipeline_bind) == 12,
               "rgp_sqtt_marker_pipeline_bind doesn't match RGP spec");
 
@@ -549,13 +552,17 @@ bool ac_check_profile_state(const struct radeon_info *info);
 union rgp_sqtt_marker_cb_id ac_sqtt_get_next_cmdbuf_id(struct ac_sqtt *sqtt,
                                                        enum amd_ip_type ip_type);
 
-bool ac_sqtt_se_is_disabled(const struct radeon_info *info, unsigned se);
-
 bool ac_sqtt_get_trace(struct ac_sqtt *sqtt, const struct radeon_info *info,
                        struct ac_sqtt_trace *sqtt_trace);
 
 uint32_t ac_sqtt_get_shader_mask(const struct radeon_info *info);
 
-uint32_t ac_sqtt_get_active_cu(const struct radeon_info *info, unsigned se);
+bool
+ac_prepare_sqtt_start(const struct radeon_info *info, const struct ac_sqtt *sqtt_data,
+                      enum amd_ip_type type, struct util_dynarray *array);
+
+bool
+ac_prepare_sqtt_stop(const struct radeon_info *info, const struct ac_sqtt *sqtt_data,
+                     enum amd_ip_type type, struct util_dynarray *array);
 
 #endif

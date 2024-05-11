@@ -8,8 +8,11 @@
 #include "ac_sqtt.h"
 
 #include "ac_gpu_info.h"
+#include "amdgfxregs.h"
+#include "sid.h"
 #include "util/u_math.h"
 #include "util/os_time.h"
+#include "util/u_dynarray.h"
 
 uint64_t
 ac_sqtt_get_info_offset(unsigned se)
@@ -29,17 +32,16 @@ ac_sqtt_get_data_offset(const struct radeon_info *rad_info, const struct ac_sqtt
    return data_offset;
 }
 
-uint64_t
-ac_sqtt_get_info_va(uint64_t va, unsigned se)
+static uint64_t
+ac_sqtt_get_info_va(const struct ac_sqtt *data, unsigned se)
 {
-   return va + ac_sqtt_get_info_offset(se);
+   return data->bo_va + ac_sqtt_get_info_offset(se);
 }
 
-uint64_t
-ac_sqtt_get_data_va(const struct radeon_info *rad_info, const struct ac_sqtt *data, uint64_t va,
-                    unsigned se)
+static uint64_t
+ac_sqtt_get_data_va(const struct radeon_info *rad_info, const struct ac_sqtt *data, unsigned se)
 {
-   return va + ac_sqtt_get_data_offset(rad_info, data, se);
+   return data->bo_va + ac_sqtt_get_data_offset(rad_info, data, se);
 }
 
 void
@@ -226,14 +228,14 @@ ac_sqtt_get_next_cmdbuf_id(struct ac_sqtt *data, enum amd_ip_type ip_type)
    return cb_id;
 }
 
-bool
+static bool
 ac_sqtt_se_is_disabled(const struct radeon_info *info, unsigned se)
 {
    /* No active CU on the SE means it is disabled. */
    return info->cu_mask[se][0] == 0;
 }
 
-uint32_t
+static uint32_t
 ac_sqtt_get_active_cu(const struct radeon_info *info, unsigned se)
 {
    uint32_t cu_index;
@@ -305,4 +307,407 @@ ac_sqtt_get_shader_mask(const struct radeon_info *info)
    }
 
    return shader_mask;
+}
+
+static uint32_t
+gfx11_get_sqtt_ctrl(const struct radeon_info *info, bool enable)
+{
+   return S_0367B0_MODE(enable) | S_0367B0_HIWATER(5) | S_0367B0_UTIL_TIMER(1) | S_0367B0_RT_FREQ(2) | /* 4096 clk */
+          S_0367B0_DRAW_EVENT_EN(1) | S_0367B0_SPI_STALL_EN(1) | S_0367B0_SQ_STALL_EN(1) | S_0367B0_REG_AT_HWM(2);
+}
+
+static uint32_t
+gfx10_get_sqtt_ctrl(const struct radeon_info *info, bool enable)
+{
+   uint32_t sqtt_ctrl = S_008D1C_MODE(enable) | S_008D1C_HIWATER(5) | S_008D1C_UTIL_TIMER(1) |
+                        S_008D1C_RT_FREQ(2) | /* 4096 clk */
+                        S_008D1C_DRAW_EVENT_EN(1) | S_008D1C_REG_STALL_EN(1) | S_008D1C_SPI_STALL_EN(1) |
+                        S_008D1C_SQ_STALL_EN(1) | S_008D1C_REG_DROP_ON_STALL(0);
+
+   if (info->gfx_level == GFX10_3)
+      sqtt_ctrl |= S_008D1C_LOWATER_OFFSET(4);
+
+   if (info->has_sqtt_auto_flush_mode_bug)
+      sqtt_ctrl |= S_008D1C_AUTO_FLUSH_MODE(1);
+
+   return sqtt_ctrl;
+}
+
+#define SQTT_ADD(reg, val)                                             \
+   do {                                                                \
+      void *p = util_dynarray_grow_bytes(array, 2, sizeof(uint32_t));  \
+      if (p) {                                                         \
+         uint32_t r = reg;                                             \
+         memcpy(p, &r, sizeof(uint32_t));                              \
+         uint32_t v = val;                                             \
+         memcpy(p + 4, &v, sizeof(uint32_t));                          \
+      } else {                                                         \
+         util_dynarray_clear(array);                                   \
+         return false;                                                 \
+      }                                                                \
+   } while (false)
+
+#define SQTT_ADD_N(n, ...)                                                \
+   do {                                                                   \
+      uint32_t v[] = { __VA_ARGS__ };                                     \
+      void *p = util_dynarray_grow_bytes(array, 1 + n, sizeof(uint32_t)); \
+      if (p) {                                                            \
+         uint32_t r = n;                                                  \
+         memcpy(p, &r, sizeof(n));                                        \
+         memcpy(p + 4, v, n * sizeof(uint32_t));                          \
+      } else {                                                            \
+         util_dynarray_clear(array);                                      \
+         return false;                                                    \
+      }                                                                   \
+   } while (false)
+
+bool
+ac_prepare_sqtt_start(const struct radeon_info *info, const struct ac_sqtt *sqtt_data,
+                      enum amd_ip_type type, struct util_dynarray *array)
+{
+   const enum amd_gfx_level gfx_level = info->gfx_level;
+   uint32_t shifted_size = sqtt_data->buffer_size >> SQTT_BUFFER_ALIGN_SHIFT;
+   const unsigned shader_mask = ac_sqtt_get_shader_mask(info);
+   unsigned max_se = info->max_se;
+
+   for (unsigned se = 0; se < max_se; se++) {
+      uint64_t data_va = ac_sqtt_get_data_va(info, sqtt_data, se);
+      uint64_t shifted_va = data_va >> SQTT_BUFFER_ALIGN_SHIFT;
+      int active_cu = ac_sqtt_get_active_cu(info, se);
+
+      if (ac_sqtt_se_is_disabled(info, se))
+         continue;
+
+      /* Target SEx and SH0. */
+      SQTT_ADD(R_030800_GRBM_GFX_INDEX,
+               S_030800_SE_INDEX(se) | S_030800_SH_INDEX(0) | S_030800_INSTANCE_BROADCAST_WRITES(1));
+
+      if (gfx_level >= GFX11) {
+         /* Order seems important for the following 2 registers. */
+         SQTT_ADD(R_0367A4_SQ_THREAD_TRACE_BUF0_SIZE,
+                  S_0367A4_SIZE(shifted_size) | S_0367A4_BASE_HI(shifted_va >> 32));
+
+         SQTT_ADD(R_0367A0_SQ_THREAD_TRACE_BUF0_BASE,
+                  shifted_va);
+
+         SQTT_ADD(R_0367B4_SQ_THREAD_TRACE_MASK,
+                  S_0367B4_WTYPE_INCLUDE(shader_mask) | S_0367B4_SA_SEL(0) |
+                     S_0367B4_WGP_SEL(active_cu / 2) | S_0367B4_SIMD_SEL(0));
+
+         uint32_t sqtt_token_mask = S_0367B8_REG_INCLUDE(V_0367B8_REG_INCLUDE_SQDEC | V_0367B8_REG_INCLUDE_SHDEC |
+                                                         V_0367B8_REG_INCLUDE_GFXUDEC | V_0367B8_REG_INCLUDE_COMP |
+                                                         V_0367B8_REG_INCLUDE_CONTEXT | V_0367B8_REG_INCLUDE_CONFIG);
+
+         /* Performance counters with SQTT are considered deprecated. */
+         uint32_t token_exclude = V_0367B8_TOKEN_EXCLUDE_PERF;
+
+         if (!sqtt_data->options.instructions_timing) {
+            /* Reduce SQTT traffic when instruction timing isn't enabled. */
+            token_exclude |= V_0367B8_TOKEN_EXCLUDE_VMEMEXEC | V_0367B8_TOKEN_EXCLUDE_ALUEXEC |
+                             V_0367B8_TOKEN_EXCLUDE_VALUINST | V_0367B8_TOKEN_EXCLUDE_IMMEDIATE |
+                             V_0367B8_TOKEN_EXCLUDE_INST;
+         }
+         sqtt_token_mask |= S_0367B8_TOKEN_EXCLUDE(token_exclude) | S_0367B8_BOP_EVENTS_TOKEN_INCLUDE(1);
+
+         SQTT_ADD(R_0367B8_SQ_THREAD_TRACE_TOKEN_MASK, sqtt_token_mask);
+
+         /* Should be emitted last (it enables thread traces). */
+         SQTT_ADD(R_0367B0_SQ_THREAD_TRACE_CTRL, gfx11_get_sqtt_ctrl(info, true));
+
+      } else if (gfx_level >= GFX10) {
+         /* Order seems important for the following 2 registers. */
+         SQTT_ADD(R_008D04_SQ_THREAD_TRACE_BUF0_SIZE,
+                  S_008D04_SIZE(shifted_size) | S_008D04_BASE_HI(shifted_va >> 32));
+
+         SQTT_ADD(R_008D00_SQ_THREAD_TRACE_BUF0_BASE,  shifted_va);
+
+         SQTT_ADD(R_008D14_SQ_THREAD_TRACE_MASK,
+                  S_008D14_WTYPE_INCLUDE(shader_mask) | S_008D14_SA_SEL(0) |
+                     S_008D14_WGP_SEL(active_cu / 2) | S_008D14_SIMD_SEL(0));
+
+         uint32_t sqtt_token_mask = S_008D18_REG_INCLUDE(V_008D18_REG_INCLUDE_SQDEC | V_008D18_REG_INCLUDE_SHDEC |
+                                                         V_008D18_REG_INCLUDE_GFXUDEC | V_008D18_REG_INCLUDE_COMP |
+                                                         V_008D18_REG_INCLUDE_CONTEXT | V_008D18_REG_INCLUDE_CONFIG);
+
+         /* Performance counters with SQTT are considered deprecated. */
+         uint32_t token_exclude = V_008D18_TOKEN_EXCLUDE_PERF;
+
+         if (!sqtt_data->options.instructions_timing) {
+            /* Reduce SQTT traffic when instruction timing isn't enabled. */
+            token_exclude |= V_008D18_TOKEN_EXCLUDE_VMEMEXEC | V_008D18_TOKEN_EXCLUDE_ALUEXEC |
+                             V_008D18_TOKEN_EXCLUDE_VALUINST | V_008D18_TOKEN_EXCLUDE_IMMEDIATE |
+                             V_008D18_TOKEN_EXCLUDE_INST;
+         }
+         sqtt_token_mask |=
+            S_008D18_TOKEN_EXCLUDE(token_exclude) | S_008D18_BOP_EVENTS_TOKEN_INCLUDE(gfx_level == GFX10_3);
+
+         SQTT_ADD(R_008D18_SQ_THREAD_TRACE_TOKEN_MASK, sqtt_token_mask);
+
+         /* Should be emitted last (it enables thread traces). */
+         SQTT_ADD(R_008D1C_SQ_THREAD_TRACE_CTRL, gfx10_get_sqtt_ctrl(info, true));
+      } else {
+         /* Order seems important for the following 4 registers. */
+         SQTT_ADD(R_030CDC_SQ_THREAD_TRACE_BASE2, S_030CDC_ADDR_HI(shifted_va >> 32));
+
+         SQTT_ADD(R_030CC0_SQ_THREAD_TRACE_BASE, shifted_va);
+
+         SQTT_ADD(R_030CC4_SQ_THREAD_TRACE_SIZE, S_030CC4_SIZE(shifted_size));
+
+         SQTT_ADD(R_030CD4_SQ_THREAD_TRACE_CTRL, S_030CD4_RESET_BUFFER(1));
+
+         uint32_t sqtt_mask = S_030CC8_CU_SEL(active_cu) | S_030CC8_SH_SEL(0) | S_030CC8_SIMD_EN(0xf) |
+                              S_030CC8_VM_ID_MASK(0) | S_030CC8_REG_STALL_EN(1) | S_030CC8_SPI_STALL_EN(1) |
+                              S_030CC8_SQ_STALL_EN(1);
+
+         if (gfx_level < GFX9) {
+            sqtt_mask |= S_030CC8_RANDOM_SEED(0xffff);
+         }
+
+         SQTT_ADD(R_030CC8_SQ_THREAD_TRACE_MASK, sqtt_mask);
+
+         /* Trace all tokens and registers. */
+         SQTT_ADD(R_030CCC_SQ_THREAD_TRACE_TOKEN_MASK,
+                  S_030CCC_TOKEN_MASK(0xbfff) | S_030CCC_REG_MASK(0xff) |
+                     S_030CCC_REG_DROP_ON_STALL(0));
+
+         /* Enable SQTT perf counters for all CUs. */
+         SQTT_ADD(R_030CD0_SQ_THREAD_TRACE_PERF_MASK,
+                  S_030CD0_SH0_MASK(0xffff) | S_030CD0_SH1_MASK(0xffff));
+
+         SQTT_ADD(R_030CE0_SQ_THREAD_TRACE_TOKEN_MASK2, 0xffffffff);
+
+         SQTT_ADD(R_030CEC_SQ_THREAD_TRACE_HIWATER, S_030CEC_HIWATER(4));
+
+         if (gfx_level == GFX9) {
+            /* Reset thread trace status errors. */
+            SQTT_ADD(R_030CE8_SQ_THREAD_TRACE_STATUS, S_030CE8_UTC_ERROR(0));
+         }
+
+         /* Enable the thread trace mode. */
+         uint32_t sqtt_mode = S_030CD8_MASK_PS(1) | S_030CD8_MASK_VS(1) | S_030CD8_MASK_GS(1) | S_030CD8_MASK_ES(1) |
+                              S_030CD8_MASK_HS(1) | S_030CD8_MASK_LS(1) | S_030CD8_MASK_CS(1) |
+                              S_030CD8_AUTOFLUSH_EN(1) | /* periodically flush SQTT data to memory */
+                              S_030CD8_MODE(1);
+
+         if (gfx_level == GFX9) {
+            /* Count SQTT traffic in TCC perf counters. */
+            sqtt_mode |= S_030CD8_TC_PERF_EN(1);
+         }
+
+         SQTT_ADD(R_030CD8_SQ_THREAD_TRACE_MODE, sqtt_mode);
+      }
+   }
+
+   /* Restore global broadcasting. */
+   SQTT_ADD(R_030800_GRBM_GFX_INDEX,
+            S_030800_SE_BROADCAST_WRITES(1) | S_030800_SH_BROADCAST_WRITES(1) |
+               S_030800_INSTANCE_BROADCAST_WRITES(1));
+
+   /* Start the thread trace with a different event based on the queue. */
+   if (type == AMD_IP_COMPUTE) {
+      SQTT_ADD(R_00B878_COMPUTE_THREAD_TRACE_ENABLE,
+               S_00B878_THREAD_TRACE_ENABLE(1));
+   } else {
+      SQTT_ADD_N(2, PKT3(PKT3_EVENT_WRITE, 0, 0),
+                    EVENT_TYPE(V_028A90_THREAD_TRACE_START) | EVENT_INDEX(0));
+   }
+
+   return true;
+}
+
+
+static const uint32_t gfx8_sqtt_info_regs[] = {
+   R_030CE4_SQ_THREAD_TRACE_WPTR,
+   R_030CE8_SQ_THREAD_TRACE_STATUS,
+   R_008E40_SQ_THREAD_TRACE_CNTR,
+};
+
+static const uint32_t gfx9_sqtt_info_regs[] = {
+   R_030CE4_SQ_THREAD_TRACE_WPTR,
+   R_030CE8_SQ_THREAD_TRACE_STATUS,
+   R_030CF0_SQ_THREAD_TRACE_CNTR,
+};
+
+static const uint32_t gfx10_sqtt_info_regs[] = {
+   R_008D10_SQ_THREAD_TRACE_WPTR,
+   R_008D20_SQ_THREAD_TRACE_STATUS,
+   R_008D24_SQ_THREAD_TRACE_DROPPED_CNTR,
+};
+
+static const uint32_t gfx11_sqtt_info_regs[] = {
+   R_0367BC_SQ_THREAD_TRACE_WPTR,
+   R_0367D0_SQ_THREAD_TRACE_STATUS,
+   R_0367E8_SQ_THREAD_TRACE_DROPPED_CNTR,
+};
+static bool
+copy_sqtt_info_regs(const struct radeon_info *info, const struct ac_sqtt *sqtt_data,
+                    unsigned se_index, struct util_dynarray *array)
+{
+   const uint32_t *sqtt_info_regs = NULL;
+
+   if (info->gfx_level >= GFX11) {
+      sqtt_info_regs = gfx11_sqtt_info_regs;
+   } else if (info->gfx_level >= GFX10) {
+      sqtt_info_regs = gfx10_sqtt_info_regs;
+   } else if (info->gfx_level == GFX9) {
+      sqtt_info_regs = gfx9_sqtt_info_regs;
+   } else {
+      assert(info->gfx_level == GFX8);
+      sqtt_info_regs = gfx8_sqtt_info_regs;
+   }
+
+   /* Get the VA where the info struct is stored for this SE. */
+   uint64_t info_va = ac_sqtt_get_info_va(sqtt_data, se_index);
+
+   /* Copy back the info struct one DWORD at a time. */
+   for (unsigned i = 0; i < 3; i++) {
+      SQTT_ADD_N(6, /* radeon_emit_array(..., 5) */
+                 PKT3(PKT3_COPY_DATA, 4, 0),
+                 COPY_DATA_SRC_SEL(COPY_DATA_PERF) | COPY_DATA_DST_SEL(COPY_DATA_TC_L2) | COPY_DATA_WR_CONFIRM,
+                 sqtt_info_regs[i] >> 2,
+                 0, /* unused */
+                 (info_va + i * 4),
+                 (info_va + i * 4) >> 32);
+   }
+
+   if (info->gfx_level >= GFX11) {
+      /* On GFX11, SQ_THREAD_TRACE_WPTR is incremented from the "initial WPTR address" instead of 0.
+       * To get the number of bytes (in units of 32 bytes) written by SQTT, the workaround is to
+       * subtract SQ_THREAD_TRACE_WPTR from the "initial WPTR address" as follow:
+       *
+       * 1) get the current buffer base address for this SE
+       * 2) shift right by 5 bits because SQ_THREAD_TRACE_WPTR is 32-byte aligned
+       * 3) mask off the higher 3 bits because WPTR.OFFSET is 29 bits
+       */
+      uint64_t data_va = ac_sqtt_get_data_va(info, sqtt_data, se_index);
+      uint64_t shifted_data_va = (data_va >> 5);
+      uint32_t init_wptr_value = shifted_data_va & 0x1fffffff;
+
+      SQTT_ADD_N(9, /* radeon_emit_array(..., 8) */
+                 PKT3(PKT3_ATOMIC_MEM, 7, 0),
+                 ATOMIC_OP(TC_OP_ATOMIC_SUB_32),
+                 info_va,         /* addr lo */
+                 info_va >> 32,   /* addr hi */
+                 init_wptr_value, /* data lo */
+                 0,               /* data hi */
+                 0,               /* compare data lo */
+                 0,               /* compare data hi */
+                 0);              /* loop interval */
+   }
+
+   return true;
+}
+
+
+bool
+ac_prepare_sqtt_stop(const struct radeon_info *info, const struct ac_sqtt *sqtt_data,
+                     enum amd_ip_type type, struct util_dynarray *array)
+{
+   const enum amd_gfx_level gfx_level = info->gfx_level;
+   unsigned max_se = info->max_se;
+
+   /* Stop the thread trace with a different event based on the queue. */
+   if (type == AMD_IP_COMPUTE) {
+      SQTT_ADD(R_00B878_COMPUTE_THREAD_TRACE_ENABLE,
+               S_00B878_THREAD_TRACE_ENABLE(0));
+   } else {
+      SQTT_ADD_N(2, /* radeon_emit_array(..., 1) */
+                 PKT3(PKT3_EVENT_WRITE, 0, 0),
+                 EVENT_TYPE(V_028A90_THREAD_TRACE_STOP) | EVENT_INDEX(0));
+   }
+
+   SQTT_ADD_N(2, /* radeon_emit_array(..., 1) */
+              PKT3(PKT3_EVENT_WRITE, 0, 0),
+              EVENT_TYPE(V_028A90_THREAD_TRACE_FINISH) | EVENT_INDEX(0));
+
+   if (info->has_sqtt_rb_harvest_bug) {
+      /* Some chips with disabled RBs should wait for idle because FINISH_DONE doesn't work.
+       * Since radv/radeonsi function for this aren't compatible, add a special case for this.
+       */
+      SQTT_ADD(0, 0);
+   }
+
+   for (unsigned se = 0; se < max_se; se++) {
+      if (ac_sqtt_se_is_disabled(info, se))
+         continue;
+
+      /* Target SEi and SH0. */
+      SQTT_ADD(R_030800_GRBM_GFX_INDEX,
+               S_030800_SE_INDEX(se) | S_030800_SH_INDEX(0) | S_030800_INSTANCE_BROADCAST_WRITES(1));
+
+      if (gfx_level >= GFX11) {
+         /* Make sure to wait for the trace buffer. */
+         SQTT_ADD_N(7, /* radeon_emit_array(..., 6) */
+                    PKT3(PKT3_WAIT_REG_MEM, 5, 0),
+                    WAIT_REG_MEM_NOT_EQUAL, /* wait until the register is equal to the reference value */
+                    R_0367D0_SQ_THREAD_TRACE_STATUS >> 2, /* register */
+                    0,
+                    0, /* reference value */
+                    C_0367D0_FINISH_DONE,
+                    4); /* poll interval */
+
+         /* Disable the thread trace mode. */
+         SQTT_ADD(R_0367B0_SQ_THREAD_TRACE_CTRL,
+                  gfx11_get_sqtt_ctrl(info, false));
+
+         /* Wait for thread trace completion. */
+         SQTT_ADD_N(7, /* radeon_emit_array(..., 6) */
+                    PKT3(PKT3_WAIT_REG_MEM, 5, 0),
+                    WAIT_REG_MEM_EQUAL, /* wait until the register is equal to the reference value */
+                    R_0367D0_SQ_THREAD_TRACE_STATUS >> 2, /* register */
+                    0,
+                    0,              /* reference value */
+                    ~C_0367D0_BUSY, /* mask */
+                    4);             /* poll interval */
+      } else if (gfx_level >= GFX10) {
+         if (!info->has_sqtt_rb_harvest_bug) {
+            /* Make sure to wait for the trace buffer. */
+            SQTT_ADD_N(7, /* radeon_emit_array(..., 6) */
+                       PKT3(PKT3_WAIT_REG_MEM, 5, 0),
+                       WAIT_REG_MEM_NOT_EQUAL, /* wait until the register is equal to the reference value */
+                       R_008D20_SQ_THREAD_TRACE_STATUS >> 2, /* register */
+                       0,
+                       0, /* reference value */
+                       ~C_008D20_FINISH_DONE,
+                       4); /* poll interval */
+         }
+
+         /* Disable the thread trace mode. */
+         SQTT_ADD(R_008D1C_SQ_THREAD_TRACE_CTRL,
+                  gfx10_get_sqtt_ctrl(info, false));
+
+         /* Wait for thread trace completion. */
+         SQTT_ADD_N(7, /* radeon_emit_array(..., 6) */
+                    PKT3(PKT3_WAIT_REG_MEM, 5, 0),
+                    WAIT_REG_MEM_EQUAL, /* wait until the register is equal to the reference value */
+                    R_008D20_SQ_THREAD_TRACE_STATUS >> 2, /* register */
+                    0,
+                    0,              /* reference value */
+                    ~C_008D20_BUSY, /* mask */
+                    4);             /* poll interval */
+      } else {
+         /* Disable the thread trace mode. */
+         SQTT_ADD(R_030CD8_SQ_THREAD_TRACE_MODE, S_030CD8_MODE(0));
+
+         /* Wait for thread trace completion. */
+         SQTT_ADD_N(7, /* radeon_emit_array(..., 6) */
+                    PKT3(PKT3_WAIT_REG_MEM, 5, 0),
+                    WAIT_REG_MEM_EQUAL, /* wait until the register is equal to the reference value */
+                    R_030CE8_SQ_THREAD_TRACE_STATUS >> 2, /* register */
+                    0,
+                    0,              /* reference value */
+                    ~C_030CE8_BUSY, /* mask */
+                    4);              /* poll interval */
+      }
+
+      if (!copy_sqtt_info_regs(info, sqtt_data, se, array))
+         return false;
+   }
+
+   /* Restore global broadcasting. */
+   SQTT_ADD(R_030800_GRBM_GFX_INDEX,
+            S_030800_SE_BROADCAST_WRITES(1) | S_030800_SH_BROADCAST_WRITES(1) |
+               S_030800_INSTANCE_BROADCAST_WRITES(1));
+
+   return true;
 }

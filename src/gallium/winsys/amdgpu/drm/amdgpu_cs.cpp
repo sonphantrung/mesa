@@ -1306,7 +1306,9 @@ static void amdgpu_cs_submit_ib(void *job, void *gdata, int thread_index)
       struct amdgpu_fence *prev_fence =
          (struct amdgpu_fence*)queue->fences[prev_seq_no % AMDGPU_FENCE_RING_SIZE];
 
-      if (prev_fence && (aws->info.ip[acs->ip_type].num_queues > 1 || queue->last_ctx != acs->ctx))
+      /* For userq num queues per process is 1, hence no need to add fence if num_queues > 1. */
+      if (prev_fence && ((!USERQ && aws->info.ip[acs->ip_type].num_queues > 1) ||
+                         queue->last_ctx != acs->ctx))
          add_seq_no_to_list(aws, &seq_no_dependencies, queue_index, prev_seq_no);
    }
 

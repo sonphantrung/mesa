@@ -1754,6 +1754,12 @@ static void amdgpu_cs_submit_ib(void *job, void *gdata, int thread_index)
             }
          }
 
+         /* HDP flush */
+         if (acs->ip_type == AMD_IP_COMPUTE) {
+            amdgpu_pkt_add_dw(PKT3(PKT3_HDP_FLUSH, 0, 0));
+            amdgpu_pkt_add_dw(0x0);
+         }
+
          /* add ib */
          amdgpu_pkt_add_dw(PKT3(PKT3_INDIRECT_BUFFER, 2, 0));
          amdgpu_pkt_add_dw(cs->chunk_ib[IB_MAIN].va_start);

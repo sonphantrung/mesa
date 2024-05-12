@@ -172,6 +172,16 @@ brw_shader_stage_pulls_push_constants(const struct intel_device_info *devinfo,
           gl_shader_stage_is_rt(stage);
 }
 
+static inline bool
+brw_shader_stage_can_push_ubo(gl_shader_stage stage)
+{
+   return stage == MESA_SHADER_VERTEX ||
+          stage == MESA_SHADER_TESS_CTRL ||
+          stage == MESA_SHADER_TESS_EVAL ||
+          stage == MESA_SHADER_GEOMETRY ||
+          stage == MESA_SHADER_FRAGMENT;
+}
+
 static inline uint32_t
 brw_shader_stage_push_constant_alignment(const struct intel_device_info *devinfo,
                                          gl_shader_stage stage)

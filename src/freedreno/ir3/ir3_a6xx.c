@@ -37,21 +37,18 @@
  * encoding compared to a4xx/a5xx.
  */
 
-/* src[] = { buffer_index, offset }. No const_index */
 static void
-emit_intrinsic_load_ssbo(struct ir3_context *ctx, nir_intrinsic_instr *intr,
-                         struct ir3_instruction **dst)
+emit_load_uav(struct ir3_context *ctx, nir_intrinsic_instr *intr,
+              struct ir3_instruction *offset,
+              struct ir3_instruction **dst)
 {
    struct ir3_block *b = ctx->block;
-   struct ir3_instruction *offset;
    struct ir3_instruction *ldib;
-
-   offset = ir3_get_src(ctx, &intr->src[2])[0];
 
    ldib = ir3_LDIB(b, ir3_ssbo_to_ibo(ctx, intr->src[0]), 0, offset, 0);
    ldib->dsts[0]->wrmask = MASK(intr->num_components);
    ldib->cat6.iim_val = intr->num_components;
-   ldib->cat6.d = 1;
+   ldib->cat6.d = reg_elems(offset->dsts[0]);
    ldib->cat6.type = intr->def.bit_size == 16 ? TYPE_U16 : TYPE_U32;
    ldib->barrier_class = IR3_BARRIER_BUFFER_R;
    ldib->barrier_conflict = IR3_BARRIER_BUFFER_W;
@@ -59,6 +56,29 @@ emit_intrinsic_load_ssbo(struct ir3_context *ctx, nir_intrinsic_instr *intr,
    ir3_handle_nonuniform(ldib, intr);
 
    ir3_split_dest(b, dst, ldib, 0, intr->num_components);
+}
+
+/* src[] = { buffer_index, offset }. No const_index */
+static void
+emit_intrinsic_load_ssbo(struct ir3_context *ctx, nir_intrinsic_instr *intr,
+                         struct ir3_instruction **dst)
+{
+   struct ir3_instruction *offset;
+
+   offset = ir3_get_src(ctx, &intr->src[2])[0];
+   emit_load_uav(ctx, intr, offset, dst);
+}
+
+static void
+emit_intrinsic_load_uav(struct ir3_context *ctx, nir_intrinsic_instr *intr,
+                        struct ir3_instruction **dst)
+{
+   struct ir3_block *b = ctx->block;
+   struct ir3_instruction *offset;
+
+   offset = ir3_create_collect(b, ir3_get_src(ctx, &intr->src[1]), 2);
+
+   emit_load_uav(ctx, intr, offset, dst);
 }
 
 /* src[] = { value, block_index, offset }. const_index[] = { write_mask } */
@@ -482,6 +502,7 @@ emit_intrinsic_atomic_global(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 
 const struct ir3_context_funcs ir3_a6xx_funcs = {
    .emit_intrinsic_load_ssbo = emit_intrinsic_load_ssbo,
+   .emit_intrinsic_load_uav = emit_intrinsic_load_uav,
    .emit_intrinsic_store_ssbo = emit_intrinsic_store_ssbo,
    .emit_intrinsic_atomic_ssbo = emit_intrinsic_atomic_ssbo,
    .emit_intrinsic_load_image = emit_intrinsic_load_image,

@@ -116,6 +116,7 @@ begin_end_tp('blit',
 
 begin_end_tp('compute',
     args=[Arg(type='uint8_t',  var='indirect',       c_format='%u'),
+          Arg(type='uint8_t',  var='unaligned',      c_format='%u'),
           Arg(type='uint16_t', var='local_size_x',   c_format='%u'),
           Arg(type='uint16_t', var='local_size_y',   c_format='%u'),
           Arg(type='uint16_t', var='local_size_z',   c_format='%u'),

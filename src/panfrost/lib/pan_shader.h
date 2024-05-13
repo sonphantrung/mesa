@@ -26,6 +26,7 @@
 #define __PAN_SHADER_H__
 
 #include "compiler/nir/nir.h"
+#include "panfrost/compiler/valhall/disassemble.h"
 #include "panfrost/util/pan_ir.h"
 #include "panfrost/util/pan_lower_framebuffer.h"
 
@@ -41,6 +42,22 @@ pan_shader_preprocess(nir_shader *nir, unsigned gpu_id)
       bifrost_preprocess_nir(nir, gpu_id);
    else
       midgard_preprocess_nir(nir, gpu_id);
+}
+
+void disassemble_bifrost(FILE *fp, const void *code, size_t size, bool verbose);
+void disassemble_midgard(FILE *fp, const void *code, size_t size,
+                         unsigned gpu_id, bool verbose);
+
+static inline void
+pan_shader_disassemble(FILE *fp, const void *code, size_t size, unsigned gpu_id,
+                       bool verbose)
+{
+   if (pan_arch(gpu_id) >= 9)
+      disassemble_valhall(fp, (const uint64_t *)code, size, verbose);
+   else if (pan_arch(gpu_id) >= 6)
+      disassemble_bifrost(fp, code, size, verbose);
+   else
+      disassemble_midgard(fp, code, size, gpu_id, verbose);
 }
 
 uint8_t pan_raw_format_mask_midgard(enum pipe_format *formats);

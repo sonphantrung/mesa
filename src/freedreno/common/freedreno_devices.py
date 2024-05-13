@@ -400,6 +400,7 @@ a6xx_gen4 = A6XXProps(
         has_z24uint_s8uint = True,
         tess_use_shared = True,
         storage_16bit = True,
+        has_universal_16bit_storage_descriptor = True,
         has_tex_filter_cubic = True,
         has_separate_chroma_filter = True,
         has_sample_locations = True,
@@ -414,6 +415,8 @@ a6xx_gen4 = A6XXProps(
         has_lrz_dir_tracking = True,
         has_per_view_viewport = True,
         has_scalar_alu = True,
+        has_isam_v = True,
+        has_ssbo_imm_offsets = True,
     )
 
 a6xx_a690_quirk = A6XXProps(
@@ -779,6 +782,7 @@ a7xx_base = A6XXProps(
         has_z24uint_s8uint = True,
         tess_use_shared = True,
         storage_16bit = True,
+        has_universal_16bit_storage_descriptor = True,
         has_tex_filter_cubic = True,
         has_separate_chroma_filter = True,
         has_sample_locations = True,
@@ -794,6 +798,8 @@ a7xx_base = A6XXProps(
         line_width_max = 127.5,
         has_scalar_alu = True,
         has_coherent_ubwc_flag_caches = True,
+        has_isam_v = True,
+        has_ssbo_imm_offsets = True,
     )
 
 a7xx_725 = A7XXProps(
@@ -825,6 +831,7 @@ a7xx_750 = A7XXProps(
         # example dEQP-VK.image.load_store.with_format.2d.*. Disable this for
         # now.
         #supports_ibo_ubwc = True,
+        storage_8bit = True,
     )
 
 a730_magic_regs = dict(

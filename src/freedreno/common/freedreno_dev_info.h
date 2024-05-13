@@ -87,10 +87,12 @@ struct fd_dev_info {
       /* Does the hw support GL_QCOM_shading_rate? */
       bool has_shading_rate;
 
-      /* newer a6xx allows using 16-bit descriptor for both 16-bit
+      /* Whether a 16-bit descriptor can be used */
+      bool storage_16bit;
+      /* Whether the 16-bit descriptor can be used for both 16-bit
        * and 32-bit access
        */
-      bool storage_16bit;
+      bool has_universal_16bit_storage_descriptor;
 
       /* The latest known a630_sqe.fw fails to wait for WFI before
        * reading the indirect buffer when using CP_DRAW_INDIRECT_MULTI,
@@ -175,6 +177,9 @@ struct fd_dev_info {
       /* See ir3_compiler::has_scalar_alu. */
       bool has_scalar_alu;
 
+      bool has_isam_v;
+      bool has_ssbo_imm_offsets;
+
       /* Whether writing to UBWC attachment and reading the same image as input
        * attachment or as a texture reads correct values from the image.
        * If this is false, we may read stale values from the flag buffer,
@@ -247,6 +252,8 @@ struct fd_dev_info {
        * fully compatible.
        */
       bool ubwc_unorm_snorm_int_compatible;
+
+      bool storage_8bit;
    } a7xx;
 };
 

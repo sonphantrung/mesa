@@ -65,8 +65,12 @@ struct ir3_compiler_options {
    int bindless_fb_read_descriptor;
    int bindless_fb_read_slot;
 
-   /* True if 16-bit descriptors are used for both 16-bit and 32-bit access. */
+   /* True if 16-bit descriptors are available. */
    bool storage_16bit;
+   /* True if 8-bit descriptors are available. */
+   bool storage_8bit;
+   /* True if 16-bit descriptors are used for both 16-bit and 32-bit access. */
+   bool universal_16bit_storage_descriptor;
 
   /* If base_vertex should be lowered in nir */
   bool lower_base_vertex;
@@ -208,8 +212,11 @@ struct ir3_compiler {
    /* Whether SSBOs have descriptors for sampling with ISAM */
    bool has_isam_ssbo;
 
-   /* True if 16-bit descriptors are used for both 16-bit and 32-bit access. */
-   bool storage_16bit;
+   /* Whether isam.v is supported to sample multiple components from SSBOs */
+   bool has_isam_v;
+
+   /* Whether isam/stib/ldib have immediate offsets. */
+   bool has_ssbo_imm_offsets;
 
    /* True if getfiberid, getlast.w8, brcst.active, and quad_shuffle
     * instructions are supported which are necessary to support

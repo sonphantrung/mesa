@@ -2645,13 +2645,29 @@ tu_CmdBindDescriptorSets(VkCommandBuffer commandBuffer,
                          A6XX_TEX_CONST_2_STARTOFFSETTEXELS__MASK) >>
                         A6XX_TEX_CONST_2_STARTOFFSETTEXELS__SHIFT;
 
-                     /* Without the ability to cast 16-bit as 32-bit, there is
-                      * only one descriptor whose texels are 32 bits (4
-                      * bytes). With casting, there are two descriptors, the
-                      * first being 16-bit and the second being 32-bit.
+                     /* Use descriptor's format to determine the shift amount
+                      * that's to be used on the offset value. 0 is handled
+                      * for cases where the descriptor data wasn't properly
+                      * initialized.
                       */
-                     unsigned offset_shift =
-                        binding->size == 4 * A6XX_TEX_CONST_DWORDS || i == 1 ? 2 : 1;
+                     uint32_t format = (dst_desc[0] &
+                                        A6XX_TEX_CONST_0_FMT__MASK) >>
+                                       A6XX_TEX_CONST_0_FMT__SHIFT;
+                     unsigned offset_shift;
+                     switch (format) {
+                     case 0:
+                     case FMT6_8_UINT:
+                        offset_shift = 0;
+                        break;
+                     case FMT6_16_UINT:
+                        offset_shift = 1;
+                        break;
+                     case FMT6_32_UINT:
+                        offset_shift = 2;
+                        break;
+                     default:
+                        unreachable("unsupported descriptor format");
+                     }
 
                      va += desc_offset << offset_shift;
                      va += offset;

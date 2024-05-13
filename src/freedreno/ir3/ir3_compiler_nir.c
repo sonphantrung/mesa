@@ -177,7 +177,7 @@ create_cov(struct ir3_context *ctx, struct ir3_instruction *src,
          src_type = TYPE_S16;
          break;
       case 8:
-         src_type = TYPE_S8;
+         src_type = TYPE_U8;
          break;
       default:
          ir3_context_error(ctx, "invalid src bit size: %u", src_bitsize);
@@ -248,7 +248,7 @@ create_cov(struct ir3_context *ctx, struct ir3_instruction *src,
    case nir_op_f2i8:
    case nir_op_i2i8:
    case nir_op_b2i8:
-      dst_type = TYPE_S8;
+      dst_type = TYPE_U8;
       break;
 
    case nir_op_f2u32:
@@ -272,6 +272,20 @@ create_cov(struct ir3_context *ctx, struct ir3_instruction *src,
 
    if (src_type == dst_type)
       return src;
+
+   /* Zero-extension of and truncation to 8-bit values doesn't work with `cov`,
+    * so simple masking is used to achieve the result.
+    */
+   if ((src_type == TYPE_U8 && full_type(dst_type) == TYPE_U32) ||
+       ((full_type(src_type) == TYPE_U32 || full_type(src_type) == TYPE_S32) &&
+        dst_type == TYPE_U8)) {
+      type_t mask_type = type_uint_size(type_size(src_type));
+      struct ir3_instruction *mask = create_immed_typed(ctx->block, 0xff,
+                                                        mask_type);
+      struct ir3_instruction *cov = ir3_AND_B(ctx->block, src, 0, mask, 0);
+      cov->dsts[0]->flags |= type_flags(dst_type);
+      return cov;
+   }
 
    struct ir3_instruction *cov = ir3_COV(ctx->block, src, src_type, dst_type);
 
@@ -1592,23 +1606,52 @@ emit_intrinsic_load_ssbo(struct ir3_context *ctx,
                          nir_intrinsic_instr *intr,
                          struct ir3_instruction **dst)
 {
-   /* Note: isam currently can't handle vectorized loads/stores */
+   /* Note: we can only use isam for vectorized loads/stores if isam.v is
+    * available.
+    * Note: isam also can't handle 8-bit loads.
+    */
    if (!(nir_intrinsic_access(intr) & ACCESS_CAN_REORDER) ||
-       intr->def.num_components > 1 ||
+       (intr->def.num_components > 1 && !ctx->compiler->has_isam_v) ||
+       (ctx->compiler->options.storage_8bit && intr->def.bit_size == 8) ||
        !ctx->compiler->has_isam_ssbo) {
       ctx->funcs->emit_intrinsic_load_ssbo(ctx, intr, dst);
       return;
    }
 
    struct ir3_block *b = ctx->block;
-   struct ir3_instruction *offset = ir3_get_src(ctx, &intr->src[2])[0];
-   struct ir3_instruction *coords = ir3_collect(b, offset, create_immed(b, 0));
+   nir_src *offset_src = &intr->src[2];
+   struct ir3_instruction *coords = NULL;
+   unsigned imm_offset = 0;
+
+   if (ctx->compiler->has_isam_v) {
+      ir3_lower_imm_offset(ctx, intr, offset_src, 8, &coords, &imm_offset);
+   } else {
+      coords =
+         ir3_collect(b, ir3_get_src(ctx, offset_src)[0], create_immed(b, 0));
+   }
+
    struct tex_src_info info = get_image_ssbo_samp_tex_src(ctx, &intr->src[0], false);
 
    unsigned num_components = intr->def.num_components;
+   assert(num_components == 1 || ctx->compiler->has_isam_v);
+
    struct ir3_instruction *sam =
       emit_sam(ctx, OPC_ISAM, info, utype_for_size(intr->def.bit_size),
-               MASK(num_components), coords, NULL);
+               MASK(num_components), coords, create_immed(b, imm_offset));
+
+   if (ctx->compiler->has_isam_v) {
+      sam->flags |= (IR3_INSTR_V | IR3_INSTR_INV_1D);
+
+      if (imm_offset) {
+         sam->flags |= IR3_INSTR_IMM_OFFSET;
+      }
+   }
+
+   if (ctx->compiler->options.storage_16bit &&
+       ctx->compiler->options.universal_16bit_storage_descriptor &&
+       (sam->flags & IR3_INSTR_B) && intr->def.bit_size == 32) {
+      sam->flags |= (IR3_INSTR_V | IR3_INSTR_INV_1D);
+   }
 
    ir3_handle_nonuniform(sam, intr);
 

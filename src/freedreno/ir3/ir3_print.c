@@ -53,14 +53,14 @@ type_name(type_t type)
 {
    static const char *type_names[] = {
       /* clang-format off */
-      [TYPE_F16] = "f16",
-      [TYPE_F32] = "f32",
-      [TYPE_U16] = "u16",
-      [TYPE_U32] = "u32",
-      [TYPE_S16] = "s16",
-      [TYPE_S32] = "s32",
-      [TYPE_U8]  = "u8", 
-      [TYPE_S8]  = "s8",
+      [TYPE_F16]   = "f16",
+      [TYPE_F32]   = "f32",
+      [TYPE_U16]   = "u16",
+      [TYPE_U32]   = "u32",
+      [TYPE_S16]   = "s16",
+      [TYPE_S32]   = "s32",
+      [TYPE_U8]    = "u8",
+      [TYPE_U8_32] = "u8_32",
       /* clang-format on */
    };
    return type_names[type];
@@ -200,6 +200,8 @@ print_instr_name(struct log_stream *stream, struct ir3_instruction *instr,
          mesa_log_stream_printf(stream, ".p");
       if (instr->flags & IR3_INSTR_S)
          mesa_log_stream_printf(stream, ".s");
+      if (instr->flags & IR3_INSTR_V)
+         mesa_log_stream_printf(stream, ".v");
       if (instr->flags & IR3_INSTR_A1EN)
          mesa_log_stream_printf(stream, ".a1en");
       if (instr->flags & IR3_INSTR_U)

@@ -145,6 +145,7 @@
 
 .google-freedreno-rules-restricted:
   stage: freedreno
+  extends: .restricted-rules
   rules:
     - !reference [.test, rules]
     - !reference [.restricted-rules, rules]
@@ -152,6 +153,7 @@
 
 .collabora-freedreno-rules-restricted:
   stage: freedreno
+  extends: .restricted-rules
   rules:
     - !reference [.test, rules]
     - !reference [.restricted-rules, rules]

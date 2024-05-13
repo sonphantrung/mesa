@@ -40,7 +40,7 @@
       when: never
     - if: '($GITLAB_USER_LOGIN != "marge-bot" || $CI_COMMIT_BRANCH)' # so it's invoked by user
       allow_failure: false
-    - allow_failure: true
+  allow_failure: true
 
 # Mesa core source file dependencies that may impact any test job
 # ---------------------------------------------------------------

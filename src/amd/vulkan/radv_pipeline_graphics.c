@@ -1060,13 +1060,6 @@ radv_pipeline_init_dynamic_state(const struct radv_device *device, struct radv_g
    pipeline->dynamic_state.mask = states;
 }
 
-static void
-gfx10_emit_ge_pc_alloc(struct radeon_cmdbuf *cs, uint32_t oversub_pc_lines)
-{
-   radeon_set_uconfig_reg(cs, R_030980_GE_PC_ALLOC,
-                          S_030980_OVERSUB_EN(oversub_pc_lines > 0) | S_030980_NUM_PC_LINES(oversub_pc_lines - 1));
-}
-
 struct radv_shader *
 radv_get_shader(struct radv_shader *const *shaders, gl_shader_stage stage)
 {
@@ -2829,13 +2822,13 @@ radv_emit_hw_vs(const struct radv_device *device, struct radeon_cmdbuf *ctx_cs, 
       radeon_set_sh_reg_idx(pdev, cs, R_00B118_SPI_SHADER_PGM_RSRC3_VS, 3,
                             shader->info.regs.vs.spi_shader_pgm_rsrc3_vs);
       radeon_set_sh_reg(cs, R_00B11C_SPI_SHADER_LATE_ALLOC_VS, shader->info.regs.vs.spi_shader_late_alloc_vs);
-   }
 
-   if (pdev->info.gfx_level >= GFX10) {
-      radeon_set_uconfig_reg(cs, R_030980_GE_PC_ALLOC, shader->info.regs.ge_pc_alloc);
+      if (pdev->info.gfx_level >= GFX10) {
+         radeon_set_uconfig_reg(cs, R_030980_GE_PC_ALLOC, shader->info.regs.ge_pc_alloc);
 
-      if (shader->info.stage == MESA_SHADER_TESS_EVAL) {
-         radeon_set_context_reg(ctx_cs, R_028A44_VGT_GS_ONCHIP_CNTL, shader->info.regs.vgt_gs_onchip_cntl);
+         if (shader->info.stage == MESA_SHADER_TESS_EVAL) {
+            radeon_set_context_reg(ctx_cs, R_028A44_VGT_GS_ONCHIP_CNTL, shader->info.regs.vgt_gs_onchip_cntl);
+         }
       }
    }
 }
@@ -2910,10 +2903,6 @@ radv_emit_hw_ngg(const struct radv_device *device, struct radeon_cmdbuf *ctx_cs,
    radeon_set_context_reg(ctx_cs, R_028A84_VGT_PRIMITIVEID_EN,
                           shader->info.regs.ngg.vgt_primitiveid_en | S_028A84_PRIMITIVEID_EN(es_enable_prim_id));
 
-   if (pdev->info.gfx_level < GFX11) {
-      radeon_set_context_reg(ctx_cs, R_028A44_VGT_GS_ONCHIP_CNTL, shader->info.regs.vgt_gs_onchip_cntl);
-   }
-
    radeon_set_context_reg(ctx_cs, R_0287FC_GE_MAX_OUTPUT_PER_SUBGROUP,
                           shader->info.regs.ngg.ge_max_output_per_subgroup);
 
@@ -2926,19 +2915,21 @@ radv_emit_hw_ngg(const struct radv_device *device, struct radeon_cmdbuf *ctx_cs,
       ge_cntl |= S_03096C_BREAK_PRIMGRP_AT_EOI(break_wave_at_eoi);
    } else {
       ge_cntl |= S_03096C_BREAK_WAVE_AT_EOI(break_wave_at_eoi);
-   }
 
-   /* Bug workaround for a possible hang with non-tessellation cases.
-    * Tessellation always sets GE_CNTL.VERT_GRP_SIZE = 0
-    *
-    * Requirement: GE_CNTL.VERT_GRP_SIZE = VGT_GS_ONCHIP_CNTL.ES_VERTS_PER_SUBGRP - 5
-    */
-   if (pdev->info.gfx_level == GFX10 && es_type != MESA_SHADER_TESS_EVAL && ngg_state->hw_max_esverts != 256) {
-      ge_cntl &= C_03096C_VERT_GRP_SIZE;
+      /* Bug workaround for a possible hang with non-tessellation cases.
+       * Tessellation always sets GE_CNTL.VERT_GRP_SIZE = 0
+       *
+       * Requirement: GE_CNTL.VERT_GRP_SIZE = VGT_GS_ONCHIP_CNTL.ES_VERTS_PER_SUBGRP - 5
+       */
+      if (pdev->info.gfx_level == GFX10 && es_type != MESA_SHADER_TESS_EVAL && ngg_state->hw_max_esverts != 256) {
+         ge_cntl &= C_03096C_VERT_GRP_SIZE;
 
-      if (ngg_state->hw_max_esverts > 5) {
-         ge_cntl |= S_03096C_VERT_GRP_SIZE(ngg_state->hw_max_esverts - 5);
+         if (ngg_state->hw_max_esverts > 5) {
+            ge_cntl |= S_03096C_VERT_GRP_SIZE(ngg_state->hw_max_esverts - 5);
+         }
       }
+
+      radeon_set_context_reg(ctx_cs, R_028A44_VGT_GS_ONCHIP_CNTL, shader->info.regs.vgt_gs_onchip_cntl);
    }
 
    radeon_set_uconfig_reg(cs, R_03096C_GE_CNTL, ge_cntl);
@@ -3093,7 +3084,7 @@ radv_emit_hw_gs(const struct radv_device *device, struct radeon_cmdbuf *ctx_cs, 
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
    const struct radv_legacy_gs_info *gs_state = &gs->info.gs_ring_info;
-   uint64_t va;
+   const uint64_t va = radv_shader_get_va(gs);
 
    radeon_set_context_reg_seq(ctx_cs, R_028A60_VGT_GSVS_RING_OFFSET_1, 3);
    radeon_emit(ctx_cs, gs->info.regs.gs.vgt_gsvs_ring_offset[0]);
@@ -3109,18 +3100,8 @@ radv_emit_hw_gs(const struct radv_device *device, struct radeon_cmdbuf *ctx_cs, 
 
    radeon_set_context_reg(ctx_cs, R_028B90_VGT_GS_INSTANCE_CNT, gs->info.regs.gs.vgt_gs_instance_cnt);
 
-   if (pdev->info.gfx_level <= GFX8) {
-      /* GFX6-8: ESGS offchip ring buffer is allocated according to VGT_ESGS_RING_ITEMSIZE.
-       * GFX9+: Only used to set the GS input VGPRs, emulated in shaders.
-       */
-      radeon_set_context_reg(ctx_cs, R_028AAC_VGT_ESGS_RING_ITEMSIZE, gs->info.regs.gs.vgt_esgs_ring_itemsize);
-   }
-
-   va = radv_shader_get_va(gs);
-
    if (pdev->info.gfx_level >= GFX9) {
       if (!gs->info.merged_shader_compiled_separately) {
-
          if (pdev->info.gfx_level >= GFX10) {
             radeon_set_sh_reg(cs, R_00B320_SPI_SHADER_PGM_LO_ES, va >> 8);
          } else {
@@ -3141,6 +3122,11 @@ radv_emit_hw_gs(const struct radv_device *device, struct radeon_cmdbuf *ctx_cs, 
       radeon_emit(cs, S_00B224_MEM_BASE(va >> 40));
       radeon_emit(cs, gs->config.rsrc1);
       radeon_emit(cs, gs->config.rsrc2);
+
+      /* GFX6-8: ESGS offchip ring buffer is allocated according to VGT_ESGS_RING_ITEMSIZE.
+       * GFX9+: Only used to set the GS input VGPRs, emulated in shaders.
+       */
+      radeon_set_context_reg(ctx_cs, R_028AAC_VGT_ESGS_RING_ITEMSIZE, gs->info.regs.gs.vgt_esgs_ring_itemsize);
    }
 
    radeon_set_sh_reg_idx(pdev, cs, R_00B21C_SPI_SHADER_PGM_RSRC3_GS, 3, gs->info.regs.spi_shader_pgm_rsrc3_gs);
@@ -3201,7 +3187,7 @@ radv_emit_mesh_shader(const struct radv_device *device, struct radeon_cmdbuf *ct
       radeon_emit(cs, ms->info.regs.ms.spi_shader_gs_meshlet_exp_alloc);
    }
 
-   radv_emit_vgt_gs_out(device, ctx_cs, gs_out);
+   radv_emit_vgt_gs_out(device, ctx_cs, cs, gs_out);
 }
 
 enum radv_ps_in_type {
@@ -3503,12 +3489,13 @@ radv_emit_vgt_shader_config(const struct radv_device *device, struct radeon_cmdb
 }
 
 void
-radv_emit_vgt_gs_out(const struct radv_device *device, struct radeon_cmdbuf *ctx_cs, uint32_t vgt_gs_out_prim_type)
+radv_emit_vgt_gs_out(const struct radv_device *device, struct radeon_cmdbuf *ctx_cs, struct radeon_cmdbuf *cs,
+                     uint32_t vgt_gs_out_prim_type)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
    if (pdev->info.gfx_level >= GFX11) {
-      radeon_set_uconfig_reg(ctx_cs, R_030998_VGT_GS_OUT_PRIM_TYPE, vgt_gs_out_prim_type);
+      radeon_set_uconfig_reg(cs, R_030998_VGT_GS_OUT_PRIM_TYPE, vgt_gs_out_prim_type);
    } else {
       radeon_set_context_reg(ctx_cs, R_028A6C_VGT_GS_OUT_PRIM_TYPE, vgt_gs_out_prim_type);
    }

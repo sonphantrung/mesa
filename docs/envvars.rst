@@ -1314,6 +1314,8 @@ RADV driver environment variables
    ``noumr``
       disable UMR dumps during GPU hang detection (only with
       :envvar:`RADV_DEBUG` = ``hang``)
+   ``novideo``
+      disable all video extensions
    ``novrsflatshading``
       disable VRS for flat shading (only on GFX10.3+)
    ``preoptir``
@@ -1387,8 +1389,6 @@ RADV driver environment variables
       enable optimizations to move more driver internal objects to VRAM.
    ``transfer_queue``
       enable experimental transfer queue support (GFX9+, not yet spec compliant)
-   ``video_decode``
-      enable experimental video decoding support
 
 .. envvar:: RADV_TEX_ANISO
 

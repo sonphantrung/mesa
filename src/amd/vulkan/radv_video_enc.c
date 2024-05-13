@@ -135,7 +135,7 @@ radv_probe_video_encode(struct radv_physical_device *pdev)
    }
 
    struct radv_instance *instance = radv_physical_device_instance(pdev);
-   pdev->video_encode_enabled = !!(instance->perftest_flags & RADV_PERFTEST_VIDEO_ENCODE);
+   pdev->video_encode_enabled = !(instance->debug_flags & RADV_DEBUG_NO_VIDEO);
 }
 
 void
@@ -701,7 +701,7 @@ radv_enc_quality_params(struct radv_cmd_buffer *cmd_buffer)
    radeon_emit(cs, 0);
    radeon_emit(cs, 0);
    radeon_emit(cs, 0);
-   if (pdev->enc_hw_ver >= RADV_VIDEO_ENC_HW_3)
+   if (pdev->enc_hw_ver >= RADV_VIDEO_ENC_HW_2)
       radeon_emit(cs, 0);
    ENC_END;
 }

@@ -448,6 +448,7 @@ struct ir3_instruction {
           * until we resolve the phi srcs
           */
          void *nphi;
+         unsigned comp;
       } phi;
       struct {
          unsigned samp, tex;

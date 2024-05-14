@@ -212,7 +212,8 @@ radeon_set_privileged_config_reg(struct radeon_cmdbuf *cs, unsigned reg, unsigne
       struct radv_cmd_buffer *__cmdbuf = (cmdbuf);                                                                     \
       struct radv_tracked_regs *__tracked_regs = &__cmdbuf->tracked_regs;                                              \
       const uint32_t __v1 = (v1), __v2 = (v2), __v3 = (v3);                                                            \
-      if (!BITSET_TEST_RANGE_INSIDE_WORD(__tracked_regs->reg_saved_mask, (reg_enum), (reg_enum) + 2, 0x7) ||           \
+      if (!BITSET_TEST_RANGE_INSIDE_WORD(__tracked_regs->reg_saved_mask, (reg_enum), (reg_enum) + 2,                   \
+                                         0x7 << ((reg_enum) % BITSET_WORDBITS)) ||                                     \
           __tracked_regs->reg_value[(reg_enum)] != __v1 || __tracked_regs->reg_value[(reg_enum) + 1] != __v2 ||        \
           __tracked_regs->reg_value[(reg_enum) + 2] != __v3) {                                                         \
          radeon_set_context_reg_seq(cmdbuf->cs, reg, 3);                                                               \

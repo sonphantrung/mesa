@@ -5347,6 +5347,7 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
       }
    }
 
+   IR3_PASS(ir, ir3_cleanup_rpt, so);
    ret = ir3_ra(so);
 
    if (ret) {

@@ -41,6 +41,7 @@ set +e
 if ! vulkaninfo | tee /tmp/version.txt | grep "\"Mesa $MESA_VERSION\(\s\|$\)\"";
 then
     printf "%s\n" "Found $(cat /tmp/version.txt), expected $MESA_VERSION"
+    exit 1
 fi
 set -e
 

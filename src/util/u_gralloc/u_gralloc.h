@@ -76,6 +76,8 @@ int u_gralloc_get_front_rendering_usage(struct u_gralloc *gralloc,
 
 int u_gralloc_get_type(struct u_gralloc *gralloc);
 
+int u_gralloc_get_type(struct u_gralloc *gralloc);
+
 #ifdef __cplusplus
 }
 #endif

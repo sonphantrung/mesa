@@ -1542,13 +1542,16 @@ struct zink_screen {
    VkExtent2D maxSampleLocationGridSize[5];
    VkPipelineLayout gfx_push_constant_layout;
 
-   struct {
-      /* these affect shader cache */
-      bool lower_robustImageAccess2;
-      bool needs_zs_shader_swizzle;
-      bool needs_sanitised_layer;
-      bool io_opt;
-   } driver_compiler_workarounds;
+   union {
+      struct {
+         /* these affect shader cache */
+         bool lower_robustImageAccess2;
+         bool needs_zs_shader_swizzle;
+         bool needs_sanitised_layer;
+         bool io_opt;
+      } driver_compiler_workarounds;
+      uint8_t driver_compiler_workarounds_hash;
+   };
    struct {
       bool broken_l4a4;
       /* https://gitlab.khronos.org/vulkan/vulkan/-/issues/3306

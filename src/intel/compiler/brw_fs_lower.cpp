@@ -619,8 +619,7 @@ brw_fs_lower_dynamic_msaa_flags(fs_visitor &s)
          continue;
 
       const brw::fs_builder ibld(&s, block, inst);
-      ibld.MOV(inst->dst, prog_param_reg(s.prog_data,
-                                         wm_prog_data->msaa_flags_param));
+      ibld.MOV(inst->dst, s.param_reg(wm_prog_data->msaa_flags_param));
       inst->remove(block);
       progress = true;
    }

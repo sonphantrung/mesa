@@ -182,7 +182,7 @@ fs_nir_setup_uniforms(fs_visitor &s)
    const intel_device_info *devinfo = s.devinfo;
 
    /* Only the first compile gets to set up uniforms. */
-   if (s.push_constant_loc)
+   if (s.constants_assigned)
       return;
 
    s.uniforms = s.nir->num_uniforms / 4;
@@ -199,6 +199,8 @@ fs_nir_setup_uniforms(fs_visitor &s)
       *param = BRW_PARAM_BUILTIN_SUBGROUP_ID;
       s.uniforms++;
    }
+
+   s.assign_constant_locations();
 }
 
 static fs_reg
@@ -4179,7 +4181,7 @@ fs_nir_emit_cs_intrinsic(nir_to_brw_state &ntb,
       break;
 
    case nir_intrinsic_load_subgroup_id:
-      s.cs_payload().load_subgroup_id(bld, dest);
+      s.cs_payload().load_subgroup_id(ntb.s, bld, dest);
       break;
 
    case nir_intrinsic_load_local_invocation_id:
@@ -4564,8 +4566,10 @@ try_rebuild_resource(nir_to_brw_state &ntb, const brw::fs_builder &bld, nir_def 
          case nir_intrinsic_load_uniform: {
             unsigned base_offset = nir_intrinsic_base(intrin);
             unsigned load_offset = nir_src_as_uint(intrin->src[0]);
-            fs_reg src(UNIFORM, base_offset / 4, BRW_TYPE_UD);
-            src.offset = load_offset + base_offset % 4;
+            fs_reg src = ntb.s.uniform_reg(BRW_UBO_RANGE_PUSH_CONSTANT,
+                                           load_offset + base_offset,
+                                           nir_intrinsic_range(intrin),
+                                           BRW_TYPE_UD);
             return src;
          }
 
@@ -4675,8 +4679,9 @@ try_rebuild_resource(nir_to_brw_state &ntb, const brw::fs_builder &bld, nir_def 
 
             unsigned base_offset = nir_intrinsic_base(intrin);
             unsigned load_offset = nir_src_as_uint(intrin->src[0]);
-            fs_reg src(UNIFORM, base_offset / 4, BRW_TYPE_UD);
-            src.offset = load_offset + base_offset % 4;
+            fs_reg src = ntb.s.uniform_reg(BRW_UBO_RANGE_PUSH_CONSTANT,
+                                           load_offset + base_offset, 4,
+                                           BRW_TYPE_UD);
             ubld8.MOV(src, &ntb.resource_insts[def->index]);
             break;
          }
@@ -6069,7 +6074,11 @@ fs_nir_emit_intrinsic(nir_to_brw_state &ntb,
       unsigned base_offset = nir_intrinsic_base(instr);
       assert(base_offset % 4 == 0 || base_offset % brw_type_size_bytes(dest.type) == 0);
 
-      fs_reg src(UNIFORM, base_offset / 4, dest.type);
+      fs_reg src = s.uniform_reg(BRW_UBO_RANGE_PUSH_CONSTANT,
+                                 base_offset,
+                                 nir_intrinsic_range(instr),
+                                 dest.type);
+      assert(src.file != BAD_FILE);
 
       if (nir_src_is_const(instr->src[0])) {
          unsigned load_offset = nir_src_as_uint(instr->src[0]);
@@ -6078,7 +6087,7 @@ fs_nir_emit_intrinsic(nir_to_brw_state &ntb,
           * data take the modulo of the offset with 4 bytes and add it to
           * the offset to read from within the source register.
           */
-         src.offset = load_offset + base_offset % 4;
+         src = byte_offset(src, load_offset);
 
          for (unsigned j = 0; j < instr->num_components; j++) {
             bld.MOV(offset(dest, bld, j), offset(src, bld, j));
@@ -6225,10 +6234,10 @@ fs_nir_emit_intrinsic(nir_to_brw_state &ntb,
             brw_nir_ubo_surface_index_get_push_block(instr->src[0]);
 
          /* See if we've selected this as a push constant candidate */
-         fs_reg push_reg = prog_uniform_reg(s.prog_data, ubo_block,
-                                            load_offset,
-                                            type_size * instr->num_components,
-                                            dest.type);
+         fs_reg push_reg = s.uniform_reg(ubo_block,
+                                         load_offset,
+                                         type_size * instr->num_components,
+                                         dest.type);
          if (push_reg.file != BAD_FILE) {
             for (unsigned i = 0; i < instr->num_components; i++) {
                bld.MOV(offset(dest, bld, i),

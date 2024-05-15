@@ -1088,9 +1088,10 @@ fs_reg::fs_reg(enum brw_reg_file file, unsigned nr, enum brw_reg_type type)
 void
 fs_visitor::import_uniforms(fs_visitor *v)
 {
-   this->push_constant_loc = v->push_constant_loc;
    this->uniforms = v->uniforms;
+   this->constant_ranges = v->constant_ranges;
    this->pull_constant_ranges = v->pull_constant_ranges;
+   this->constants_assigned = true;
 }
 
 enum brw_barycentric_mode
@@ -1219,20 +1220,9 @@ round_components_to_whole_registers(const intel_device_info *devinfo,
 void
 fs_visitor::assign_curb_setup()
 {
-   unsigned uniform_push_length =
-      round_components_to_whole_registers(devinfo, prog_data->nr_params);
-
-   unsigned ubo_push_length = 0;
-   unsigned ubo_push_start[4];
-   for (int i = 0; i < 4; i++) {
-      ubo_push_start[i] = 8 * (ubo_push_length + uniform_push_length);
-      ubo_push_length += DIV_ROUND_UP(prog_data->ubo_ranges[i].length_B, REG_SIZE * reg_unit(devinfo));
-
-      assert(ubo_push_start[i] % (8 * reg_unit(devinfo)) == 0);
-      assert(ubo_push_length % (1 * reg_unit(devinfo)) == 0);
-   }
-
-   prog_data->curb_read_length = uniform_push_length + ubo_push_length;
+   prog_data->curb_read_length = constant_ranges.empty() ? 0 :
+      (constant_ranges.back().reg_offset +
+       DIV_ROUND_UP(constant_ranges.back().length_B, REG_SIZE * reg_unit(devinfo)));
 
    uint64_t used = 0;
    const bool is_compute = gl_shader_stage_is_compute(stage);
@@ -1253,7 +1243,8 @@ fs_visitor::assign_curb_setup()
        * TODO: Support inline data and push at the same time.
        */
       assert(devinfo->verx10 >= 125);
-      assert(uniform_push_length <= reg_unit(devinfo));
+      assert(!constant_ranges.empty());
+      assert(prog_data->curb_read_length <= reg_unit(devinfo));
    } else if (pull_push_constants) {
       assert(devinfo->has_lsc);
       assert(gl_shader_stage_is_compute(stage) ||
@@ -1353,37 +1344,12 @@ fs_visitor::assign_curb_setup()
    foreach_block_and_inst(block, fs_inst, inst, cfg) {
       for (unsigned int i = 0; i < inst->sources; i++) {
 	 if (inst->src[i].file == UNIFORM) {
-            int uniform_nr = inst->src[i].nr + inst->src[i].offset / 4;
-            int constant_nr;
-            if (inst->src[i].nr >= UBO_START) {
-               /* constant_nr is in 32-bit units, the rest are in bytes */
-               constant_nr = ubo_push_start[inst->src[i].nr - UBO_START] +
-                             inst->src[i].offset / 4;
-            } else if (uniform_nr >= 0 && uniform_nr < (int) uniforms) {
-               constant_nr = push_constant_loc[uniform_nr];
-            } else {
-               /* Section 5.11 of the OpenGL 4.1 spec says:
-                * "Out-of-bounds reads return undefined values, which include
-                *  values from other variables of the active program or zero."
-                * Just return the first push constant.
-                */
-               constant_nr = 0;
-            }
+            inst->src[i] = get_constant_payload_reg(inst->src[i]);
 
-            assert(constant_nr / 8 < 64);
-            used |= BITFIELD64_BIT(constant_nr / 8);
-
-	    struct brw_reg brw_reg = brw_vec1_grf(payload().num_regs +
-						  constant_nr / 8,
-						  constant_nr % 8);
-            brw_reg.abs = inst->src[i].abs;
-            brw_reg.negate = inst->src[i].negate;
-
-            assert(inst->src[i].stride == 0);
-            inst->src[i] = byte_offset(
-               retype(brw_reg, inst->src[i].type),
-               inst->src[i].offset % 4);
-	 }
+            unsigned reg_nr = inst->src[i].nr - payload().num_regs;
+            assert(reg_nr < 64);
+            used |= BITFIELD64_BIT(reg_nr);
+         }
       }
    }
 
@@ -1393,10 +1359,11 @@ fs_visitor::assign_curb_setup()
          cfg->first_block(), cfg->first_block()->start());
 
       /* push_reg_mask_param is in 32-bit units */
-      assert(prog_data->push_reg_mask_param.block == BRW_UBO_RANGE_PUSH_CONSTANT);
-      struct fs_reg mask =
-         byte_offset(brw_vec1_grf(payload().num_regs, 0),
-                     prog_data->push_reg_mask_param.offset_B);
+      fs_reg mask = get_constant_payload_reg(
+         prog_data->push_reg_mask_param.block,
+         prog_data->push_reg_mask_param.offset_B,
+         BRW_TYPE_UD);
+      assert(mask.file != BAD_FILE);
 
       fs_reg b32;
       for (unsigned i = 0; i < 64; i++) {
@@ -2072,6 +2039,21 @@ get_push_constant_access_ranges(const struct intel_device_info *devinfo,
    return ranges;
 }
 
+void
+fs_visitor::append_constant_range(uint16_t block, uint32_t offset_B, uint32_t length_B)
+{
+   struct constant_range r;
+   r.block = block;
+   r.reg_offset = constant_ranges.empty() ? 0 :
+      constant_ranges.back().reg_offset +
+      DIV_ROUND_UP(constant_ranges.back().length_B,
+                   REG_SIZE * reg_unit(devinfo));
+   r.offset_B = offset_B;
+   r.length_B = length_B;
+
+   constant_ranges.push_back(r);
+}
+
 /**
  * Assign UNIFORM file registers to either push constants or pull constants.
  *
@@ -2085,7 +2067,7 @@ void
 fs_visitor::assign_constant_locations()
 {
    /* Only the first compile gets to decide on locations. */
-   if (push_constant_loc)
+   if (constants_assigned)
       return;
 
    /* Compute the push constant locations.
@@ -2101,28 +2083,17 @@ fs_visitor::assign_constant_locations()
       /* Build a bitfield of used uniforms so that we can pack the push
        * constant loads.
        */
-      std::vector<struct pull_constant_range> r;
-      r = get_push_constant_access_ranges(devinfo, nir,
-                                          nir_intrinsic_load_uniform);
-      pull_constant_ranges.insert(pull_constant_ranges.end(), r.begin(), r.end());
+      std::vector<struct pull_constant_range> ranges;
+      ranges = get_push_constant_access_ranges(devinfo, nir,
+                                               nir_intrinsic_load_uniform);
+      for (const auto &r : ranges)
+         append_constant_range(BRW_UBO_RANGE_PUSH_CONSTANT, r.offset_B, r.length_B);
+      pull_constant_ranges.insert(pull_constant_ranges.end(),
+                                  ranges.begin(), ranges.end());
 
-      push_constant_loc = rzalloc_array(mem_ctx, int, uniforms);
-      /* Build a map of uniforms */
-      for (unsigned i = 0, offset = 0; i < pull_constant_ranges.size(); i++) {
-         const struct pull_constant_range &r = pull_constant_ranges[i];
-         for (unsigned u = 0; u < r.length_B / 4; u++) {
-            unsigned uniform = r.offset_B / 4 + u;
-            if (uniform >= uniforms)
-               continue;
-            push_constant_loc[uniform] = offset / 4 + u;
-         }
-         offset += r.length_B;
-      }
    } else {
-      push_constant_loc = rzalloc_array(mem_ctx, int, uniforms);
-      for (unsigned u = 0; u < uniforms; u++) {
-         push_constant_loc[u] = u;
-      }
+      if (uniforms)
+         append_constant_range(BRW_UBO_RANGE_PUSH_CONSTANT, 0, uniforms * 4);
    }
 
    /* Now that we know how many regular uniforms we'll push, reduce the
@@ -2145,8 +2116,12 @@ fs_visitor::assign_constant_locations()
 
       assert(push_length_B % (REG_SIZE * reg_unit(devinfo)) == 0);
 
+      if (range->length_B > 0)
+         append_constant_range(range->block, range->start_B, range->length_B);
    }
    assert(push_length_B <= max_push_length_B);
+
+   constants_assigned = true;
 }
 
 bool

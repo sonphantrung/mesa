@@ -1023,6 +1023,92 @@ fs_visitor::emit_cs_terminate()
    send->eot = true;
 }
 
+fs_reg
+fs_visitor::uniform_reg(unsigned block, unsigned offset_B, unsigned length_B,
+                        brw_reg_type type) const
+{
+   for (const auto &r : constant_ranges) {
+      if (block != r.block)
+         continue;
+
+      if (offset_B + length_B < r.offset_B)
+         continue;
+      if (offset_B + length_B > r.offset_B + r.length_B)
+         continue;
+
+      return byte_offset(fs_reg(UNIFORM, r.reg_offset, type), offset_B - r.offset_B);
+   }
+
+   return fs_reg();
+}
+
+fs_reg
+fs_visitor::param_reg(const struct brw_push_param &param)
+{
+   return uniform_reg(param.block, param.offset_B, 4, BRW_TYPE_UD);
+}
+
+fs_reg
+fs_visitor::get_constant_payload_reg(uint16_t block, uint32_t offset_B,
+                                     brw_reg_type type)
+{
+   fs_reg reg;
+
+   for (const auto &r : constant_ranges) {
+      if (r.block != block)
+         continue;
+
+      if (offset_B < r.offset_B ||
+          offset_B > (r.offset_B + r.length_B))
+         continue;
+
+      return retype(byte_offset(brw_vec1_grf(payload().num_regs + r.reg_offset, 0),
+                                offset_B - r.offset_B),
+                    type);
+   }
+
+   /* Section 5.11 of the OpenGL 4.1 spec says: "Out-of-bounds reads return
+    * undefined values, which include values from other variables of the
+    * active program or zero." Just return the first push constant.
+    */
+   return retype(brw_vec1_grf(payload().num_regs, 0), type);
+}
+
+fs_reg
+fs_visitor::get_constant_payload_reg(fs_reg uniform)
+{
+   fs_reg reg;
+
+   if (gl_shader_stage_is_compute(stage) &&
+       brw_cs_prog_data(prog_data)->uses_inline_data) {
+      reg = byte_offset(retype(brw_vec1_grf(payload().num_regs, 0),
+                               uniform.type),
+                        uniform.offset);
+   } else {
+      reg = byte_offset(
+         retype(brw_vec1_grf(payload().num_regs + uniform.nr,
+                             uniform.subnr), uniform.type),
+         uniform.offset);
+   }
+
+   reg.abs = uniform.abs;
+   reg.negate = uniform.negate;
+
+   return reg;
+}
+
+void
+fs_visitor::dump_constant_ranges() const
+{
+   for (const auto &r : constant_ranges) {
+      fprintf(stderr, "block%04u range=[%03u, %03u] reg=%02u (%s)\n",
+              r.block, r.offset_B, r.length_B, r.reg_offset,
+              r.block == BRW_UBO_RANGE_PUSH_CONSTANT ? "push-constants" :
+              r.block == BRW_UBO_RANGE_DRIVER_INTERNAL ? "driver-constants" :
+              "ubo");
+   }
+}
+
 fs_visitor::fs_visitor(const struct brw_compiler *compiler,
                        const struct brw_compile_params *params,
                        const brw_base_prog_key *key,
@@ -1116,8 +1202,8 @@ fs_visitor::init()
    this->first_non_payload_grf = 0;
 
    this->uniforms = 0;
+   this->constants_assigned = false;
    this->last_scratch = 0;
-   this->push_constant_loc = NULL;
 
    memset(&this->shader_stats, 0, sizeof(this->shader_stats));
 

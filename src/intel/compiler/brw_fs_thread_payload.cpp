@@ -391,7 +391,8 @@ cs_thread_payload::cs_thread_payload(const fs_visitor &v)
 }
 
 void
-cs_thread_payload::load_subgroup_id(const fs_builder &bld,
+cs_thread_payload::load_subgroup_id(const fs_visitor &v,
+                                    const fs_builder &bld,
                                     fs_reg &dest) const
 {
    auto devinfo = bld.shader->devinfo;
@@ -405,7 +406,8 @@ cs_thread_payload::load_subgroup_id(const fs_builder &bld,
       assert(gl_shader_stage_is_compute(bld.shader->stage));
       int index = brw_get_subgroup_id_param_index(devinfo,
                                                   bld.shader->prog_data);
-      bld.MOV(dest, fs_reg(UNIFORM, index, BRW_TYPE_UD));
+      bld.MOV(dest, v.uniform_reg(BRW_UBO_RANGE_PUSH_CONSTANT,
+                                  4 * index, 4, BRW_TYPE_UD));
    }
 }
 

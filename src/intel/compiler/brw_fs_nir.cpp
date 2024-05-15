@@ -6040,13 +6040,14 @@ fs_nir_emit_intrinsic(nir_to_brw_state &ntb,
 
    case nir_intrinsic_load_reloc_const_intel: {
       uint32_t id = nir_intrinsic_param_idx(instr);
+      uint32_t base = nir_intrinsic_base(instr);
 
       /* Emit the reloc in the smallest SIMD size to limit register usage. */
       const fs_builder ubld = bld.exec_all().group(1, 0);
       fs_reg small_dest = ubld.vgrf(dest.type);
       ubld.UNDEF(small_dest);
-      ubld.exec_all().group(1, 0).emit(SHADER_OPCODE_MOV_RELOC_IMM,
-                                       small_dest, brw_imm_ud(id));
+      ubld.exec_all().group(1, 0).emit(SHADER_OPCODE_MOV_RELOC_IMM, small_dest,
+                                       brw_imm_ud(id), brw_imm_ud(base));
 
       /* Copy propagation will get rid of this MOV. */
       bld.MOV(dest, component(small_dest, 0));
@@ -8455,6 +8456,12 @@ nir_to_brw(fs_visitor *s)
       .mem_ctx = ralloc_context(NULL),
       .bld     = fs_builder(s).at_end(),
    };
+
+   for (unsigned i = 0; i < s->nir->printf_info_count; i++) {
+      brw_stage_prog_data_add_printf(s->prog_data,
+                                     s->mem_ctx,
+                                     &s->nir->printf_info[i]);
+   }
 
    emit_shader_float_controls_execution_mode(ntb);
 

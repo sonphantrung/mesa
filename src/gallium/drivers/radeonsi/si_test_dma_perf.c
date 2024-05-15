@@ -120,8 +120,7 @@ void si_test_dma_perf(struct si_screen *sscreen)
 
          void *compute_shader = NULL;
          if (test_cs) {
-            compute_shader = si_create_dma_compute_shader(sctx, cs_dwords_per_thread,
-                                              cache_policy == L2_STREAM, is_copy);
+            compute_shader = si_create_dma_compute_shader(sctx, cs_dwords_per_thread, is_copy);
          }
 
          double score = 0;
@@ -193,12 +192,12 @@ void si_test_dma_perf(struct si_screen *sscreen)
                   info.grid[2] = 1;
 
                   struct pipe_shader_buffer sb[2] = {};
-                  sb[0].buffer = dst;
-                  sb[0].buffer_size = size;
+                  sb[is_copy].buffer = dst;
+                  sb[is_copy].buffer_size = size;
 
                   if (is_copy) {
-                     sb[1].buffer = src;
-                     sb[1].buffer_size = size;
+                     sb[0].buffer = src;
+                     sb[0].buffer_size = size;
                   } else {
                      for (unsigned i = 0; i < 4; i++)
                         sctx->cs_user_data[i] = clear_value;

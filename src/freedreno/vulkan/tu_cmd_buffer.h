@@ -145,6 +145,8 @@ enum tu_cmd_access_mask {
     */
    TU_ACCESS_CCHE_READ = 1 << 16,
 
+   TU_ACCESS_RTU_READ = 1 << 17,
+
    TU_ACCESS_READ =
       TU_ACCESS_UCHE_READ |
       TU_ACCESS_CCU_COLOR_READ |
@@ -210,6 +212,8 @@ enum tu_cmd_flush_bits {
     */
    TU_CMD_FLAG_BLIT_CACHE_FLUSH = 1 << 11,
 
+   TU_CMD_FLAG_RTU_INVALIDATE = 1 << 12,
+
    TU_CMD_FLAG_ALL_FLUSH =
       TU_CMD_FLAG_CCU_FLUSH_DEPTH |
       TU_CMD_FLAG_CCU_FLUSH_COLOR |
@@ -231,7 +235,8 @@ enum tu_cmd_flush_bits {
        * in case there was another command before the current command buffer
        * that it needs to wait for.
        */
-      TU_CMD_FLAG_WAIT_FOR_ME,
+      TU_CMD_FLAG_WAIT_FOR_ME |
+      TU_CMD_FLAG_RTU_INVALIDATE,
 };
 
 /* Changing the CCU from sysmem mode to gmem mode or vice-versa is pretty

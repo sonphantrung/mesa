@@ -29,6 +29,8 @@
 #include "tu_acceleration_structure.h"
 #include "radix_sort/radix_sort_u64.h"
 
+#include "common/freedreno_gpu_event.h"
+
 #include "bvh/tu_build_interface.h"
 
 static const uint32_t encode_spv[] = {

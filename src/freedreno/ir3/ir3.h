@@ -75,6 +75,7 @@ struct ir3_info {
    uint8_t subgroup_size;
    bool double_threadsize;
    bool multi_dword_ldp_stp;
+   bool uses_ray_intersection;
 
    /* number of sync bits: */
    uint16_t ss, sy;

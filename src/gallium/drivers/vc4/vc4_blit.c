@@ -458,7 +458,7 @@ vc4_render_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
         }
 
         vc4_blitter_save(vc4);
-        util_blitter_blit(vc4->blitter, info);
+        util_blitter_blit(vc4->blitter, info, NULL);
 
         info->mask = 0;
 }

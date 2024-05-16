@@ -126,6 +126,7 @@ static const struct debug_named_value test_options[] = {
    {"testvmfaultcp", DBG(TEST_VMFAULT_CP), "Invoke a CP VM fault test and exit."},
    {"testvmfaultshader", DBG(TEST_VMFAULT_SHADER), "Invoke a shader VM fault test and exit."},
    {"testdmaperf", DBG(TEST_DMA_PERF), "Test DMA performance"},
+   {"blitperf", DBG(TEST_BLIT_PERF), "Test gfx and compute clear/copy/blit/resolve performance"},
 
    DEBUG_NAMED_VALUE_END /* must be last */
 };
@@ -271,18 +272,6 @@ static void si_destroy_context(struct pipe_context *context)
       sctx->b.delete_compute_state(&sctx->b, sctx->cs_copy_buffer);
    if (sctx->cs_ubyte_to_ushort)
       sctx->b.delete_compute_state(&sctx->b, sctx->cs_ubyte_to_ushort);
-   for (unsigned i = 0; i < ARRAY_SIZE(sctx->cs_copy_image); i++) {
-      for (unsigned j = 0; j < ARRAY_SIZE(sctx->cs_copy_image[i]); j++) {
-         for (unsigned k = 0; k < ARRAY_SIZE(sctx->cs_copy_image[i][j]); k++) {
-            if (sctx->cs_copy_image[i][j][k])
-               sctx->b.delete_compute_state(&sctx->b, sctx->cs_copy_image[i][j][k]);
-         }
-      }
-   }
-   if (sctx->cs_clear_render_target)
-      sctx->b.delete_compute_state(&sctx->b, sctx->cs_clear_render_target);
-   if (sctx->cs_clear_render_target_1d_array)
-      sctx->b.delete_compute_state(&sctx->b, sctx->cs_clear_render_target_1d_array);
    if (sctx->cs_clear_12bytes_buffer)
       sctx->b.delete_compute_state(&sctx->b, sctx->cs_clear_12bytes_buffer);
    for (unsigned i = 0; i < ARRAY_SIZE(sctx->cs_dcc_retile); i++) {
@@ -377,10 +366,17 @@ static void si_destroy_context(struct pipe_context *context)
       p_atomic_dec(&context->screen->num_contexts);
 
    if (sctx->cs_blit_shaders) {
-      hash_table_foreach(sctx->cs_blit_shaders, entry) {
-         context->delete_compute_state(context, entry->data);
+      hash_table_u64_foreach(sctx->cs_blit_shaders, entry) {
+         context->delete_compute_state(context, entry.data);
       }
-      _mesa_hash_table_destroy(sctx->cs_blit_shaders, NULL);
+      _mesa_hash_table_u64_destroy(sctx->cs_blit_shaders);
+   }
+
+   if (sctx->ps_resolve_shaders) {
+      hash_table_u64_foreach(sctx->ps_resolve_shaders, entry) {
+         context->delete_fs_state(context, entry.data);
+      }
+      _mesa_hash_table_u64_destroy(sctx->ps_resolve_shaders);
    }
 
    FREE(sctx);
@@ -875,8 +871,12 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, unsign
    sctx->initial_gfx_cs_size = sctx->gfx_cs.current.cdw;
    sctx->last_timestamp_cmd = NULL;
 
-   sctx->cs_blit_shaders = _mesa_hash_table_create_u32_keys(NULL);
+   sctx->cs_blit_shaders = _mesa_hash_table_u64_create(NULL);
    if (!sctx->cs_blit_shaders)
+      goto fail;
+
+   sctx->ps_resolve_shaders = _mesa_hash_table_u64_create(NULL);
+   if (!sctx->ps_resolve_shaders)
       goto fail;
 
    return &sctx->b;
@@ -1501,6 +1501,9 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
    if (test_flags & DBG(TEST_DMA_PERF)) {
       si_test_dma_perf(sscreen);
    }
+
+   if (test_flags & DBG(TEST_BLIT_PERF))
+      si_test_blit_perf(sscreen);
 
    if (test_flags & (DBG(TEST_VMFAULT_CP) | DBG(TEST_VMFAULT_SHADER)))
       si_test_vmfault(sscreen, test_flags);

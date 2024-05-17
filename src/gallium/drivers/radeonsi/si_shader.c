@@ -803,6 +803,9 @@ bool si_shader_binary_open(struct si_screen *screen, struct si_shader *shader,
                                        .options =
                                           {
                                              .halt_at_entry = screen->options.halt_shaders,
+                                             .transc_wa = num_parts > 1 &&
+                                                          shader->info.uses_transcendal_op &&
+                                                          screen->info.needs_llvm_transc_wa,
                                           },
                                        .shader_type = sel->stage,
                                        .wave_size = shader->wave_size,
@@ -2541,6 +2544,7 @@ void si_update_shader_binary_info(struct si_shader *shader, nir_shader *nir)
 
    shader->info.uses_vmem_load_other |= info.uses_vmem_load_other;
    shader->info.uses_vmem_sampler_or_bvh |= info.uses_vmem_sampler_or_bvh;
+   shader->info.uses_transcendal_op |= info.uses_transcendal_op;
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       /* Since uniform inlining can remove PS inputs, set the latest info about PS inputs here. */

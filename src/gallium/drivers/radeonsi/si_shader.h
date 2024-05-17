@@ -532,6 +532,8 @@ struct si_shader_info {
    /* frag coord and sample pos per component read mask. */
    uint8_t reads_frag_coord_mask;
    uint8_t reads_sample_pos_mask;
+
+   bool uses_transcendal_op;
 };
 
 /* A shader selector is a gallium CSO and contains shader variants and
@@ -805,6 +807,7 @@ struct si_shader_binary_info {
    uint8_t num_input_vgprs;
    bool uses_vmem_load_other; /* all other VMEM loads and atomics with return */
    bool uses_vmem_sampler_or_bvh;
+   bool uses_transcendal_op;
    uint8_t num_fragcoord_components;
    bool uses_instanceid;
    uint8_t nr_pos_exports;

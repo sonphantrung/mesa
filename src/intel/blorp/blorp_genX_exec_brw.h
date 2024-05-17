@@ -595,12 +595,19 @@ blorp_emit_cc_viewport(struct blorp_batch *batch)
    if (batch->blorp->config.use_cached_dynamic_states) {
       cc_vp_offset = blorp_get_dynamic_state(batch, BLORP_DYNAMIC_STATE_CC_VIEWPORT);
    } else {
+#if GFX_VERx10 >= 20
+      blorp_emit_dynamic(batch, GENX(CC_VIEWPORT), vp, 32, &cc_vp_offset) {
+         vp.MinimumDepth = -FLT_MAX;
+         vp.MaximumDepth = FLT_MAX;
+      }
+#else
       blorp_emit_dynamic(batch, GENX(CC_VIEWPORT), vp, 32, &cc_vp_offset) {
          vp.MinimumDepth = batch->blorp->config.use_unrestricted_depth_range ?
                            -FLT_MAX : 0.0;
          vp.MaximumDepth = batch->blorp->config.use_unrestricted_depth_range ?
                            FLT_MAX : 1.0;
       }
+#endif
    }
 
    blorp_emit(batch, GENX(3DSTATE_VIEWPORT_STATE_POINTERS_CC), vsp) {

@@ -160,6 +160,10 @@ panvk_image_select_mod(VkDevice _device, const VkImageCreateInfo *pCreateInfo,
    if (linear)
       return DRM_FORMAT_MOD_LINEAR;
 
+   /* Keep 1D images linear. */
+   if (pCreateInfo->imageType == VK_IMAGE_TYPE_1D)
+      return DRM_FORMAT_MOD_LINEAR;
+
    /* Image store don't work on AFBC images */
    if (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT)
       return DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED;

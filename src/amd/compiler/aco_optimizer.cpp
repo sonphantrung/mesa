@@ -711,7 +711,7 @@ valu_can_accept_vgpr(aco_ptr<Instruction>& instr, unsigned operand)
    if (instr->opcode == aco_opcode::v_permlane16_b32 ||
        instr->opcode == aco_opcode::v_permlanex16_b32)
       return operand == 0;
-   return true;
+   return instr_info.classes[(int)instr->opcode] != instr_class::valu_pseudo_scalar_trans;
 }
 
 /* check constant bus and literal limitations */

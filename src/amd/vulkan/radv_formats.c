@@ -441,25 +441,27 @@ radv_is_buffer_format_supported(VkFormat format, bool *scaled)
    return true;
 }
 
-bool
-radv_is_colorbuffer_format_supported(const struct radv_physical_device *pdev, VkFormat format, bool *blendable)
+static bool
+radv_is_colorbuffer_format_blendable(const struct radv_physical_device *pdev, VkFormat format)
 {
    const struct util_format_description *desc = vk_format_description(format);
-   uint32_t color_format = ac_get_cb_format(pdev->info.gfx_level, desc->format);
-   uint32_t color_swap = ac_translate_colorswap(pdev->info.gfx_level, desc->format, false);
-   uint32_t color_num_format = ac_get_cb_number_type(desc->format);
+   const uint32_t color_format = ac_get_cb_format(pdev->info.gfx_level, desc->format);
+   const uint32_t color_num_format = ac_get_cb_number_type(desc->format);
 
+   assert(color_format != V_028C70_COLOR_INVALID);
    if (color_num_format == V_028C70_NUMBER_UINT || color_num_format == V_028C70_NUMBER_SINT ||
        color_format == V_028C70_COLOR_8_24 || color_format == V_028C70_COLOR_24_8 ||
-       color_format == V_028C70_COLOR_X24_8_32_FLOAT) {
-      *blendable = false;
-   } else
-      *blendable = true;
-
-   if (format == VK_FORMAT_E5B9G9R9_UFLOAT_PACK32 && pdev->info.gfx_level < GFX10_3)
+       color_format == V_028C70_COLOR_X24_8_32_FLOAT)
       return false;
 
-   return color_format != V_028C70_COLOR_INVALID && color_swap != ~0U && color_num_format != ~0;
+   return true;
+}
+
+bool
+radv_is_colorbuffer_format_supported(const struct radv_physical_device *pdev, VkFormat format)
+{
+   const struct util_format_description *desc = vk_format_description(format);
+   return ac_is_colorbuffer_format_supported(pdev->info.gfx_level, desc->format);
 }
 
 static bool
@@ -468,7 +470,7 @@ radv_is_zs_format_supported(VkFormat format)
    if (format == VK_FORMAT_D24_UNORM_S8_UINT || format == VK_FORMAT_X8_D24_UNORM_PACK32)
       return false;
 
-   return ac_translate_dbformat(vk_format_to_pipe_format(format)) != V_028040_Z_INVALID || format == VK_FORMAT_S8_UINT;
+   return ac_is_zs_format_supported(vk_format_to_pipe_format(format)) || format == VK_FORMAT_S8_UINT;
 }
 
 static bool
@@ -581,7 +583,6 @@ radv_physical_device_get_format_properties(struct radv_physical_device *pdev, Vk
    const struct radv_instance *instance = radv_physical_device_instance(pdev);
    VkFormatFeatureFlags2 linear = 0, tiled = 0, buffer = 0;
    const struct util_format_description *desc = vk_format_description(format);
-   bool blendable;
    bool scaled = false;
    /* TODO: implement some software emulation of SUBSAMPLED formats. */
    if (desc->format == PIPE_FORMAT_NONE || desc->layout == UTIL_FORMAT_LAYOUT_SUBSAMPLED) {
@@ -709,10 +710,10 @@ radv_physical_device_get_format_properties(struct radv_physical_device *pdev, Vk
             linear &= ~VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_MINMAX_BIT;
          }
       }
-      if (radv_is_colorbuffer_format_supported(pdev, format, &blendable) && desc->channel[0].size != 64) {
+      if (radv_is_colorbuffer_format_supported(pdev, format) && desc->channel[0].size != 64) {
          linear |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_2_BLIT_DST_BIT;
          tiled |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_2_BLIT_DST_BIT;
-         if (blendable) {
+         if (radv_is_colorbuffer_format_blendable(pdev, format)) {
             linear |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BLEND_BIT;
             tiled |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BLEND_BIT;
          }

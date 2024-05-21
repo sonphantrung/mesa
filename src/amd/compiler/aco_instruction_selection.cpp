@@ -4444,20 +4444,38 @@ get_gfx6_cache_flags(bool glc, bool slc, bool dlc)
 ac_hw_cache_flags
 get_load_cache_flags(Builder& bld, bool glc, bool slc)
 {
-   bool dlc = glc && (bld.program->gfx_level == GFX10 || bld.program->gfx_level == GFX10_3);
-   return get_gfx6_cache_flags(glc, slc, dlc);
+   if (bld.program->gfx_level >= GFX12) {
+      ac_hw_cache_flags cache = {0};
+      cache.gfx12.scope = (glc || slc) ? gfx12_scope_memory : gfx12_scope_cu;
+      return cache;
+   } else {
+      bool dlc = glc && (bld.program->gfx_level == GFX10 || bld.program->gfx_level == GFX10_3);
+      return get_gfx6_cache_flags(glc, slc, dlc);
+   }
 }
 
 ac_hw_cache_flags
 get_store_cache_flags(Builder& bld, bool glc, bool slc)
 {
-   return get_gfx6_cache_flags(glc, slc, false);
+   if (bld.program->gfx_level >= GFX12) {
+      ac_hw_cache_flags cache = {0};
+      cache.gfx12.scope = gfx12_scope_memory;
+      return cache;
+   } else {
+      return get_gfx6_cache_flags(glc, slc, false);
+   }
 }
 
 ac_hw_cache_flags
 get_atomic_cache_flags(Builder& bld, bool return_previous)
 {
-   return get_gfx6_cache_flags(return_previous, false, false);
+   if (bld.program->gfx_level >= GFX12) {
+      ac_hw_cache_flags cache = {0};
+      cache.gfx12.temporal_hint = return_previous ? gfx12_atomic_return : 0;
+      return cache;
+   } else {
+      return get_gfx6_cache_flags(return_previous, false, false);
+   }
 }
 
 Temp

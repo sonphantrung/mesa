@@ -3111,6 +3111,8 @@ struct anv_sparse_binding_data {
 
 struct anv_sparse_surf_info {
    struct isl_surf *isl;
+   const struct isl_format_layout *layout;
+   struct isl_tile_info tile_info;
 };
 
 static inline bool

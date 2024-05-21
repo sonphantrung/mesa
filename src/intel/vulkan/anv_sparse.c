@@ -54,6 +54,8 @@ anv_sparse_calc_surf_info(struct isl_surf *isl_surf)
    struct anv_sparse_surf_info surf;
 
    surf.isl = isl_surf;
+   surf.layout = isl_format_get_layout(isl_surf->format);
+   isl_surf_get_tile_info(isl_surf, &surf.tile_info);
 
    return surf;
 }
@@ -126,25 +128,24 @@ dump_isl_surf(struct anv_sparse_surf_info *surf)
    sparse_debug("- row_pitch_B: %u\n", s->row_pitch_B);
    sparse_debug("- array_pitch_el_rows: %u\n", s->array_pitch_el_rows);
 
-   const struct isl_format_layout *layout = isl_format_get_layout(s->format);
+   const struct isl_format_layout *layout = surf->layout;
    sparse_debug("- format layout:\n");
    sparse_debug("  - format:%d bpb:%d bw:%d bh:%d bd:%d\n",
                 layout->format, layout->bpb, layout->bw, layout->bh,
                 layout->bd);
 
-   struct isl_tile_info tile_info;
-   isl_surf_get_tile_info(s, &tile_info);
+   struct isl_tile_info *tile_info = &surf->tile_info;
 
    sparse_debug("- tile info:\n");
-   sparse_debug("  - format_bpb: %d\n", tile_info.format_bpb);
+   sparse_debug("  - format_bpb: %d\n", tile_info->format_bpb);
    sparse_debug("  - logical_extent_el: [%d, %d, %d, %d]\n",
-                tile_info.logical_extent_el.w,
-                tile_info.logical_extent_el.h,
-                tile_info.logical_extent_el.d,
-                tile_info.logical_extent_el.a);
+                tile_info->logical_extent_el.w,
+                tile_info->logical_extent_el.h,
+                tile_info->logical_extent_el.d,
+                tile_info->logical_extent_el.a);
    sparse_debug("  - phys_extent_B: [%d, %d]\n",
-                tile_info.phys_extent_B.w,
-                tile_info.phys_extent_B.h);
+                tile_info->phys_extent_B.w,
+                tile_info->phys_extent_B.h);
 }
 
 static VkOffset3D
@@ -744,17 +745,14 @@ anv_sparse_calc_block_shape(struct anv_physical_device *pdevice,
                             struct anv_sparse_surf_info *surf)
 {
    struct isl_surf *isl_surf = surf->isl;
-   const struct isl_format_layout *layout =
-      isl_format_get_layout(isl_surf->format);
+   const struct isl_format_layout *layout = surf->layout;
    const int Bpb = layout->bpb / 8;
-
-   struct isl_tile_info tile_info;
-   isl_surf_get_tile_info(isl_surf, &tile_info);
+   struct isl_tile_info *tile_info = &surf->tile_info;
 
    VkExtent3D block_shape_el = {
-      .width = tile_info.logical_extent_el.width,
-      .height = tile_info.logical_extent_el.height,
-      .depth = tile_info.logical_extent_el.depth,
+      .width = tile_info->logical_extent_el.width,
+      .height = tile_info->logical_extent_el.height,
+      .depth = tile_info->logical_extent_el.depth,
    };
    VkExtent3D block_shape_px = vk_extent3d_el_to_px(block_shape_el, layout);
 
@@ -783,8 +781,7 @@ anv_sparse_calc_image_format_properties(struct anv_physical_device *pdevice,
                                         struct anv_sparse_surf_info *surf)
 {
    const struct isl_surf *isl_surf = surf->isl;
-   const struct isl_format_layout *isl_layout =
-      isl_format_get_layout(isl_surf->format);
+   const struct isl_format_layout *isl_layout = surf->layout;
    const int bpb = isl_layout->bpb;
    assert(bpb == 8 || bpb == 16 || bpb == 32 || bpb == 64 ||bpb == 128);
    const int Bpb = bpb / 8;
@@ -889,14 +886,11 @@ anv_sparse_calc_miptail_properties(struct anv_device *device,
    struct isl_surf *isl_surf = surf->isl;
    uint64_t binding_plane_offset =
       image->planes[plane].primary_surface.memory_range.offset;
-   const struct isl_format_layout *isl_layout =
-      isl_format_get_layout(isl_surf->format);
-   const int Bpb = isl_layout->bpb / 8;
-   struct isl_tile_info tile_info;
-   isl_surf_get_tile_info(isl_surf, &tile_info);
-   uint32_t tile_size = tile_info.logical_extent_el.width * Bpb *
-                        tile_info.logical_extent_el.height *
-                        tile_info.logical_extent_el.depth *
+   const int Bpb = surf->layout->bpb / 8;
+   struct isl_tile_info *tile_info = &surf->tile_info;
+   uint32_t tile_size = tile_info->logical_extent_el.width * Bpb *
+                        tile_info->logical_extent_el.height *
+                        tile_info->logical_extent_el.depth *
                         isl_surf->samples;
 
    uint64_t layer1_offset;
@@ -1063,8 +1057,7 @@ anv_sparse_bind_image_memory(struct anv_queue *queue,
    struct anv_sparse_surf_info surf = anv_sparse_calc_surf_info(isl_surf);
    uint64_t binding_plane_offset =
       image->planes[plane].primary_surface.memory_range.offset;
-   const struct isl_format_layout *layout =
-      isl_format_get_layout(isl_surf->format);
+   const struct isl_format_layout *layout = surf.layout;
 
    if (INTEL_DEBUG(DEBUG_SPARSE)) {
       sparse_debug("%s:", __func__);

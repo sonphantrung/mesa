@@ -3365,7 +3365,6 @@ genX(CmdExecuteCommands)(
    container->state.current_l3_config = NULL;
    container->state.current_hash_scale = 0;
    container->state.gfx.push_constant_stages = 0;
-   container->state.gfx.ds_write_state = false;
 
    memset(&container->state.gfx.urb_cfg, 0, sizeof(struct intel_urb_config));
 

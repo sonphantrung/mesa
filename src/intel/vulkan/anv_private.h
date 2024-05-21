@@ -3113,6 +3113,7 @@ struct anv_sparse_surf_info {
    struct isl_surf *isl;
    const struct isl_format_layout *layout;
    struct isl_tile_info tile_info;
+   uint32_t tile_size;
 };
 
 static inline bool

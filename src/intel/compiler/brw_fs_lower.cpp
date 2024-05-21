@@ -771,3 +771,63 @@ brw_fs_lower_vgrfs_to_fixed_grfs(fs_visitor &s)
                          DEPENDENCY_VARIABLES);
 }
 
+bool
+brw_fs_lower_indirect_mov(fs_visitor &s)
+{
+   bool progress = false;
+
+   if (s.devinfo->ver < 20)
+      return progress;
+
+   foreach_block_and_inst_safe(block, fs_inst, inst, s.cfg) {
+      if (inst->opcode == SHADER_OPCODE_MOV_INDIRECT) {
+         if (brw_type_size_bytes(inst->src[0].type) > 1 &&
+             brw_type_size_bytes(inst->dst.type) > 1) {
+            continue;
+         }
+
+         const fs_builder ibld(&s, block, inst);
+
+         /* Indirect addressing(vx1 and vxh) not supported with UB/B datatype for
+          * Src0, so change data type for src0 and dst to W.
+          */
+         const fs_reg dst = retype(inst->dst, BRW_TYPE_UW);
+         fs_reg src0 = retype(inst->src[0], BRW_TYPE_UW);
+
+         fs_reg offset = ibld.vgrf(BRW_TYPE_UD);
+
+         /* Add src0 offset to the indirect byte offset so that we can make sure it's
+          * word-aligned.
+          */
+         ibld.ADD(offset, inst->src[1], brw_imm_uw(src0.offset));
+
+         /* Reset the src0 offset since we already added that offset to the indirect
+          * byte offset.
+          */
+         src0.offset = 0;
+
+         /* Make sure offset is word (2-bytes) aligned */
+         inst->src[1] = ibld.AND(offset, brw_imm_ud(~1));
+
+         ibld.emit(SHADER_OPCODE_MOV_INDIRECT, dst, src0, inst->src[1], inst->src[2]);
+
+         fs_reg lo = ibld.AND(dst, brw_imm_uw(0xff));
+         fs_reg hi = ibld.SHR(dst, brw_imm_uw(8));
+         fs_reg odd = ibld.AND(offset, brw_imm_ud(1));
+
+         fs_reg result = ibld.vgrf(BRW_TYPE_W);
+         /* Select high byte if offset is odd otherwise select low byte. */
+         ibld.CSEL(result, hi, lo, retype(odd, BRW_TYPE_W),
+                   BRW_CONDITIONAL_NZ);
+
+         ibld.MOV(inst->dst, retype(result, BRW_TYPE_UW));
+         inst->remove(block);
+         progress = true;
+      }
+   }
+
+   if (progress)
+      s.invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES);
+
+   return progress;
+}

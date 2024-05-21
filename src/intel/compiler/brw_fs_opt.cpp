@@ -155,6 +155,8 @@ brw_fs_optimize(fs_visitor &s)
 
    OPT(brw_fs_lower_uniform_pull_constant_loads);
 
+   OPT(brw_fs_lower_indirect_mov);
+
    OPT(brw_fs_lower_find_live_channel);
 }
 

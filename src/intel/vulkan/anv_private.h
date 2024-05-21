@@ -3648,6 +3648,8 @@ struct anv_cmd_pipeline_state {
    /** Push constants from the application */
    uint8_t                                      push_constants[MAX_PUSH_CONSTANTS_SIZE];
 
+   uint16_t                                     push_constant_written_size;
+
    /** Driver constants (loaded through push constants) */
    struct anv_driver_constants                  driver_constants;
 

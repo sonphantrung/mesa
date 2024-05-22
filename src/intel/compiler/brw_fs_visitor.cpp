@@ -543,12 +543,18 @@ fs_visitor::emit_single_fb_write(const fs_builder &bld,
    if (nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL))
       src_stencil = frag_stencil;
 
-   const fs_reg sources[] = {
-      color0, color1, src0_alpha, src_depth, dst_depth, src_stencil,
-      (prog_data->uses_omask ? sample_mask : fs_reg()),
-      brw_imm_ud(components)
-   };
-   assert(ARRAY_SIZE(sources) - 1 == FB_WRITE_LOGICAL_SRC_COMPONENTS);
+   fs_reg sources[FB_WRITE_LOGICAL_NUM_SRCS];
+   sources[FB_WRITE_LOGICAL_SRC_COLOR0] = color0;
+   sources[FB_WRITE_LOGICAL_SRC_COLOR1] = color1;
+   sources[FB_WRITE_LOGICAL_SRC_SRC0_ALPHA] = src0_alpha;
+   sources[FB_WRITE_LOGICAL_SRC_SRC_DEPTH] = src_depth;
+   sources[FB_WRITE_LOGICAL_SRC_DST_DEPTH] = dst_depth;
+   sources[FB_WRITE_LOGICAL_SRC_SRC_STENCIL] = src_stencil;
+   sources[FB_WRITE_LOGICAL_SRC_COMPONENTS] = brw_imm_ud(components);
+   if (prog_data->uses_omask)
+      sources[FB_WRITE_LOGICAL_SRC_OMASK] = sample_mask;
+   if (prog_data->coarse_pixel_dispatch == BRW_SOMETIMES)
+      sources[FB_WRITE_LOGICAL_MSAA_FLAGS] = dynamic_msaa_flags(prog_data);
    fs_inst *write = bld.emit(FS_OPCODE_FB_WRITE_LOGICAL, fs_reg(),
                              sources, ARRAY_SIZE(sources));
 

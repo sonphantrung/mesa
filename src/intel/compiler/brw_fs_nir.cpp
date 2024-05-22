@@ -1973,15 +1973,17 @@ emit_pixel_interpolater_send(const fs_builder &bld,
                              const fs_reg &src,
                              const fs_reg &desc,
                              const fs_reg &flag_reg,
+                             const fs_reg &msaa_flags,
                              glsl_interp_mode interpolation)
 {
    struct brw_wm_prog_data *wm_prog_data =
       brw_wm_prog_data(bld.shader->prog_data);
 
    fs_reg srcs[INTERP_NUM_SRCS];
-   srcs[INTERP_SRC_OFFSET]       = src;
-   srcs[INTERP_SRC_MSG_DESC]     = desc;
-   srcs[INTERP_SRC_DYNAMIC_MODE] = flag_reg;
+   srcs[INTERP_SRC_OFFSET]             = src;
+   srcs[INTERP_SRC_MSG_DESC]           = desc;
+   srcs[INTERP_SRC_DYNAMIC_MODE]       = flag_reg;
+   srcs[INTERP_SRC_DYNAMIC_MSAA_FLAGS] = msaa_flags;
 
    fs_inst *inst = bld.emit(opcode, dst, srcs, INTERP_NUM_SRCS);
    /* 2 floats per slot returned */
@@ -4040,10 +4042,12 @@ fs_nir_emit_fs_intrinsic(nir_to_brw_state &ntb,
       }
 
       fs_reg flag_reg;
+      fs_reg msaa_flags;
       struct brw_wm_prog_key *wm_prog_key = (struct brw_wm_prog_key *) s.key;
       if (wm_prog_key->multisample_fbo == BRW_SOMETIMES) {
          struct brw_wm_prog_data *wm_prog_data = brw_wm_prog_data(s.prog_data);
 
+         msaa_flags = dynamic_msaa_flags(wm_prog_data);
          check_dynamic_msaa_flag(bld.exec_all().group(8, 0),
                                  wm_prog_data,
                                  INTEL_MSAA_FLAG_MULTISAMPLE_FBO);
@@ -4056,6 +4060,7 @@ fs_nir_emit_fs_intrinsic(nir_to_brw_state &ntb,
                                    fs_reg(), /* src */
                                    msg_data,
                                    flag_reg,
+                                   msaa_flags,
                                    interpolation);
       break;
    }
@@ -4065,6 +4070,11 @@ fs_nir_emit_fs_intrinsic(nir_to_brw_state &ntb,
          (enum glsl_interp_mode) nir_intrinsic_interp_mode(instr);
 
       nir_const_value *const_offset = nir_src_as_const_value(instr->src[0]);
+
+      struct brw_wm_prog_data *wm_prog_data = brw_wm_prog_data(s.prog_data);
+      fs_reg msaa_flags;
+      if (wm_prog_data->coarse_pixel_dispatch == BRW_SOMETIMES)
+         msaa_flags = dynamic_msaa_flags(wm_prog_data);
 
       if (const_offset) {
          assert(nir_src_bit_size(instr->src[0]) == 32);
@@ -4077,6 +4087,7 @@ fs_nir_emit_fs_intrinsic(nir_to_brw_state &ntb,
                                       fs_reg(), /* src */
                                       brw_imm_ud(off_x | (off_y << 4)),
                                       fs_reg(), /* flag_reg */
+                                      msaa_flags,
                                       interpolation);
       } else {
          fs_reg src = retype(get_nir_src(ntb, instr->src[0]), BRW_TYPE_D);
@@ -4087,6 +4098,7 @@ fs_nir_emit_fs_intrinsic(nir_to_brw_state &ntb,
                                       src,
                                       brw_imm_ud(0u),
                                       fs_reg(), /* flag_reg */
+                                      msaa_flags,
                                       interpolation);
       }
       break;

@@ -2624,6 +2624,9 @@ brw_instruction_name(const struct brw_isa_info *isa, enum opcode op)
       return "btd_retire_logical";
    case SHADER_OPCODE_READ_SR_REG:
       return "read_sr_reg";
+
+   case SHADER_OPCODE_DYNAMIC_MSAA_FLAGS:
+      return "dynamic_msaa_flags";
    }
 
    unreachable("not reached");
@@ -4747,13 +4750,20 @@ namespace brw {
       return tmp;
    }
 
+   fs_reg
+   dynamic_msaa_flags(const fs_builder &bld)
+   {
+      fs_reg msaa_flags = bld.vgrf(BRW_TYPE_UD);
+      bld.emit(SHADER_OPCODE_DYNAMIC_MSAA_FLAGS, msaa_flags);
+      return msaa_flags;
+   }
+
    void
    check_dynamic_msaa_flag(const fs_builder &bld,
-                           const struct brw_wm_prog_data *wm_prog_data,
                            enum intel_msaa_flags flag)
    {
       fs_inst *inst = bld.AND(bld.null_reg_ud(),
-                              dynamic_msaa_flags(wm_prog_data),
+                              dynamic_msaa_flags(bld),
                               brw_imm_ud(flag));
       inst->conditional_mod = BRW_CONDITIONAL_NZ;
    }

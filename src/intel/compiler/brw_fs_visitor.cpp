@@ -241,8 +241,7 @@ fs_visitor::emit_interpolation_setup()
       const fs_builder dbld =
          abld.exec_all().group(MIN2(16, dispatch_width) * 2, 0);
 
-      check_dynamic_msaa_flag(dbld, wm_prog_data,
-                              INTEL_MSAA_FLAG_COARSE_RT_WRITES);
+      check_dynamic_msaa_flag(dbld, INTEL_MSAA_FLAG_COARSE_RT_WRITES);
 
       int_pixel_offset_x = dbld.vgrf(BRW_TYPE_UW);
       set_predicate(BRW_PREDICATE_NORMAL,
@@ -469,10 +468,8 @@ fs_visitor::emit_interpolation_setup()
          uint8_t *sample_barys = fs_payload().barycentric_coord_reg[sample_mode];
          assert(barys[0] && sample_barys[0]);
 
-         if (!loaded_flag) {
-            check_dynamic_msaa_flag(ubld, wm_prog_data,
-                                    INTEL_MSAA_FLAG_PERSAMPLE_INTERP);
-         }
+         if (!loaded_flag)
+            check_dynamic_msaa_flag(ubld, INTEL_MSAA_FLAG_PERSAMPLE_INTERP);
 
          for (unsigned j = 0; j < dispatch_width / 8; j++) {
             set_predicate(
@@ -554,7 +551,7 @@ fs_visitor::emit_single_fb_write(const fs_builder &bld,
    if (prog_data->uses_omask)
       sources[FB_WRITE_LOGICAL_SRC_OMASK] = sample_mask;
    if (prog_data->coarse_pixel_dispatch == BRW_SOMETIMES)
-      sources[FB_WRITE_LOGICAL_MSAA_FLAGS] = dynamic_msaa_flags(prog_data);
+      sources[FB_WRITE_LOGICAL_MSAA_FLAGS] = dynamic_msaa_flags(bld);
    fs_inst *write = bld.emit(FS_OPCODE_FB_WRITE_LOGICAL, fs_reg(),
                              sources, ARRAY_SIZE(sources));
 

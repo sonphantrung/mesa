@@ -604,3 +604,31 @@ brw_fs_lower_alu_restrictions(fs_visitor &s)
 
    return progress;
 }
+
+/**
+ * Lower the dynamic msaa flags opcode to a constant/uniform register.
+ */
+bool
+brw_fs_lower_dynamic_msaa_flags(fs_visitor &s)
+{
+   struct brw_wm_prog_data *wm_prog_data = brw_wm_prog_data(s.prog_data);
+   bool progress = false;
+
+   foreach_block_and_inst_safe(block, fs_inst, inst, s.cfg) {
+      if (inst->opcode != SHADER_OPCODE_DYNAMIC_MSAA_FLAGS)
+         continue;
+
+      const brw::fs_builder ibld(&s, block, inst);
+      ibld.MOV(inst->dst, prog_param_reg(s.prog_data,
+                                         wm_prog_data->msaa_flags_param));
+      inst->remove(block);
+      progress = true;
+   }
+
+   if (progress) {
+      s.invalidate_analysis(DEPENDENCY_INSTRUCTION_DATA_FLOW |
+                            DEPENDENCY_INSTRUCTION_DETAIL);
+   }
+
+   return progress;
+}

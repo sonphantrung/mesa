@@ -3573,8 +3573,7 @@ emit_samplepos_setup(nir_to_brw_state &ntb)
    }
 
    if (wm_prog_data->persample_dispatch == BRW_SOMETIMES) {
-      check_dynamic_msaa_flag(abld, wm_prog_data,
-                              INTEL_MSAA_FLAG_PERSAMPLE_DISPATCH);
+      check_dynamic_msaa_flag(abld, INTEL_MSAA_FLAG_PERSAMPLE_DISPATCH);
       for (unsigned i = 0; i < 2; i++) {
          set_predicate(BRW_PREDICATE_NORMAL,
                        bld.SEL(offset(pos, abld, i), offset(pos, abld, i),
@@ -3594,7 +3593,6 @@ emit_sampleid_setup(nir_to_brw_state &ntb)
 
    assert(s.stage == MESA_SHADER_FRAGMENT);
    ASSERTED brw_wm_prog_key *key = (brw_wm_prog_key*) s.key;
-   struct brw_wm_prog_data *wm_prog_data = brw_wm_prog_data(s.prog_data);
 
    const fs_builder abld = bld.annotate("compute sample id");
    fs_reg sample_id = abld.vgrf(BRW_TYPE_UD);
@@ -3647,8 +3645,7 @@ emit_sampleid_setup(nir_to_brw_state &ntb)
    abld.AND(sample_id, tmp, brw_imm_w(0xf));
 
    if (key->multisample_fbo == BRW_SOMETIMES) {
-      check_dynamic_msaa_flag(abld, wm_prog_data,
-                              INTEL_MSAA_FLAG_MULTISAMPLE_FBO);
+      check_dynamic_msaa_flag(abld, INTEL_MSAA_FLAG_MULTISAMPLE_FBO);
       set_predicate(BRW_PREDICATE_NORMAL,
                     abld.SEL(sample_id, sample_id, brw_imm_ud(0)));
    }
@@ -3696,8 +3693,7 @@ emit_samplemaskin_setup(nir_to_brw_state &ntb)
    if (wm_prog_data->persample_dispatch == BRW_ALWAYS)
       return mask;
 
-   check_dynamic_msaa_flag(abld, wm_prog_data,
-                           INTEL_MSAA_FLAG_PERSAMPLE_DISPATCH);
+   check_dynamic_msaa_flag(abld, INTEL_MSAA_FLAG_PERSAMPLE_DISPATCH);
    set_predicate(BRW_PREDICATE_NORMAL, abld.SEL(mask, mask, coverage_mask));
 
    return mask;
@@ -3741,8 +3737,7 @@ emit_shading_rate_setup(nir_to_brw_state &ntb)
    if (wm_prog_data->coarse_pixel_dispatch == BRW_ALWAYS)
       return rate;
 
-   check_dynamic_msaa_flag(abld, wm_prog_data,
-                           INTEL_MSAA_FLAG_COARSE_RT_WRITES);
+   check_dynamic_msaa_flag(abld, INTEL_MSAA_FLAG_COARSE_RT_WRITES);
    set_predicate(BRW_PREDICATE_NORMAL, abld.SEL(rate, rate, brw_imm_ud(0)));
 
    return rate;
@@ -4045,11 +4040,8 @@ fs_nir_emit_fs_intrinsic(nir_to_brw_state &ntb,
       fs_reg msaa_flags;
       struct brw_wm_prog_key *wm_prog_key = (struct brw_wm_prog_key *) s.key;
       if (wm_prog_key->multisample_fbo == BRW_SOMETIMES) {
-         struct brw_wm_prog_data *wm_prog_data = brw_wm_prog_data(s.prog_data);
-
-         msaa_flags = dynamic_msaa_flags(wm_prog_data);
+         msaa_flags = dynamic_msaa_flags(bld);
          check_dynamic_msaa_flag(bld.exec_all().group(8, 0),
-                                 wm_prog_data,
                                  INTEL_MSAA_FLAG_MULTISAMPLE_FBO);
          flag_reg = brw_flag_reg(0, 0);
       }
@@ -4074,7 +4066,7 @@ fs_nir_emit_fs_intrinsic(nir_to_brw_state &ntb,
       struct brw_wm_prog_data *wm_prog_data = brw_wm_prog_data(s.prog_data);
       fs_reg msaa_flags;
       if (wm_prog_data->coarse_pixel_dispatch == BRW_SOMETIMES)
-         msaa_flags = dynamic_msaa_flags(wm_prog_data);
+         msaa_flags = dynamic_msaa_flags(bld);
 
       if (const_offset) {
          assert(nir_src_bit_size(instr->src[0]) == 32);
@@ -4142,8 +4134,7 @@ fs_nir_emit_fs_intrinsic(nir_to_brw_state &ntb,
    }
 
    case nir_intrinsic_load_fs_msaa_intel:
-      bld.MOV(retype(dest, BRW_TYPE_UD),
-              dynamic_msaa_flags(brw_wm_prog_data(s.prog_data)));
+      bld.MOV(retype(dest, BRW_TYPE_UD), dynamic_msaa_flags(bld));
       break;
 
    default:

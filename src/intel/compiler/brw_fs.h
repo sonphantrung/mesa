@@ -603,15 +603,11 @@ namespace brw {
       return r;
    }
 
-   inline fs_reg
-   dynamic_msaa_flags(const struct brw_wm_prog_data *wm_prog_data)
-   {
-      return prog_param_reg(&wm_prog_data->base, wm_prog_data->msaa_flags_param);
-   }
+   fs_reg
+   dynamic_msaa_flags(const fs_builder &bld);
 
    void
    check_dynamic_msaa_flag(const fs_builder &bld,
-                           const struct brw_wm_prog_data *wm_prog_data,
                            enum intel_msaa_flags flag);
 
    bool
@@ -656,6 +652,7 @@ bool brw_fs_lower_barycentrics(fs_visitor &s);
 bool brw_fs_lower_constant_loads(fs_visitor &s);
 bool brw_fs_lower_derivatives(fs_visitor &s);
 bool brw_fs_lower_dpas(fs_visitor &s);
+bool brw_fs_lower_dynamic_msaa_flags(fs_visitor &s);
 bool brw_fs_lower_find_live_channel(fs_visitor &s);
 bool brw_fs_lower_integer_multiplication(fs_visitor &s);
 bool brw_fs_lower_logical_sends(fs_visitor &s);

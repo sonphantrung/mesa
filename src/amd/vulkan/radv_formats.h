@@ -104,29 +104,6 @@ vk_format_no_srgb(VkFormat format)
    }
 }
 
-static inline VkFormat
-vk_to_non_srgb_format(VkFormat format)
-{
-   switch (format) {
-   case VK_FORMAT_R8_SRGB:
-      return VK_FORMAT_R8_UNORM;
-   case VK_FORMAT_R8G8_SRGB:
-      return VK_FORMAT_R8G8_UNORM;
-   case VK_FORMAT_R8G8B8_SRGB:
-      return VK_FORMAT_R8G8B8_UNORM;
-   case VK_FORMAT_B8G8R8_SRGB:
-      return VK_FORMAT_B8G8R8_UNORM;
-   case VK_FORMAT_R8G8B8A8_SRGB:
-      return VK_FORMAT_R8G8B8A8_UNORM;
-   case VK_FORMAT_B8G8R8A8_SRGB:
-      return VK_FORMAT_B8G8R8A8_UNORM;
-   case VK_FORMAT_A8B8G8R8_SRGB_PACK32:
-      return VK_FORMAT_A8B8G8R8_UNORM_PACK32;
-   default:
-      return format;
-   }
-}
-
 static inline unsigned
 vk_format_get_plane_width(VkFormat format, unsigned plane, unsigned width)
 {
@@ -140,8 +117,6 @@ vk_format_get_plane_height(VkFormat format, unsigned plane, unsigned height)
 }
 
 struct radv_physical_device;
-
-uint32_t radv_translate_buffer_dataformat(const struct util_format_description *desc, int first_non_void);
 
 uint32_t radv_translate_buffer_numformat(const struct util_format_description *desc, int first_non_void);
 

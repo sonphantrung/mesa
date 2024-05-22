@@ -763,22 +763,6 @@ radv_compose_swizzle(const struct util_format_description *desc, const VkCompone
    }
 }
 
-bool
-vi_alpha_is_on_msb(const struct radv_device *device, const VkFormat format)
-{
-   const struct radv_physical_device *pdev = radv_device_physical(device);
-
-   if (pdev->info.gfx_level >= GFX11)
-      return false;
-
-   const struct util_format_description *desc = vk_format_description(format);
-
-   if (pdev->info.gfx_level >= GFX10 && desc->nr_channels == 1)
-      return desc->swizzle[3] == PIPE_SWIZZLE_X;
-
-   return ac_translate_colorswap(pdev->info.gfx_level, desc->format, false) <= 1;
-}
-
 static void
 radv_query_opaque_metadata(struct radv_device *device, struct radv_image *image, unsigned plane_id,
                            struct radeon_bo_metadata *md)

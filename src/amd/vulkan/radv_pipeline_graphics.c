@@ -1265,23 +1265,6 @@ radv_link_shaders(const struct radv_device *device, struct radv_shader_stage *pr
 
    progress = nir_remove_unused_varyings(producer, consumer);
 
-   nir_compact_varyings(producer, consumer, true);
-
-   /* nir_compact_varyings changes deleted varyings into shader_temp.
-    * We need to remove these otherwise we risk them being lowered to scratch.
-    * This can especially happen to arrayed outputs.
-    */
-   NIR_PASS(_, producer, nir_remove_dead_variables, nir_var_shader_temp, NULL);
-   NIR_PASS(_, consumer, nir_remove_dead_variables, nir_var_shader_temp, NULL);
-
-   nir_validate_shader(producer, "after nir_compact_varyings");
-   nir_validate_shader(consumer, "after nir_compact_varyings");
-
-   if (producer->info.stage == MESA_SHADER_MESH) {
-      /* nir_compact_varyings can change the location of per-vertex and per-primitive outputs */
-      nir_shader_gather_info(producer, nir_shader_get_entrypoint(producer));
-   }
-
    const bool has_geom_or_tess =
       consumer->info.stage == MESA_SHADER_GEOMETRY || consumer->info.stage == MESA_SHADER_TESS_CTRL;
    const bool merged_gs = consumer->info.stage == MESA_SHADER_GEOMETRY && gfx_level >= GFX9;

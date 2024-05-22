@@ -5728,6 +5728,8 @@ bool nir_lower_is_helper_invocation(nir_shader *shader);
 
 bool nir_lower_single_sampled(nir_shader *shader);
 
+bool nir_emulate_64b_atomics(nir_shader *shader, nir_instr_filter_cb filter);
+
 typedef struct nir_lower_subgroups_options {
    uint8_t subgroup_size;
    uint8_t ballot_bit_size;

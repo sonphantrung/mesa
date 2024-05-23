@@ -80,6 +80,7 @@ jm_archs = [6, 7, 9]
 jm_inc_dir = ['jm']
 jm_files = [
   'jm/panvk_vX_cmd_buffer.c',
+  'jm/panvk_vX_cmd_event.c',
   'jm/panvk_vX_queue.c',
 ]
 

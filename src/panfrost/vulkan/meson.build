@@ -59,6 +59,7 @@ bifrost_archs = [6, 7]
 bifrost_inc_dir = ['bifrost']
 bifrost_files = [
   'bifrost/panvk_vX_cmd_desc_state.c',
+  'bifrost/panvk_vX_cmd_draw.c',
   'bifrost/panvk_vX_descriptor_set.c',
   'bifrost/panvk_vX_descriptor_set_layout.c',
   'bifrost/panvk_vX_meta.c',

@@ -2007,11 +2007,16 @@ anv_image_get_memory_requirements(struct anv_device *device,
     *    supported memory type for the resource. The bit `1<<i` is set if and
     *    only if the memory type `i` in the VkPhysicalDeviceMemoryProperties
     *    structure for the physical device is supported.
+    *
+    *    For images created with a color format, the memoryTypeBits member is
+    *    identical for all VkImage objects created with the same combination
+    *    of values for the tiling member...
+    *
+    * So for Images is up to applications to choose a memory type that matches
+    * VK_IMAGE_CREATE_PROTECTED_BIT value.
     */
-   uint32_t memory_types =
-      (image->vk.create_flags & VK_IMAGE_CREATE_PROTECTED_BIT) ?
-      device->physical->memory.protected_mem_types :
-      device->physical->memory.default_buffer_mem_types;
+   uint32_t memory_types = device->physical->memory.protected_mem_types |
+                           device->physical->memory.default_buffer_mem_types;
 
    vk_foreach_struct(ext, pMemoryRequirements->pNext) {
       switch (ext->sType) {

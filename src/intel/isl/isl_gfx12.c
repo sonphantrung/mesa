@@ -128,14 +128,16 @@ isl_gfx125_filter_tiling(const struct isl_device *dev,
    if (isl_format_get_layout(info->format)->bpb % 3 == 0)
       *flags &= ~ISL_TILING_STD_64_MASK;
 
-   /* BSpec 46962: 3DSTATE_CPSIZE_CONTROL_BUFFER::Tiled Mode : TILE4 & TILE64
-    * are the only 2 valid values.
+   /* From 3DSTATE_CPSIZE_CONTROL_BUFFER::TiledMode,
     *
-    * TODO: For now we only TILE64 as we need to figure out potential
-    *       additional requirements for TILE4.
+    *    - 3h       Tile4      4KB tile mode
+    *    - 1h       Tile64     64KB tile mode
+    *    - 2h, 0h   Reserved
+    *
+    * Tile4 and Tile64 are the only two valid values.
     */
    if (info->usage & ISL_SURF_USAGE_CPB_BIT)
-      *flags &= ISL_TILING_STD_64_MASK;
+      *flags &= ISL_TILING_4_BIT | ISL_TILING_STD_64_MASK;
 }
 
 void
@@ -205,6 +207,15 @@ isl_gfx125_choose_image_alignment_el(const struct isl_device *dev,
        *    surfaces support only alignment of 8.
        */
       *image_align_el = isl_extent3d(16, 8, 1);
+   } else if (isl_surf_usage_is_cpb(info->usage)) {
+      /* Neither the horizontal nor vertical alignment is documented in the
+       * reference manuals. Thankfully, we only need to get the vertical
+       * alignment correct because mipmapped CPB surfaces aren't enabled in
+       * any API. Experiments show that a minimum vertical alignment of 16 is
+       * needed for this surface.
+       */
+      assert(info->levels == 1);
+      *image_align_el = isl_extent3d(16, 16, 1);
    } else if (!isl_is_pow2(fmtl->bpb)) {
       /* From RENDER_SURFACE_STATE::SurfaceHorizontalAlignment,
        *

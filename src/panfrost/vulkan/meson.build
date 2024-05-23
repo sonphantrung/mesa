@@ -28,7 +28,10 @@ panvk_entrypoints = custom_target(
   command : [
     prog_python, '@INPUT0@', '--xml', '@INPUT1@', '--proto', '--weak',
     '--out-h', '@OUTPUT0@', '--out-c', '@OUTPUT1@', '--prefix', 'panvk',
+    '--device-prefix', 'panvk_bifrost',
     '--device-prefix', 'panvk_v6', '--device-prefix', 'panvk_v7',
+    '--device-prefix', 'panvk_valhall',
+    '--device-prefix', 'panvk_v9',
     '--beta', with_vulkan_beta.to_string()
   ],
   depend_files : vk_entrypoints_gen_depend_files,
@@ -52,33 +55,67 @@ panvk_deps = []
 panvk_flags = []
 panvk_per_arch_libs = []
 
+bifrost_archs = [6, 7]
+bifrost_inc_dir = ['bifrost']
+bifrost_files = [
+  'bifrost/panvk_vX_descriptor_set.c',
+  'bifrost/panvk_vX_descriptor_set_layout.c',
+  'bifrost/panvk_vX_meta.c',
+  'bifrost/panvk_vX_meta_blit.c',
+  'bifrost/panvk_vX_meta_clear.c',
+  'bifrost/panvk_vX_meta_copy.c',
+  'bifrost/panvk_vX_nir_lower_descriptors.c',
+  'bifrost/panvk_vX_pipeline.c',
+  'bifrost/panvk_vX_pipeline_layout.c',
+]
+
+valhall_archs = [9]
+valhall_inc_dir = ['valhall']
+valhall_files = [
+]
+
+jm_archs = [6, 7, 9]
+jm_inc_dir = ['jm']
+jm_files = [
+  'jm/panvk_vX_cmd_buffer.c',
+  'jm/panvk_vX_queue.c',
+]
+
+common_per_arch_files = [
+  panvk_entrypoints[0],
+  'panvk_vX_blend.c',
+  'panvk_vX_buffer_view.c',
+  'panvk_vX_device.c',
+  'panvk_vX_image_view.c',
+  'panvk_vX_sampler.c',
+  'panvk_vX_shader.c',
+]
+
 foreach arch : [6, 7]
+  per_arch_files = common_per_arch_files
+  inc_panvk_per_arch = []
+
+  if arch in bifrost_archs
+    inc_panvk_per_arch += bifrost_inc_dir
+    per_arch_files += bifrost_files
+  elif arch in valhall_archs
+    inc_panvk_per_arch += valhall_inc_dir
+    per_arch_files += valhall_files
+  endif
+
+  if arch in jm_archs
+    inc_panvk_per_arch += jm_inc_dir
+    per_arch_files += jm_files
+  endif
+
   panvk_per_arch_libs += static_library(
     'panvk_v@0@'.format(arch),
-    [
-      panvk_entrypoints[0],
-      'panvk_vX_blend.c',
-      'panvk_vX_buffer_view.c',
-      'panvk_vX_cmd_buffer.c',
-      'panvk_vX_descriptor_set.c',
-      'panvk_vX_descriptor_set_layout.c',
-      'panvk_vX_device.c',
-      'panvk_vX_image_view.c',
-      'panvk_vX_meta.c',
-      'panvk_vX_meta_blit.c',
-      'panvk_vX_meta_copy.c',
-      'panvk_vX_meta_clear.c',
-      'panvk_vX_nir_lower_descriptors.c',
-      'panvk_vX_pipeline.c',
-      'panvk_vX_pipeline_layout.c',
-      'panvk_vX_queue.c',
-      'panvk_vX_sampler.c',
-      'panvk_vX_shader.c',
-    ],
+    per_arch_files,
     include_directories : [
       inc_include,
       inc_src,
       inc_panfrost,
+      inc_panvk_per_arch,
     ],
     dependencies : [
       idep_nir_headers,

@@ -868,6 +868,7 @@ static bool visit_alu(struct ac_nir_context *ctx, const nir_alu_instr *instr)
    case nir_op_vec3:
    case nir_op_vec4:
    case nir_op_vec5:
+   case nir_op_vec7:
    case nir_op_vec8:
    case nir_op_vec16:
       for (unsigned i = 0; i < nir_op_infos[instr->op].num_inputs; i++)

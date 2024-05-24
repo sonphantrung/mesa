@@ -97,7 +97,7 @@ print_annotation(print_state *state, void *obj)
 
 /* For 1 element, the size is intentionally omitted. */
 static const char *sizes[] = { "x??", "   ", "x2 ", "x3 ", "x4 ",
-                               "x5 ", "x??", "x??", "x8 ",
+                               "x5 ", "x??", "x7 ", "x8 ",
                                "x??", "x??", "x??", "x??",
                                "x??", "x??", "x??", "x16" };
 

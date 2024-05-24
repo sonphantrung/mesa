@@ -364,6 +364,7 @@ impl<'a> ShaderFromNir<'a> {
             | nir_op_vec3
             | nir_op_vec4
             | nir_op_vec5
+            | nir_op_vec7
             | nir_op_vec8
             | nir_op_vec16 => {
                 let src_bit_size = alu.get_src(0).src.bit_size();

@@ -77,9 +77,9 @@ class Opcode(object):
       assert isinstance(algebraic_properties, str)
       assert isinstance(const_expr, str)
       assert len(input_sizes) == len(input_types)
-      assert 0 <= output_size <= 5 or (output_size == 8) or (output_size == 16)
+      assert 0 <= output_size <= 5 or output_size in [7, 8, 16]
       for size in input_sizes:
-         assert 0 <= size <= 5 or (size == 8) or (size == 16)
+         assert 0 <= size <= 5 or size in [7, 8, 16]
          if output_size != 0:
             assert size != 0
       self.name = name
@@ -1199,6 +1199,18 @@ dst.y = src1.x;
 dst.z = src2.x;
 dst.w = src3.x;
 dst.e = src4.x;
+""")
+
+opcode("vec7", 7, tuint,
+       [1] * 7, [tuint] * 7,
+       False, "", """
+dst.x = src0.x;
+dst.y = src1.x;
+dst.z = src2.x;
+dst.w = src3.x;
+dst.e = src4.x;
+dst.f = src5.x;
+dst.g = src6.x;
 """)
 
 opcode("vec8", 8, tuint,

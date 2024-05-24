@@ -618,9 +618,14 @@ new_bitsize_acceptable(struct vectorize_ctx *ctx, unsigned new_bit_size,
    if (new_bit_size / common_bit_size > NIR_MAX_VEC_COMPONENTS)
       return false;
 
+   unsigned low_size = low->intrin->num_components * get_bit_size(low) / 8;
+   /* The hole size can be less than 0 if low and high instructions overlap. */
+   unsigned hole_size =
+      MAX2(high->offset_signed - (low->offset_signed + low_size), 0);
+
    if (!ctx->options->callback(low->align_mul,
                                low->align_offset,
-                               new_bit_size, new_num_components,
+                               new_bit_size, new_num_components, hole_size,
                                low->intrin, high->intrin,
                                ctx->options->cb_data))
       return false;
@@ -1241,7 +1246,11 @@ vectorize_sorted_entries(struct vectorize_ctx *ctx, nir_function_impl *impl,
          struct entry *second = low->index < high->index ? high : low;
 
          uint64_t diff = high->offset_signed - low->offset_signed;
-         bool separate = diff > get_bit_size(low) / 8u * low->intrin->num_components;
+         /* Allow overfetching by 4 bytes, which can be later rejected by the callback. */
+         unsigned max_hole = first->is_store ? 0 : 4;
+         bool separate =
+            diff > max_hole + get_bit_size(low) / 8u * low->intrin->num_components;
+
          if (separate) {
             if (!ctx->options->has_shared2_amd ||
                 get_variable_mode(first) != nir_var_mem_shared)

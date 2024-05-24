@@ -609,8 +609,7 @@ ac_init_gfx6_ds_surface(const struct radeon_info *info, const struct ac_ds_state
                        S_028008_Z_READ_ONLY(state->z_read_only) |
                        S_028008_STENCIL_READ_ONLY(state->stencil_read_only);
    ds->db_z_info = S_028040_FORMAT(db_format) |
-                   S_028040_NUM_SAMPLES(util_logbase2(state->num_samples)) |
-                   S_028040_ZRANGE_PRECISION(state->zrange_precision);
+                   S_028040_NUM_SAMPLES(util_logbase2(state->num_samples));
    ds->db_stencil_info = S_028044_FORMAT(stencil_format);
 
    if (info->gfx_level >= GFX7) {
@@ -699,7 +698,6 @@ ac_init_gfx9_ds_surface(const struct radeon_info *info, const struct ac_ds_state
                    S_028038_NUM_SAMPLES(util_logbase2(state->num_samples)) |
                    S_028038_SW_MODE(surf->u.gfx9.swizzle_mode) |
                    S_028038_MAXMIP(state->num_levels - 1) |
-                   S_028038_ZRANGE_PRECISION(state->zrange_precision) |
                    S_028040_ITERATE_256(info->gfx_level >= GFX11);
    ds->db_stencil_info = S_02803C_FORMAT(stencil_format) |
                          S_02803C_SW_MODE(surf->u.gfx9.zs.stencil_swizzle_mode) |
@@ -796,5 +794,101 @@ ac_init_ds_surface(const struct radeon_info *info, const struct ac_ds_state *sta
       ac_init_gfx9_ds_surface(info, state, db_format, stencil_format, ds);
    } else {
       ac_init_gfx6_ds_surface(info, state, db_format, stencil_format, ds);
+   }
+}
+
+static unsigned
+ac_get_decompress_on_z_planes(const struct radeon_info *info, enum pipe_format format, uint8_t log_num_samples,
+                              bool htile_stencil_disabled, bool no_d16_compression)
+{
+   uint32_t max_zplanes = 0;
+
+   if (info->gfx_level >= GFX9) {
+      const bool iterate256 = info->gfx_level >= GFX10 && log_num_samples >= 1;
+
+      /* Default value for 32-bit depth surfaces. */
+      max_zplanes = 4;
+
+      if (format == PIPE_FORMAT_Z16_UNORM && log_num_samples > 0)
+         max_zplanes = 2;
+
+      /* Workaround for a DB hang when ITERATE_256 is set to 1. Only affects 4X MSAA D/S images. */
+      if (info->has_two_planes_iterate256_bug && iterate256 && !htile_stencil_disabled && log_num_samples == 2)
+         max_zplanes = 1;
+
+      max_zplanes++;
+   } else {
+      if (format == PIPE_FORMAT_Z16_UNORM && no_d16_compression) {
+         /* Do not enable Z plane compression for 16-bit depth
+          * surfaces because isn't supported on GFX8. Only
+          * 32-bit depth surfaces are supported by the hardware.
+          * This allows to maintain shader compatibility and to
+          * reduce the number of depth decompressions.
+          */
+         max_zplanes = 1;
+      } else {
+         /* 0 = full compression. N = only compress up to N-1 Z planes. */
+         if (log_num_samples == 0)
+            max_zplanes = 5;
+         else if (log_num_samples <= 2)
+            max_zplanes = 3;
+         else
+            max_zplanes = 2;
+      }
+   }
+
+   return max_zplanes;
+}
+
+void
+ac_set_mutable_ds_surface_fields(const struct radeon_info *info, const struct ac_mutable_ds_state *state,
+                                 struct ac_ds_surface *ds)
+{
+   bool tile_stencil_disable = false;
+   uint32_t log_num_samples;
+
+   memcpy(ds, state->ds, sizeof(*ds));
+
+   if (info->gfx_level >= GFX12)
+      return;
+
+   if (info->gfx_level >= GFX9) {
+      log_num_samples = G_028038_NUM_SAMPLES(ds->db_z_info);
+      tile_stencil_disable = G_02803C_TILE_STENCIL_DISABLE(ds->db_stencil_info);
+   } else {
+      log_num_samples = G_028040_NUM_SAMPLES(ds->db_z_info);
+   }
+
+   const uint32_t max_zplanes =
+      ac_get_decompress_on_z_planes(info, state->format, log_num_samples,
+                                    tile_stencil_disable, state->no_d16_compression);
+
+   if (info->gfx_level >= GFX9) {
+      if (state->tc_compat_htile_enabled) {
+         ds->db_z_info |= S_028038_DECOMPRESS_ON_N_ZPLANES(max_zplanes);
+
+         if (info->gfx_level >= GFX10) {
+            const bool iterate256 = log_num_samples >= 1;
+
+            ds->db_z_info |= S_028040_ITERATE_FLUSH(1);
+            ds->db_stencil_info |= S_028044_ITERATE_FLUSH(!tile_stencil_disable);
+            ds->db_z_info |= S_028040_ITERATE_256(iterate256);
+            ds->db_stencil_info |= S_028044_ITERATE_256(iterate256);
+         } else {
+            ds->db_z_info |= S_028038_ITERATE_FLUSH(1);
+            ds->db_stencil_info |= S_02803C_ITERATE_FLUSH(1);
+         }
+      }
+
+      ds->db_z_info |= S_028038_ZRANGE_PRECISION(state->zrange_precision);
+   } else {
+      if (state->tc_compat_htile_enabled) {
+         ds->u.gfx6.db_htile_surface |= S_028ABC_TC_COMPATIBLE(1);
+         ds->db_z_info |= S_028040_DECOMPRESS_ON_N_ZPLANES(max_zplanes);
+      } else {
+         ds->u.gfx6.db_depth_info |= S_02803C_ADDR5_SWIZZLE_MASK(1);
+      }
+
+      ds->db_z_info |= S_028040_ZRANGE_PRECISION(state->zrange_precision);
    }
 }

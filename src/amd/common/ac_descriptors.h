@@ -142,7 +142,6 @@ struct ac_ds_state {
    uint32_t first_layer : 14;
    uint32_t last_layer : 14;
 
-   uint32_t zrange_precision : 1;
    uint32_t allow_expclear : 1;
    uint32_t stencil_only : 1;
    uint32_t z_read_only : 1;
@@ -185,6 +184,18 @@ struct ac_ds_surface {
 
 void
 ac_init_ds_surface(const struct radeon_info *info, const struct ac_ds_state *state, struct ac_ds_surface *ds);
+
+struct ac_mutable_ds_state {
+   const struct ac_ds_surface *ds; /* original DS surface */
+   enum pipe_format format;
+   uint32_t tc_compat_htile_enabled : 1;
+   uint32_t zrange_precision : 1;
+   uint32_t no_d16_compression : 1;
+};
+
+void
+ac_set_mutable_ds_surface_fields(const struct radeon_info *info, const struct ac_mutable_ds_state *state,
+                                 struct ac_ds_surface *ds);
 
 #ifdef __cplusplus
 }

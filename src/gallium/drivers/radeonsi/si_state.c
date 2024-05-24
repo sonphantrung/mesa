@@ -3547,47 +3547,29 @@ static void gfx11_dgpu_emit_framebuffer_state(struct si_context *sctx, unsigned 
       }
 
       /* Compute mutable surface parameters. */
-      uint64_t cb_color_base = tex->buffer.gpu_address >> 8;
-      uint64_t cb_dcc_base = 0;
-      unsigned cb_color_info = cb->cb.cb_color_info | tex->cb_color_info;
+      const struct ac_mutable_cb_state mutable_cb_state = {
+         .surf = &tex->surface,
+         .cb = &cb->cb,
+         .va = tex->buffer.gpu_address,
+         .num_samples = cb->base.texture->nr_samples,
+         .dcc_enabled = vi_dcc_enabled(tex, cb->base.u.tex.level),
+      };
+      struct ac_cb_surface cb_surf;
 
-      /* Set up DCC. */
-      if (vi_dcc_enabled(tex, cb->base.u.tex.level)) {
-         cb_dcc_base = (tex->buffer.gpu_address + tex->surface.meta_offset) >> 8;
+      ac_set_mutable_cb_surface_fields(&sctx->screen->info, &mutable_cb_state, &cb_surf);
 
-         unsigned dcc_tile_swizzle = tex->surface.tile_swizzle;
-         dcc_tile_swizzle &= ((1 << tex->surface.meta_alignment_log2) - 1) >> 8;
-         cb_dcc_base |= dcc_tile_swizzle;
-      }
+      unsigned cb_color_info = cb_surf.cb_color_info | tex->cb_color_info;
 
-      unsigned cb_color_attrib3, cb_fdcc_control;
-
-      /* Set mutable surface parameters. */
-      cb_color_base += tex->surface.u.gfx9.surf_offset >> 8;
-      cb_color_base |= tex->surface.tile_swizzle;
-
-      cb_color_attrib3 = cb->cb.cb_color_attrib3 |
-                         S_028EE0_COLOR_SW_MODE(tex->surface.u.gfx9.swizzle_mode) |
-                         S_028EE0_DCC_PIPE_ALIGNED(tex->surface.u.gfx9.color.dcc.pipe_aligned);
-      cb_fdcc_control = cb->cb.cb_dcc_control |
-                        S_028C78_DISABLE_CONSTANT_ENCODE_REG(1) |
-                        S_028C78_FDCC_ENABLE(vi_dcc_enabled(tex, cb->base.u.tex.level));
-
-      if (sctx->family >= CHIP_GFX1103_R2) {
-         cb_fdcc_control |= S_028C78_ENABLE_MAX_COMP_FRAG_OVERRIDE(1) |
-                            S_028C78_MAX_COMP_FRAGS(cb->base.texture->nr_samples >= 4);
-      }
-
-      gfx11_set_context_reg(R_028C60_CB_COLOR0_BASE + i * 0x3C, cb_color_base);
-      gfx11_set_context_reg(R_028C6C_CB_COLOR0_VIEW + i * 0x3C, cb->cb.cb_color_view);
+      gfx11_set_context_reg(R_028C60_CB_COLOR0_BASE + i * 0x3C, cb_surf.cb_color_base);
+      gfx11_set_context_reg(R_028C6C_CB_COLOR0_VIEW + i * 0x3C, cb_surf.cb_color_view);
       gfx11_set_context_reg(R_028C70_CB_COLOR0_INFO + i * 0x3C, cb_color_info);
-      gfx11_set_context_reg(R_028C74_CB_COLOR0_ATTRIB + i * 0x3C, cb->cb.cb_color_attrib);
-      gfx11_set_context_reg(R_028C78_CB_COLOR0_DCC_CONTROL + i * 0x3C, cb_fdcc_control);
-      gfx11_set_context_reg(R_028C94_CB_COLOR0_DCC_BASE + i * 0x3C, cb_dcc_base);
-      gfx11_set_context_reg(R_028E40_CB_COLOR0_BASE_EXT + i * 4, cb_color_base >> 32);
-      gfx11_set_context_reg(R_028EA0_CB_COLOR0_DCC_BASE_EXT + i * 4, cb_dcc_base >> 32);
-      gfx11_set_context_reg(R_028EC0_CB_COLOR0_ATTRIB2 + i * 4, cb->cb.cb_color_attrib2);
-      gfx11_set_context_reg(R_028EE0_CB_COLOR0_ATTRIB3 + i * 4, cb_color_attrib3);
+      gfx11_set_context_reg(R_028C74_CB_COLOR0_ATTRIB + i * 0x3C, cb_surf.cb_color_attrib);
+      gfx11_set_context_reg(R_028C78_CB_COLOR0_DCC_CONTROL + i * 0x3C, cb_surf.cb_dcc_control);
+      gfx11_set_context_reg(R_028C94_CB_COLOR0_DCC_BASE + i * 0x3C, cb_surf.cb_dcc_base);
+      gfx11_set_context_reg(R_028E40_CB_COLOR0_BASE_EXT + i * 4, cb_surf.cb_color_base >> 32);
+      gfx11_set_context_reg(R_028EA0_CB_COLOR0_DCC_BASE_EXT + i * 4, cb_surf.cb_dcc_base >> 32);
+      gfx11_set_context_reg(R_028EC0_CB_COLOR0_ATTRIB2 + i * 4, cb_surf.cb_color_attrib2);
+      gfx11_set_context_reg(R_028EE0_CB_COLOR0_ATTRIB3 + i * 4, cb_surf.cb_color_attrib3);
    }
    for (; i < 8; i++)
       if (sctx->framebuffer.dirty_cbufs & (1 << i))
@@ -3709,20 +3691,26 @@ static void gfx12_emit_framebuffer_state(struct si_context *sctx, unsigned index
          (tex->buffer.b.b.nr_samples > 1 ? RADEON_PRIO_COLOR_BUFFER_MSAA : RADEON_PRIO_COLOR_BUFFER));
 
       /* Compute mutable surface parameters. */
-      uint64_t cb_color_base = ((tex->buffer.gpu_address + tex->surface.u.gfx9.surf_offset) >> 8) |
-                               tex->surface.tile_swizzle;
+      const struct ac_mutable_cb_state mutable_cb_state = {
+         .surf = &tex->surface,
+         .cb = &cb->cb,
+         .va = tex->buffer.gpu_address,
+      };
+      struct ac_cb_surface cb_surf;
 
-      gfx12_set_context_reg(R_028C60_CB_COLOR0_BASE + i * 0x24, cb_color_base);
-      gfx12_set_context_reg(R_028C64_CB_COLOR0_VIEW + i * 0x24, cb->cb.cb_color_view);
-      gfx12_set_context_reg(R_028C68_CB_COLOR0_VIEW2 + i * 0x24, cb->cb.cb_color_view2);
-      gfx12_set_context_reg(R_028C6C_CB_COLOR0_ATTRIB + i * 0x24, cb->cb.cb_color_attrib);
-      gfx12_set_context_reg(R_028C70_CB_COLOR0_FDCC_CONTROL + i * 0x24, cb->cb.cb_dcc_control);
-      gfx12_set_context_reg(R_028C78_CB_COLOR0_ATTRIB2 + i * 0x24, cb->cb.cb_color_attrib2);
+      ac_set_mutable_cb_surface_fields(&sctx->screen->info, &mutable_cb_state, &cb_surf);
+
+      gfx12_set_context_reg(R_028C60_CB_COLOR0_BASE + i * 0x24, cb_surf.cb_color_base);
+      gfx12_set_context_reg(R_028C64_CB_COLOR0_VIEW + i * 0x24, cb_surf.cb_color_view);
+      gfx12_set_context_reg(R_028C68_CB_COLOR0_VIEW2 + i * 0x24, cb_surf.cb_color_view2);
+      gfx12_set_context_reg(R_028C6C_CB_COLOR0_ATTRIB + i * 0x24, cb_surf.cb_color_attrib);
+      gfx12_set_context_reg(R_028C70_CB_COLOR0_FDCC_CONTROL + i * 0x24, cb_surf.cb_dcc_control);
+      gfx12_set_context_reg(R_028C78_CB_COLOR0_ATTRIB2 + i * 0x24, cb_surf.cb_color_attrib2);
       gfx12_set_context_reg(R_028C7C_CB_COLOR0_ATTRIB3 + i * 0x24,
-                            cb->cb.cb_color_attrib3 |
+                            cb_surf.cb_color_attrib3 |
                             S_028C7C_COLOR_SW_MODE(tex->surface.u.gfx9.swizzle_mode));
-      gfx12_set_context_reg(R_028E40_CB_COLOR0_BASE_EXT + i * 4, cb_color_base >> 32);
-      gfx12_set_context_reg(R_028EC0_CB_COLOR0_INFO + i * 4, cb->cb.cb_color_info);
+      gfx12_set_context_reg(R_028E40_CB_COLOR0_BASE_EXT + i * 4, cb_surf.cb_color_base >> 32);
+      gfx12_set_context_reg(R_028EC0_CB_COLOR0_INFO + i * 4, cb_surf.cb_color_info);
    }
    /* Set unbound colorbuffers. */
    for (; i < 8; i++)

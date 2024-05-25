@@ -172,15 +172,29 @@ panvk_per_arch(CreateImageView)(VkDevice _device,
          unsigned level = view->pview.first_level;
 
          cfg.s_dimension = u_minify(image->pimage.layout.width, level);
-         cfg.t_dimension = u_minify(image->pimage.layout.height, level);
+         cfg.t_dimension = u_minify(image->pimage.layout.height, level) *
+                           image->pimage.layout.nr_samples;
          cfg.r_dimension =
             view->pview.dim == MALI_TEXTURE_DIMENSION_3D
                ? u_minify(image->pimage.layout.depth, level)
                : (view->pview.last_layer - view->pview.first_layer + 1);
+
          cfg.row_stride = image->pimage.layout.slices[level].row_stride;
          if (cfg.r_dimension > 1) {
             cfg.slice_stride =
                panfrost_get_layer_stride(&image->pimage.layout, level);
+         }
+
+         if (image->pimage.layout.nr_samples > 1) {
+            if (cfg.r_dimension == 1) {
+               cfg.r_dimension = image->pimage.layout.nr_samples;
+               cfg.slice_stride =
+                  panfrost_get_layer_stride(&image->pimage.layout, level) /
+                  image->pimage.layout.nr_samples;
+            } else {
+               cfg.t_dimension *=
+                  image->pimage.layout.nr_samples * cfg.t_dimension;
+            }
          }
       }
    }

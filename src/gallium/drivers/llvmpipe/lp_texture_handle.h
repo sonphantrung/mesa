@@ -51,6 +51,8 @@ struct lp_sampler_matrix {
 
    struct llvmpipe_context *ctx;
 
+   LLVMContextRef context;
+
    struct util_dynarray gallivms;
 };
 

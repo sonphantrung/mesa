@@ -443,8 +443,10 @@ debian-arm32:
     CROSS: armhf
     DRI_LOADERS:
       -D glvnd=disabled
+    GALLIUM_ST: >
+      -D gallium-rusticl=true
+      -D opencl-spirv=true
     EXTRA_OPTION: >
-      -D llvm=disabled
       -D valgrind=disabled
     S3_ARTIFACT_NAME: mesa-arm32-default-${BUILDTYPE}
     # The strip command segfaults, failing to strip the binary and leaving
@@ -480,8 +482,10 @@ debian-arm64:
     VULKAN_DRIVERS: "freedreno,broadcom,panfrost,imagination-experimental"
     DRI_LOADERS:
       -D glvnd=disabled
+    GALLIUM_ST: >
+      -D gallium-rusticl=true
+      -D opencl-spirv=true
     EXTRA_OPTION: >
-      -D llvm=disabled
       -D valgrind=disabled
       -D imagination-srv=true
       -D perfetto=true
@@ -499,7 +503,6 @@ debian-arm64-asan:
     DRI_LOADERS:
       -D glvnd=disabled
     EXTRA_OPTION: >
-      -D llvm=disabled
       -D b_sanitize=address
       -D valgrind=disabled
       -D tools=dlclose-skip

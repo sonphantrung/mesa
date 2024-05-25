@@ -24,6 +24,7 @@ DEPS=(
     bc
     bison
     ccache
+    "clang-${LLVM_VERSION}"
     cmake
     curl
     fastboot
@@ -34,6 +35,8 @@ DEPS=(
     glslang-tools
     kmod
     libasan8
+    "libclang-${LLVM_VERSION}-dev"
+    "libclang-cpp${LLVM_VERSION}-dev"
     libdrm-dev
     libelf-dev
     libexpat1-dev
@@ -85,6 +88,19 @@ arch=armhf
 . .gitlab-ci/container/build-mold.sh
 
 . .gitlab-ci/container/build-wayland.sh
+
+. .gitlab-ci/container/build-llvm-spirv.sh
+
+. .gitlab-ci/container/build-libclc.sh
+
+. .gitlab-ci/container/build-rust.sh
+
+# install bindgen
+RUSTFLAGS='-L native=/usr/local/lib' cargo install \
+  bindgen-cli --version 0.62.0 \
+  --locked \
+  -j ${FDO_CI_CONCURRENT:-4} \
+  --root /usr/local
 
 apt-get purge -y "${EPHEMERAL[@]}"
 

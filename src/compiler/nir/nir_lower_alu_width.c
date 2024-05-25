@@ -211,6 +211,7 @@ lower_alu_instr_width(nir_builder *b, nir_instr *instr, void *_data)
 
    switch (alu->op) {
    case nir_op_vec16:
+   case nir_op_vec15:
    case nir_op_vec8:
    case nir_op_vec7:
    case nir_op_vec5:

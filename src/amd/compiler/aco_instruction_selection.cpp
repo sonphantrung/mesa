@@ -1385,6 +1385,7 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
    case nir_op_vec5:
    case nir_op_vec7:
    case nir_op_vec8:
+   case nir_op_vec15:
    case nir_op_vec16: {
       std::array<Temp, NIR_MAX_VEC_COMPONENTS> elems;
       unsigned num = instr->def.num_components;

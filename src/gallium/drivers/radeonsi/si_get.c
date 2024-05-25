@@ -1410,6 +1410,7 @@ static unsigned si_varying_estimate_instr_cost(nir_instr *instr)
       case nir_op_vec5:
       case nir_op_vec7:
       case nir_op_vec8:
+      case nir_op_vec15:
       case nir_op_vec16:
       case nir_op_fabs:
       case nir_op_fneg:

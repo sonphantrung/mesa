@@ -147,6 +147,7 @@ alu_op_is_typeless(nir_op op)
    case nir_op_vec5:
    case nir_op_vec7:
    case nir_op_vec8:
+   case nir_op_vec15:
    case nir_op_bcsel:
       return true;
    default:

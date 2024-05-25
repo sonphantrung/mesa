@@ -2851,6 +2851,7 @@ nir_op_vec(unsigned num_components)
    case  5: return nir_op_vec5;
    case  7: return nir_op_vec7;
    case  8: return nir_op_vec8;
+   case 15: return nir_op_vec15;
    case 16: return nir_op_vec16;
    default: unreachable("bad component count");
    }
@@ -2867,6 +2868,7 @@ nir_op_is_vec(nir_op op)
    case nir_op_vec5:
    case nir_op_vec7:
    case nir_op_vec8:
+   case nir_op_vec15:
    case nir_op_vec16:
       return true;
    default:

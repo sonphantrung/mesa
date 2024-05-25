@@ -122,6 +122,7 @@ nir_num_components_valid(unsigned num_components)
            num_components <= 5) ||
           num_components == 7 ||
           num_components == 8 ||
+          num_components == 15 ||
           num_components == 16;
 }
 

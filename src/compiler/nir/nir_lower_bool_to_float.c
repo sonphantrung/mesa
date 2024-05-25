@@ -60,6 +60,7 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *alu, bool has_fcsel_ne,
    case nir_op_vec5:
    case nir_op_vec7:
    case nir_op_vec8:
+   case nir_op_vec15:
    case nir_op_vec16:
       if (alu->def.bit_size != 1)
          return false;

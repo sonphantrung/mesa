@@ -208,6 +208,7 @@ add_gpus([
         GPUId(305),
         GPUId(chip_id=0x03000512, name="FD305B"),
         GPUId(chip_id=0x030007FF, name="FD306"), # codename 307
+        GPUId(308),
         GPUId(320),
         GPUId(330),
     ], GPUInfo(

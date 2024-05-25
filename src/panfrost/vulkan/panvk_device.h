@@ -10,11 +10,11 @@
 
 #include "vk_device.h"
 
+#include "bifrost/panvk_meta.h"
 #include "panvk_blend.h"
 #include "panvk_instance.h"
 #include "panvk_macros.h"
 #include "panvk_mempool.h"
-#include "panvk_meta.h"
 #include "panvk_physical_device.h"
 
 #include "kmod/pan_kmod.h"

@@ -627,18 +627,28 @@ get_ahb_buffer_format_properties2(
    if (u_gralloc_get_buffer_basic_info(vk_android_get_ugralloc(), &gr_handle, &info) != 0)
       return VK_ERROR_INVALID_EXTERNAL_HANDLE;
 
+   bool is_yuv = false;
+
    switch (info.drm_fourcc) {
    case DRM_FORMAT_YVU420:
       /* Assuming that U and V planes are swapped earlier */
       external_format = VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM;
+      is_yuv = true;
       break;
    case DRM_FORMAT_NV12:
       external_format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+      is_yuv = true;
+      break;
+   case DRM_FORMAT_XBGR8888:
+      external_format = VK_FORMAT_R8G8B8_UNORM;
       break;
    default:;
       mesa_loge("Unsupported external DRM format: %d", info.drm_fourcc);
       return VK_ERROR_INVALID_EXTERNAL_HANDLE;
    }
+
+   if (!is_yuv)
+      goto finish;
 
    struct u_gralloc_buffer_color_info color_info;
    if (u_gralloc_get_buffer_color_info(vk_android_get_ugralloc(), &gr_handle, &color_info) == 0) {

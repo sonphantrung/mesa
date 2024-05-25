@@ -206,10 +206,11 @@ add_gpus([
 
 add_gpus([
         GPUId(305),
-        GPUId(307),
+        GPUId(chip_id=0x03000512, name="FD305B"),
+        GPUId(chip_id=0x030007FF, name="FD306"), # codename 307
+        GPUId(308),
         GPUId(320),
         GPUId(330),
-        GPUId(chip_id=0x03000512, name="FD305B"),
     ], GPUInfo(
         CHIP.A3XX,
         gmem_align_w = 32,  gmem_align_h = 32,

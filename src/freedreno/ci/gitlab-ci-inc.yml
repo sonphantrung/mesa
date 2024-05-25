@@ -296,6 +296,7 @@
     reports:
       junit: results/junit.xml
 
+# ? devices (yyyy-mm-dd)
 .a306-test:
   extends:
     - .google-freedreno-test
@@ -303,7 +304,7 @@
     BM_KERNEL: Image.gz
     BM_DTB: apq8016-sbc
     DEVICE_TYPE: apq8016-sbc
-    GPU_VERSION: freedreno-a307
+    GPU_VERSION: freedreno-a306
   timeout: 20m
   tags:
     - google-freedreno-db410c

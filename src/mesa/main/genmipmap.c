@@ -95,10 +95,13 @@ _mesa_is_valid_generate_texture_mipmap_internalformat(struct gl_context *ctx,
               _mesa_is_es3_texture_filterable(ctx, internalformat));
    }
 
-   return (!_mesa_is_enum_format_integer(internalformat) &&
-           !_mesa_is_depthstencil_format(internalformat) &&
-           !_mesa_is_astc_format(internalformat) &&
-           !_mesa_is_stencil_format(internalformat));
+   /* The ASTC formats are introduced by the KHR_texture_compression_astc_hdr
+    * spec, which is written against the GLES 3.1 spec. And the GLES 3.1 spec
+    * disallows this (see above). While not explicitly spelled out in the ASTC
+    * extension spec, it's unlikely that GenerateMipmap() was meant to be
+    * allowed when implementing on OpenGL.
+    */
+   return !_mesa_is_astc_format(internalformat);
 }
 
 /**

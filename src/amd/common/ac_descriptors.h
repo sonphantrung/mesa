@@ -197,6 +197,71 @@ void
 ac_set_mutable_ds_surface_fields(const struct radeon_info *info, const struct ac_mutable_ds_state *state,
                                  struct ac_ds_surface *ds);
 
+struct ac_cb_state {
+   const struct radeon_surf *surf;
+   enum pipe_format format;
+   uint32_t width : 17;
+   uint32_t height : 17;
+   uint32_t first_layer : 14;
+   uint32_t last_layer : 14;
+   uint32_t num_layers : 14;
+   uint32_t num_samples : 5;
+   uint32_t num_storage_samples : 5;
+   uint32_t base_level : 5;
+   uint32_t num_levels : 6;
+
+   struct {
+      struct ac_surf_nbc_view *nbc_view;
+   } gfx10;
+};
+
+struct ac_cb_surface {
+   uint32_t cb_color_info;
+   uint32_t cb_color_view;
+   uint32_t cb_color_view2;
+   uint32_t cb_color_attrib;
+   uint32_t cb_color_attrib2; /* GFX9+ */
+   uint32_t cb_color_attrib3; /* GFX10+ */
+   uint32_t cb_dcc_control;
+   uint64_t cb_color_base;
+   uint64_t cb_color_cmask;
+   uint64_t cb_color_fmask;
+   uint64_t cb_dcc_base;
+   uint32_t cb_color_slice;
+   uint32_t cb_color_cmask_slice;
+   uint32_t cb_color_fmask_slice;
+   union {
+      uint32_t cb_color_pitch; /* GFX6-GFX8 */
+      uint32_t cb_mrt_epitch;  /* GFX9+ */
+   };
+};
+
+void
+ac_init_cb_surface(const struct radeon_info *info, const struct ac_cb_state *state, struct ac_cb_surface *cb);
+
+struct ac_mutable_cb_state {
+   const struct radeon_surf *surf;
+   const struct ac_cb_surface *cb; /* original CB surface */
+   uint64_t va;
+
+   uint32_t base_level : 5;
+   uint32_t num_samples : 5;
+
+   uint32_t fmask_enabled : 1;
+   uint32_t cmask_enabled : 1;
+   uint32_t fast_clear_enabled : 1;
+   uint32_t tc_compat_cmask_enabled : 1;
+   uint32_t dcc_enabled : 1;
+
+   struct {
+      struct ac_surf_nbc_view *nbc_view;
+   } gfx10;
+};
+
+void
+ac_set_mutable_cb_surface_fields(const struct radeon_info *info, const struct ac_mutable_cb_state *state,
+                                 struct ac_cb_surface *cb);
+
 #ifdef __cplusplus
 }
 #endif

@@ -892,3 +892,352 @@ ac_set_mutable_ds_surface_fields(const struct radeon_info *info, const struct ac
       ds->db_z_info |= S_028040_ZRANGE_PRECISION(state->zrange_precision);
    }
 }
+
+static uint32_t
+ac_get_dcc_min_compressed_block_size(const struct radeon_info *info)
+{
+   /* This should typically match the request size of the memory type. DIMMs have 64B minimum
+    * request size, which means compressing 64B to 32B has no benefit, while GDDR and HBM have
+    * 32B minimum request size. Sometimes a different size is used depending on the data fabric,
+    * etc.
+    */
+   return info->has_dedicated_vram || info->family == CHIP_GFX1151 ?
+            V_028C78_MIN_BLOCK_SIZE_32B : V_028C78_MIN_BLOCK_SIZE_64B;
+}
+
+static void
+ac_init_gfx6_cb_surface(const struct radeon_info *info, const struct ac_cb_state *state,
+                        uint32_t cb_format, bool force_dst_alpha_1, struct ac_cb_surface *cb)
+{
+   const struct radeon_surf *surf = state->surf;
+   const uint32_t endian = ac_colorformat_endian_swap(cb_format);
+
+   cb->cb_color_info |= S_028C70_ENDIAN(endian) |
+                        S_028C70_FORMAT_GFX6(cb_format) |
+                        S_028C70_COMPRESSION(!!surf->fmask_offset);
+   cb->cb_color_view = S_028C6C_SLICE_START(state->first_layer) |
+                       S_028C6C_SLICE_MAX_GFX6(state->last_layer);
+   cb->cb_color_attrib = S_028C74_NUM_SAMPLES(util_logbase2(state->num_samples)) |
+                         S_028C74_NUM_FRAGMENTS_GFX6(util_logbase2(state->num_storage_samples)) |
+                         S_028C74_FORCE_DST_ALPHA_1_GFX6(force_dst_alpha_1);
+   cb->cb_color_attrib2 = 0;
+   cb->cb_dcc_control = 0;
+
+   if (info->gfx_level == GFX9) {
+      cb->cb_color_view |= S_028C6C_MIP_LEVEL_GFX9(state->base_level);
+      cb->cb_color_attrib |= S_028C74_MIP0_DEPTH(state->num_layers) |
+                             S_028C74_RESOURCE_TYPE(surf->u.gfx9.resource_type);
+      cb->cb_color_attrib2 |= S_028C68_MIP0_WIDTH(state->width - 1) |
+                              S_028C68_MIP0_HEIGHT(state->height - 1) |
+                              S_028C68_MAX_MIP(state->num_levels - 1);
+   }
+
+   if (info->gfx_level >= GFX8) {
+      uint32_t max_uncompressed_block_size = V_028C78_MAX_BLOCK_SIZE_256B;
+
+      if (state->num_storage_samples > 1) {
+         if (surf->bpe == 1)
+            max_uncompressed_block_size = V_028C78_MAX_BLOCK_SIZE_64B;
+         else if (surf->bpe == 2)
+            max_uncompressed_block_size = V_028C78_MAX_BLOCK_SIZE_128B;
+      }
+
+      cb->cb_dcc_control |= S_028C78_MAX_UNCOMPRESSED_BLOCK_SIZE(max_uncompressed_block_size) |
+                            S_028C78_MIN_COMPRESSED_BLOCK_SIZE(ac_get_dcc_min_compressed_block_size(info)) |
+                            S_028C78_INDEPENDENT_64B_BLOCKS(1);
+   }
+
+   if (info->gfx_level == GFX6) {
+      /* Due to a hw bug, FMASK_BANK_HEIGHT must still be set on GFX6. (inherited from GFX5) */
+      /* This must also be set for fast clear to work without FMASK. */
+      const uint32_t fmask_bankh = surf->fmask_offset ? surf->u.legacy.color.fmask.bankh
+                                                      : surf->u.legacy.bankh;
+      cb->cb_color_attrib |= S_028C74_FMASK_BANK_HEIGHT(util_logbase2(fmask_bankh));
+   }
+}
+
+static void
+ac_init_gfx10_cb_surface(const struct radeon_info *info, const struct ac_cb_state *state,
+                         uint32_t cb_format, bool force_dst_alpha_1, uint32_t width,
+                         struct ac_cb_surface *cb)
+{
+   const struct radeon_surf *surf = state->surf;
+   uint32_t first_layer = state->first_layer;
+   uint32_t base_level = state->base_level;
+   uint32_t num_levels = state->num_levels;
+
+   if (state->gfx10.nbc_view) {
+      assert(state->gfx10.nbc_view->valid);
+      first_layer = 0;
+      base_level = state->gfx10.nbc_view->level;
+      num_levels = state->gfx10.nbc_view->num_levels;
+   }
+
+   cb->cb_color_view = S_028C6C_SLICE_START(first_layer) |
+                       S_028C6C_SLICE_MAX_GFX10(state->last_layer) |
+                       S_028C6C_MIP_LEVEL_GFX10(base_level);
+   cb->cb_color_attrib = 0;
+   cb->cb_color_attrib2 = S_028C68_MIP0_WIDTH(width - 1) |
+                          S_028C68_MIP0_HEIGHT(state->height - 1) |
+                          S_028C68_MAX_MIP(num_levels - 1);
+   cb->cb_color_attrib3 = S_028EE0_MIP0_DEPTH(state->num_layers) |
+                          S_028EE0_RESOURCE_TYPE(surf->u.gfx9.resource_type) |
+                          S_028EE0_RESOURCE_LEVEL(info->gfx_level >= GFX11 ? 0 : 1);
+   cb->cb_dcc_control = S_028C78_MAX_UNCOMPRESSED_BLOCK_SIZE(V_028C78_MAX_BLOCK_SIZE_256B) |
+                        S_028C78_MAX_COMPRESSED_BLOCK_SIZE(surf->u.gfx9.color.dcc.max_compressed_block_size) |
+                        S_028C78_MIN_COMPRESSED_BLOCK_SIZE(ac_get_dcc_min_compressed_block_size(info)) |
+                        S_028C78_INDEPENDENT_64B_BLOCKS(surf->u.gfx9.color.dcc.independent_64B_blocks);
+
+   if (info->gfx_level >= GFX11) {
+      assert(!UTIL_ARCH_BIG_ENDIAN);
+      cb->cb_color_info |= S_028C70_FORMAT_GFX11(cb_format);
+      cb->cb_color_attrib |= S_028C74_NUM_FRAGMENTS_GFX11(util_logbase2(state->num_storage_samples)) |
+                             S_028C74_FORCE_DST_ALPHA_1_GFX11(force_dst_alpha_1);
+      cb->cb_dcc_control |= S_028C78_INDEPENDENT_128B_BLOCKS_GFX11(surf->u.gfx9.color.dcc.independent_128B_blocks);
+   } else {
+      const uint32_t endian = ac_colorformat_endian_swap(cb_format);
+
+      cb->cb_color_info |= S_028C70_ENDIAN(endian) |
+                           S_028C70_FORMAT_GFX6(cb_format) |
+                           S_028C70_COMPRESSION(!!surf->fmask_offset);
+      cb->cb_color_attrib |= S_028C74_NUM_SAMPLES(util_logbase2(state->num_samples)) |
+                             S_028C74_NUM_FRAGMENTS_GFX6(util_logbase2(state->num_storage_samples)) |
+                             S_028C74_FORCE_DST_ALPHA_1_GFX6(force_dst_alpha_1);
+      cb->cb_dcc_control |= S_028C78_INDEPENDENT_128B_BLOCKS_GFX10(surf->u.gfx9.color.dcc.independent_128B_blocks);
+   }
+}
+
+static void
+ac_init_gfx12_cb_surface(const struct radeon_info *info, const struct ac_cb_state *state,
+                         uint32_t cb_format, bool force_dst_alpha_1, uint32_t width,
+                         struct ac_cb_surface *cb)
+{
+   const struct radeon_surf *surf = state->surf;
+
+   assert(!UTIL_ARCH_BIG_ENDIAN);
+   cb->cb_color_info |= S_028EC0_FORMAT(cb_format);
+   cb->cb_color_view = S_028C64_SLICE_START(state->first_layer) |
+                       S_028C64_SLICE_MAX(state->last_layer);
+   cb->cb_color_view2 = S_028C68_MIP_LEVEL(state->base_level);
+   cb->cb_color_attrib = S_028C6C_NUM_FRAGMENTS(util_logbase2(state->num_storage_samples)) |
+                         S_028C6C_FORCE_DST_ALPHA_1(force_dst_alpha_1);
+   cb->cb_color_attrib2 = S_028C78_MIP0_HEIGHT(state->height - 1) |
+                          S_028C78_MIP0_WIDTH(width - 1);
+   cb->cb_color_attrib3 = S_028C7C_MIP0_DEPTH(state->num_layers) |
+                          S_028C7C_MAX_MIP(state->num_levels - 1) |
+                          S_028C7C_RESOURCE_TYPE(surf->u.gfx9.resource_type);
+   cb->cb_dcc_control = S_028C70_MAX_UNCOMPRESSED_BLOCK_SIZE(1) | /* 256B */
+                        S_028C70_MAX_COMPRESSED_BLOCK_SIZE(surf->u.gfx9.color.dcc.max_compressed_block_size) |
+                        S_028C70_ENABLE_MAX_COMP_FRAG_OVERRIDE(1) |
+                        S_028C70_MAX_COMP_FRAGS(state->num_samples >= 8 ? 3 :
+                                                state->num_samples >= 4 ? 2 : 0);
+}
+
+void
+ac_init_cb_surface(const struct radeon_info *info, const struct ac_cb_state *state, struct ac_cb_surface *cb)
+{
+   const struct util_format_description *desc = util_format_description(state->format);
+   const uint32_t cb_format = ac_get_cb_format(info->gfx_level, state->format);
+   const struct radeon_surf *surf = state->surf;
+   uint32_t width = state->width;
+
+   assert(cb_format != V_028C70_COLOR_INVALID);
+
+   /* Intensity is implemented as Red, so treat it that way. */
+   const bool force_dst_alpha_1 =
+      desc->swizzle[3] == PIPE_SWIZZLE_1 || util_format_is_intensity(state->format);
+
+   /* GFX10.3+ can set a custom pitch for 1D and 2D non-array, but it must be a multiple of
+    * 256B for GFX10.3-11 and 128B for GFX12.
+    *
+    * We set the pitch in MIP0_WIDTH.
+    */
+   if (info->gfx_level >= GFX10_3 && surf->u.gfx9.uses_custom_pitch) {
+      ASSERTED unsigned min_alignment = info->gfx_level >= GFX12 ? 128 : 256;
+      assert((surf->u.gfx9.surf_pitch * surf->bpe) % min_alignment == 0);
+      assert(surf->is_linear);
+
+      width = surf->u.gfx9.surf_pitch;
+
+      /* Subsampled images have the pitch in the units of blocks. */
+      if (surf->blk_w == 2)
+         width *= 2;
+   }
+
+   const uint32_t swap = ac_translate_colorswap(info->gfx_level, state->format, false);
+   const uint32_t ntype = ac_get_cb_number_type(state->format);
+   uint32_t blend_clamp = 0, blend_bypass = 0;
+
+   /* blend clamp should be set for all NORM/SRGB types */
+   if (ntype == V_028C70_NUMBER_UNORM || ntype == V_028C70_NUMBER_SNORM ||
+       ntype == V_028C70_NUMBER_SRGB)
+      blend_clamp = 1;
+
+   /* set blend bypass according to docs if SINT/UINT or 8/24 COLOR variants */
+   if (ntype == V_028C70_NUMBER_UINT || ntype == V_028C70_NUMBER_SINT ||
+       cb_format == V_028C70_COLOR_8_24 || cb_format == V_028C70_COLOR_24_8 ||
+       cb_format == V_028C70_COLOR_X24_8_32_FLOAT) {
+      blend_clamp = 0;
+      blend_bypass = 1;
+   }
+
+   const bool round_mode = ntype != V_028C70_NUMBER_UNORM &&
+                           ntype != V_028C70_NUMBER_SNORM &&
+                           ntype != V_028C70_NUMBER_SRGB &&
+                           cb_format != V_028C70_COLOR_8_24 &&
+                           cb_format != V_028C70_COLOR_24_8;
+
+   cb->cb_color_info = S_028C70_COMP_SWAP(swap) |
+                       S_028C70_BLEND_CLAMP(blend_clamp) |
+                       S_028C70_BLEND_BYPASS(blend_bypass) |
+                       S_028C70_SIMPLE_FLOAT(1) |
+                       S_028C70_ROUND_MODE(round_mode) |
+                       S_028C70_NUMBER_TYPE(ntype);
+
+   if (info->gfx_level >= GFX12) {
+      ac_init_gfx12_cb_surface(info, state, cb_format, force_dst_alpha_1, width, cb);
+   } else if (info->gfx_level >= GFX10) {
+      ac_init_gfx10_cb_surface(info, state, cb_format, force_dst_alpha_1, width, cb);
+   } else {
+      ac_init_gfx6_cb_surface(info, state, cb_format, force_dst_alpha_1, cb);
+   }
+}
+
+void
+ac_set_mutable_cb_surface_fields(const struct radeon_info *info, const struct ac_mutable_cb_state *state,
+                                 struct ac_cb_surface *cb)
+{
+   const struct radeon_surf *surf = state->surf;
+   uint8_t tile_swizzle = surf->tile_swizzle;
+   uint64_t va = state->va;
+
+   memcpy(cb, state->cb, sizeof(*cb));
+
+   if (state->gfx10.nbc_view) {
+      assert(state->gfx10.nbc_view->valid);
+      va += state->gfx10.nbc_view->base_address_offset;
+      tile_swizzle = state->gfx10.nbc_view->tile_swizzle;
+   }
+
+   cb->cb_color_base = va >> 8;
+
+   if (info->gfx_level >= GFX9) {
+      cb->cb_color_base += surf->u.gfx9.surf_offset >> 8;
+      cb->cb_color_base |= tile_swizzle;
+   } else {
+      const struct legacy_surf_level *level_info = &surf->u.legacy.level[state->base_level];
+
+      cb->cb_color_base += level_info->offset_256B;
+
+      /* Only macrotiled modes can set tile swizzle. */
+      if (level_info->mode == RADEON_SURF_MODE_2D)
+         cb->cb_color_base |= tile_swizzle;
+   }
+
+   if (info->gfx_level >= GFX12)
+      return;
+
+   /* Set up DCC. */
+   if (state->dcc_enabled) {
+      cb->cb_dcc_base = (va + surf->meta_offset) >> 8;
+
+      uint32_t dcc_tile_swizzle = tile_swizzle;
+      dcc_tile_swizzle &= ((1 << surf->meta_alignment_log2) - 1) >> 8;
+      cb->cb_dcc_base |= dcc_tile_swizzle;
+   }
+
+   if (info->gfx_level >= GFX11) {
+      cb->cb_color_attrib3 |= S_028EE0_COLOR_SW_MODE(surf->u.gfx9.swizzle_mode) |
+                              S_028EE0_DCC_PIPE_ALIGNED(surf->u.gfx9.color.dcc.pipe_aligned);
+
+      if (state->dcc_enabled) {
+         cb->cb_dcc_control |= S_028C78_DISABLE_CONSTANT_ENCODE_REG(1) |
+                               S_028C78_FDCC_ENABLE(1);
+
+         if (info->family >= CHIP_GFX1103_R2) {
+            cb->cb_dcc_control |= S_028C78_ENABLE_MAX_COMP_FRAG_OVERRIDE(1) |
+                                  S_028C78_MAX_COMP_FRAGS(state->num_samples >= 4);
+         }
+      }
+   } else if (info->gfx_level >= GFX10) {
+      cb->cb_color_attrib3 |= S_028EE0_COLOR_SW_MODE(surf->u.gfx9.swizzle_mode) |
+                              S_028EE0_FMASK_SW_MODE(surf->u.gfx9.color.fmask_swizzle_mode) |
+                              S_028EE0_CMASK_PIPE_ALIGNED(1) |
+                              S_028EE0_DCC_PIPE_ALIGNED(surf->u.gfx9.color.dcc.pipe_aligned);
+   } else if (info->gfx_level == GFX9) {
+      struct gfx9_surf_meta_flags meta = {
+         .rb_aligned = 1,
+         .pipe_aligned = 1,
+      };
+
+      if (!(surf->flags & RADEON_SURF_Z_OR_SBUFFER) && surf->meta_offset)
+         meta = surf->u.gfx9.color.dcc;
+
+      cb->cb_color_attrib |= S_028C74_COLOR_SW_MODE(surf->u.gfx9.swizzle_mode) |
+                             S_028C74_FMASK_SW_MODE(surf->u.gfx9.color.fmask_swizzle_mode) |
+                             S_028C74_RB_ALIGNED(meta.rb_aligned) |
+                             S_028C74_PIPE_ALIGNED(meta.pipe_aligned);
+      cb->cb_mrt_epitch = S_0287A0_EPITCH(surf->u.gfx9.epitch);
+   } else {
+      /* GFX6-8 */
+      const struct legacy_surf_level *level_info = &surf->u.legacy.level[state->base_level];
+      uint32_t pitch_tile_max, slice_tile_max, tile_mode_index;
+
+      if (cb->cb_dcc_base)
+         cb->cb_dcc_base += surf->u.legacy.color.dcc_level[state->base_level].dcc_offset >> 8;
+
+      pitch_tile_max = level_info->nblk_x / 8 - 1;
+      slice_tile_max = (level_info->nblk_x * level_info->nblk_y) / 64 - 1;
+      tile_mode_index = ac_tile_mode_index(surf, state->base_level, false);
+
+      cb->cb_color_attrib |= S_028C74_TILE_MODE_INDEX(tile_mode_index);
+      cb->cb_color_pitch = S_028C64_TILE_MAX(pitch_tile_max);
+      cb->cb_color_slice = S_028C68_TILE_MAX(slice_tile_max);
+
+      cb->cb_color_cmask_slice = surf->u.legacy.color.cmask_slice_tile_max;
+
+      if (state->fmask_enabled) {
+         if (info->gfx_level >= GFX7)
+            cb->cb_color_pitch |= S_028C64_FMASK_TILE_MAX(surf->u.legacy.color.fmask.pitch_in_pixels / 8 - 1);
+         cb->cb_color_attrib |= S_028C74_FMASK_TILE_MODE_INDEX(surf->u.legacy.color.fmask.tiling_index);
+         cb->cb_color_fmask_slice = S_028C88_TILE_MAX(surf->u.legacy.color.fmask.slice_tile_max);
+      } else {
+         /* This must be set for fast clear to work without FMASK. */
+         if (info->gfx_level >= GFX7)
+            cb->cb_color_pitch |= S_028C64_FMASK_TILE_MAX(pitch_tile_max);
+         cb->cb_color_attrib |= S_028C74_FMASK_TILE_MODE_INDEX(tile_mode_index);
+         cb->cb_color_fmask_slice = S_028C88_TILE_MAX(slice_tile_max);
+      }
+   }
+
+   if (state->cmask_enabled) {
+      cb->cb_color_cmask = (va + surf->cmask_offset) >> 8;
+      cb->cb_color_info |= S_028C70_FAST_CLEAR(state->fast_clear_enabled);
+   } else {
+      cb->cb_color_cmask = cb->cb_color_base;
+   }
+
+   if (state->fmask_enabled) {
+      cb->cb_color_fmask = (va + surf->fmask_offset) >> 8;
+      cb->cb_color_fmask |= surf->fmask_tile_swizzle;
+
+      if (state->tc_compat_cmask_enabled) {
+         assert(state->cmask_enabled);
+
+         /* Allow the texture block to read FMASK directly without decompressing it. */
+         cb->cb_color_info |= S_028C70_FMASK_COMPRESS_1FRAG_ONLY(1);
+
+         if (info->gfx_level == GFX8) {
+            /* Set CMASK into a tiling format that allows
+             * the texture block to read it.
+             */
+            cb->cb_color_info |= S_028C70_CMASK_ADDR_TYPE(2);
+         }
+      }
+   } else {
+      cb->cb_color_fmask = cb->cb_color_base;
+   }
+
+   if (info->gfx_level < GFX11)
+      cb->cb_color_info |= S_028C70_DCC_ENABLE(state->dcc_enabled);
+}

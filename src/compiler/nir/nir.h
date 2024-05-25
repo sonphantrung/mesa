@@ -120,7 +120,9 @@ nir_num_components_valid(unsigned num_components)
 {
    return (num_components >= 1 &&
            num_components <= 5) ||
+          num_components == 7 ||
           num_components == 8 ||
+          num_components == 15 ||
           num_components == 16;
 }
 
@@ -5651,6 +5653,9 @@ typedef bool (*nir_should_vectorize_mem_func)(unsigned align_mul,
                                               unsigned align_offset,
                                               unsigned bit_size,
                                               unsigned num_components,
+                                              /* The distance between low and
+                                               * high if they are not adjacent. */
+                                              unsigned hole_size,
                                               nir_intrinsic_instr *low,
                                               nir_intrinsic_instr *high,
                                               void *data);
